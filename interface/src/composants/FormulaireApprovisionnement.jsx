@@ -1,79 +1,48 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { API_URL } from '../config';
 
-export default function FormulaireApprovisionnement({ fermerTiroir, depotId, actualiserAccueil }) {
-  const [qtyPleine, setQtyPleine] = useState(10);
-  const [qtyVide, setQtyVide] = useState(10);
-  const [montantPaye, setMontantPaye] = useState(0);
-  const [enChargement, setEnChargement] = useState(false);
+const FormulaireApprovisionnement = ({ depotId, onSucces }) => {
+  const [quantitePleine, setQuantitePleine] = useState(0);
+  const [quantiteVide, setQuantiteVide] = useState(0);
+  const [description, setDescription] = useState('');
+  const [chargement, setChargement] = useState(false);
 
-  const validerAppro = async () => {
-    if (!depotId) return alert("Aucun dépôt sélectionné !");
-    setEnChargement(true);
-
-    const donneesAppro = {
-      type_operation: 'approvisionnement',
-      quantite_pleine: qtyPleine,
-      quantite_vide: qtyVide,
-      montant_total: montantPaye,
-      montant_paye: montantPaye,
-      reste_a_payer: 0,
-      depot_id: depotId
-    };
-
+  const soumettre = async (e) => {
+    e.preventDefault();
+    setChargement(true);
     try {
-      const reponse = await fetch('http://localhost:5000/api/transactions', {
+      const jeton = localStorage.getItem('jeton_monan');
+      const res = await fetch(`${API_URL}/api/transactions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(donneesAppro)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${jeton}`
+        },
+        body: JSON.stringify({
+          type_operation: 'approvisionnement',
+          quantite_pleine: parseInt(quantitePleine),
+          quantite_vide: parseInt(quantiteVide),
+          description,
+          depot_id: depotId
+        })
       });
-
-      if (reponse.ok) {
-        actualiserAccueil();
-        fermerTiroir();
-        alert('✅ Approvisionnement enregistré !');
-      } else {
-        alert('❌ Erreur lors de l\'enregistrement.');
-      }
-    } catch (erreur) {
-      console.error(erreur);
-      alert('❌ Impossible de contacter le serveur.');
+      if (res.ok && onSucces) onSucces();
+    } catch (err) {
+      console.error(err);
     } finally {
-      setEnChargement(false);
+      setChargement(false);
     }
   };
 
   return (
-    <>
-      <h2>Approvisionnement</h2>
-      
-      <label>Bouteilles pleines reçues</label>
-      <div className="stepper">
-        <button type="button" onClick={() => setQtyPleine(Math.max(0, qtyPleine - 1))}>−</button>
-        <input type="number" value={qtyPleine} readOnly />
-        <button type="button" onClick={() => setQtyPleine(qtyPleine + 1)}>+</button>
-      </div>
-
-      <label>Bouteilles vides rendues au camion</label>
-      <div className="stepper">
-        <button type="button" onClick={() => setQtyVide(Math.max(0, qtyVide - 1))}>−</button>
-        <input type="number" value={qtyVide} readOnly />
-        <button type="button" onClick={() => setQtyVide(qtyVide + 1)}>+</button>
-      </div>
-
-      <label>Coût de l'approvisionnement (F)</label>
-      <input 
-        type="number" 
-        value={montantPaye} 
-        onChange={(e) => setMontantPaye(Number(e.target.value))} 
-        placeholder="Montant payé au fournisseur"
-      />
-
-      <div className="btns">
-        <button type="button" className="btn ghost" onClick={fermerTiroir}>Annuler</button>
-        <button type="button" className="btn flame" onClick={validerAppro} disabled={enChargement}>
-          {enChargement ? 'Enregistrement...' : 'Valider l\'opération'}
-        </button>
-      </div>
-    </>
+    <form onSubmit={soumettre} className="formulaire">
+      <h3>Approvisionnement Dépôt</h3>
+      <input type="number" placeholder="Bouteilles pleines reçues" value={quantitePleine} onChange={(e) => setQuantitePleine(e.target.value)} required />
+      <input type="number" placeholder="Bouteilles vides rendues" value={quantiteVide} onChange={(e) => setQuantiteVide(e.target.value)} required />
+      <textarea placeholder="Remarques / Camion..." value={description} onChange={(e) => setDescription(e.target.value)} />
+      <button type="submit" disabled={chargement}>{chargement ? 'Enregistrement...' : 'Valider l\'approvisionnement'}</button>
+    </form>
   );
-}
+};
+
+export default FormulaireApprovisionnement;

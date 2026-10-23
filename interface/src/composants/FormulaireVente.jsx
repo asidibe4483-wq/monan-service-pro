@@ -1,97 +1,59 @@
-import { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { API_URL } from '../config';
 
-export default function FormulaireVente({ fermerTiroir, depotId, clients = [], actualiserAccueil, prixUnitaire = 2000 }) {
+const FormulaireVente = ({ depotId, clients, onSucces }) => {
   const [clientId, setClientId] = useState('');
-  const [qty, setQty] = useState(1);
-  const [empty, setEmpty] = useState(1);
-  const [montantPaye, setMontantPaye] = useState(prixUnitaire);
-  const [enChargement, setEnChargement] = useState(false);
+  const [quantitePleine, setQuantitePleine] = useState(1);
+  const [quantiteVide, setQuantiteVide] = useState(1);
+  const [montantTotal, setMontantTotal] = useState(0);
+  const [montantPaye, setMontantPaye] = useState(0);
+  const [chargement, setChargement] = useState(false);
 
-  const total = qty * prixUnitaire;
-  const dette = Math.max(0, total - montantPaye);
-
-  useEffect(() => {
-    setMontantPaye(qty * prixUnitaire);
-  }, [qty, prixUnitaire]);
-
-  const validerVente = async () => {
-    if (!depotId) return alert("Aucun dépôt sélectionné !");
-    setEnChargement(true);
-
-    const donneesVente = {
-      type_operation: 'vente',
-      quantite_pleine: qty,
-      quantite_vide: empty,
-      montant_total: total,
-      montant_paye: montantPaye,
-      reste_a_payer: dette,
-      depot_id: depotId,
-      client_id: clientId || null
-    };
-
+  const soumettre = async (e) => {
+    e.preventDefault();
+    setChargement(true);
     try {
-      const reponse = await fetch('http://localhost:5000/api/transactions', {
+      const jeton = localStorage.getItem('jeton_monan');
+      const reste = montantTotal - montantPaye;
+      const res = await fetch(`${API_URL}/api/transactions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(donneesVente)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${jeton}`
+        },
+        body: JSON.stringify({
+          type_operation: 'vente',
+          quantite_pleine: parseInt(quantitePleine),
+          quantite_vide: parseInt(quantiteVide),
+          montant_total: parseFloat(montantTotal),
+          montant_paye: parseFloat(montantPaye),
+          reste_a_payer: reste,
+          client_id: clientId || null,
+          depot_id: depotId
+        })
       });
-
-      if (reponse.ok) {
-        actualiserAccueil();
-        fermerTiroir();
-        alert('✅ Vente enregistrée avec succès !');
-      } else {
-        alert('❌ Erreur lors de l\'enregistrement.');
-      }
-    } catch (erreur) {
-      console.error(erreur);
-      alert('❌ Impossible de contacter le serveur.');
+      if (res.ok && onSucces) onSucces();
+    } catch (err) {
+      console.error(err);
     } finally {
-      setEnChargement(false);
+      setChargement(false);
     }
   };
 
   return (
-    <>
-      <h2>Nouvelle vente</h2>
-
-      <label>Sélectionner le client</label>
+    <form onSubmit={soumettre} className="formulaire">
+      <h3>Enregistrer une Vente</h3>
       <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-        <option value="">Client de passage</option>
-        {clients.map((c) => (
-          <option key={c.id} value={c.id}>{c.nom} {c.telephone ? `(${c.telephone})` : ''}</option>
-        ))}
+        <option value="">-- Client de passage --</option>
+        {clients.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
       </select>
-
-      <label>Bouteilles vendues</label>
-      <div className="stepper">
-        <button onClick={() => setQty(Math.max(1, qty - 1))}>−</button>
-        <input type="number" value={qty} readOnly />
-        <button onClick={() => setQty(qty + 1)}>+</button>
-      </div>
-
-      <label>Bouteilles vides rendues par le client</label>
-      <div className="stepper">
-        <button onClick={() => setEmpty(Math.max(0, empty - 1))}>−</button>
-        <input type="number" value={empty} readOnly />
-        <button onClick={() => setEmpty(empty + 1)}>+</button>
-      </div>
-
-      <div className="totalbox">
-        <span>À payer</span><b>{total.toLocaleString('fr-FR')} F</b>
-      </div>
-
-      <label>Montant reçu (F)</label>
-      <input type="number" value={montantPaye} onChange={(e) => setMontantPaye(Number(e.target.value))} />
-
-      {dette > 0 && <p className="muted">Reste à payer : {dette} F</p>}
-
-      <div className="btns">
-        <button className="btn ghost" onClick={fermerTiroir}>Annuler</button>
-        <button className="btn flame" onClick={validerVente} disabled={enChargement}>
-          {enChargement ? 'Enregistrement...' : 'Valider la vente'}
-        </button>
-      </div>
-    </>
+      <input type="number" placeholder="Bouteilles pleines vendant" value={quantitePleine} onChange={(e) => setQuantitePleine(e.target.value)} required />
+      <input type="number" placeholder="Bouteilles vides récupérées" value={quantiteVide} onChange={(e) => setQuantiteVide(e.target.value)} required />
+      <input type="number" placeholder="Montant Total (FCFA)" value={montantTotal} onChange={(e) => setMontantTotal(e.target.value)} required />
+      <input type="number" placeholder="Montant Payé (FCFA)" value={montantPaye} onChange={(e) => setMontantPaye(e.target.value)} required />
+      <button type="submit" disabled={chargement}>{chargement ? 'Validation...' : 'Valider la Vente'}</button>
+    </form>
   );
-}
+};
+
+export default FormulaireVente;
