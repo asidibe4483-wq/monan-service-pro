@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TextInput,
-  TouchableOpacity,
   SafeAreaView,
   StatusBar,
   ScrollView,
@@ -13,10 +12,47 @@ import {
   Platform,
   ActivityIndicator,
   Image,
-  Dimensions
+  Animated,
+  Pressable
 } from 'react-native';
 
 const API_URL = "https://monan-backend.onrender.com";
+
+// Composant Bouton Animé avec effet de pression réactif (Tactile Feedback)
+const AnimatedButton = ({ onPress, style, children, disabled }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.95,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 10,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 8,
+    }).start();
+  };
+
+  return (
+    <Pressable
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      <Animated.View style={[style, { transform: [{ scale }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+};
 
 const CYLINDER_TYPES = [
   { id: 'B6', name: 'B6 (6 kg)', price: 2500, desc: 'Compact & facile à transporter', icon: '🔥', popular: false },
@@ -43,6 +79,14 @@ export default function App() {
   const [quantite, setQuantite] = useState('1');
   const [adresseLivraison, setAdresseLivraison] = useState('');
   const [orderFilter, setOrderFilter] = useState('all');
+
+  // Recherche Dépôt Proche
+  const [searchDepot, setSearchDepot] = useState('');
+  const [depotsList, setDepotsList] = useState([
+    { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distance: '0.8 km', quartier: 'Cocody Angré', statut: 'Ouvert', b6: 14, b12: 28, b28: 5 },
+    { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distance: '2.3 km', quartier: 'Cocody Centre', statut: 'Ouvert', b6: 8, b12: 12, b28: 0 },
+    { id: 'DEP-03', nom: 'Dépôt Yopougon Maroc', distance: '5.1 km', quartier: 'Yopougon', statut: 'Ouvert', b6: 22, b12: 35, b28: 10 },
+  ]);
 
   // Suivi des commandes
   const [commandes, setCommandes] = useState([
@@ -172,6 +216,11 @@ export default function App() {
     setDashboardTab('home');
   };
 
+  const filteredDepots = depotsList.filter(d => 
+    d.nom.toLowerCase().includes(searchDepot.toLowerCase()) || 
+    d.quartier.toLowerCase().includes(searchDepot.toLowerCase())
+  );
+
   const filteredCommandes = commandes.filter(cmd => {
     if (orderFilter === 'pending') return cmd.codeStatut === 'pending';
     if (orderFilter === 'delivered') return cmd.codeStatut === 'delivered';
@@ -182,7 +231,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* App Bar Navigation */}
+      {/* Header / App Bar */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -201,9 +250,9 @@ export default function App() {
         </View>
 
         {user && (
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
+          <AnimatedButton style={styles.logoutBtn} onPress={handleLogout}>
             <Text style={styles.logoutBtnText}>Déconnexion</Text>
-          </TouchableOpacity>
+          </AnimatedButton>
         )}
       </View>
 
@@ -215,49 +264,50 @@ export default function App() {
 
           {user ? (
             <View>
-              {/* Onglets de navigation */}
+              {/* Onglets Pille de navigation */}
               <View style={styles.pillsContainer}>
-                <TouchableOpacity
+                <AnimatedButton
                   style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
                   onPress={() => setDashboardTab('home')}
-                  activeOpacity={0.8}
                 >
                   <Text style={[styles.pillText, dashboardTab === 'home' && styles.pillTextActive]}>Vue d'ensemble</Text>
-                </TouchableOpacity>
+                </AnimatedButton>
 
                 {user.role === 'depot' ? (
                   <>
-                    <TouchableOpacity
+                    <AnimatedButton
                       style={[styles.pillBtn, dashboardTab === 'add_stock' && styles.pillBtnActive]}
                       onPress={() => setDashboardTab('add_stock')}
-                      activeOpacity={0.8}
                     >
                       <Text style={[styles.pillText, dashboardTab === 'add_stock' && styles.pillTextActive]}>+ Stock</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
+                    </AnimatedButton>
+                    <AnimatedButton
                       style={[styles.pillBtn, dashboardTab === 'sales_list' && styles.pillBtnActive]}
                       onPress={() => setDashboardTab('sales_list')}
-                      activeOpacity={0.8}
                     >
                       <Text style={[styles.pillText, dashboardTab === 'sales_list' && styles.pillTextActive]}>Inventaire</Text>
-                    </TouchableOpacity>
+                    </AnimatedButton>
                   </>
                 ) : (
                   <>
-                    <TouchableOpacity
+                    <AnimatedButton
+                      style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
+                      onPress={() => setDashboardTab('depots')}
+                    >
+                      <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts 📍</Text>
+                    </AnimatedButton>
+                    <AnimatedButton
                       style={[styles.pillBtn, dashboardTab === 'order' && styles.pillBtnActive]}
                       onPress={() => setDashboardTab('order')}
-                      activeOpacity={0.8}
                     >
                       <Text style={[styles.pillText, dashboardTab === 'order' && styles.pillTextActive]}>Commander</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
+                    </AnimatedButton>
+                    <AnimatedButton
                       style={[styles.pillBtn, dashboardTab === 'orders_list' && styles.pillBtnActive]}
                       onPress={() => setDashboardTab('orders_list')}
-                      activeOpacity={0.8}
                     >
                       <Text style={[styles.pillText, dashboardTab === 'orders_list' && styles.pillTextActive]}>Suivi ({commandes.length})</Text>
-                    </TouchableOpacity>
+                    </AnimatedButton>
                   </>
                 )}
               </View>
@@ -268,7 +318,7 @@ export default function App() {
                   <View style={styles.welcomeBanner}>
                     <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} 👋</Text>
                     <Text style={styles.welcomeBannerSub}>
-                      {user.role === 'depot' ? 'Ajustez votre stock et suivez les ventes récents.' : 'Passez une commande de gaz et suivez la livraison en direct.'}
+                      {user.role === 'depot' ? 'Ajustez votre stock et suivez les ventes récents.' : 'Localisez les dépôts proches ou passez une commande directe.'}
                     </Text>
                   </View>
 
@@ -280,24 +330,91 @@ export default function App() {
                       <Text style={styles.kpiCardSub}>Historique total</Text>
                     </View>
                     <View style={styles.kpiCard}>
-                      <Text style={styles.kpiCardTag}>FORMAT FAVORIS</Text>
-                      <Text style={styles.kpiCardNum}>B12</Text>
-                      <Text style={styles.kpiCardSub}>Standard 12.5 kg</Text>
+                      <Text style={styles.kpiCardTag}>DÉPÔTS PROCHES</Text>
+                      <Text style={styles.kpiCardNum}>3</Text>
+                      <Text style={styles.kpiCardSub}>Disponibles à proximité</Text>
                     </View>
                   </View>
 
-                  <Text style={styles.sectionTitle}>Action rapide</Text>
+                  <Text style={styles.sectionTitle}>Actions rapides</Text>
                   {user.role === 'depot' ? (
-                    <TouchableOpacity style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
+                    <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
                       <Text style={styles.actionCardTitle}>📦 Mettre à jour les stocks du dépôt</Text>
                       <Text style={styles.actionCardSub}>Modifiez les quantités de bouteilles B6, B12 et B28 disponibles.</Text>
-                    </TouchableOpacity>
+                    </AnimatedButton>
                   ) : (
-                    <TouchableOpacity style={styles.actionCardOrange} onPress={() => setDashboardTab('order')}>
-                      <Text style={styles.actionCardTitle}>🚀 Commander une nouvelle recharge</Text>
-                      <Text style={styles.actionCardSub}>Sélectionnez la bouteille de votre choix et renseignez votre adresse.</Text>
-                    </TouchableOpacity>
+                    <>
+                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
+                        <Text style={styles.actionCardTitle}>📍 Trouver un dépôt de gaz à proximité</Text>
+                        <Text style={styles.actionCardSub}>Consultez les stocks disponibles en temps réel dans les dépôts autour de vous.</Text>
+                      </AnimatedButton>
+
+                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
+                        <Text style={styles.actionCardTitleWhite}>🚀 Commander une recharge directe</Text>
+                        <Text style={styles.actionCardSubWhite}>Faites-vous livrer la bouteille de votre choix à domicile.</Text>
+                      </AnimatedButton>
+                    </>
                   )}
+                </View>
+              )}
+
+              {/* FONCTIONNALITÉ RECHERCHE DÉPÔTS PROCHES EN TEMPS RÉEL */}
+              {dashboardTab === 'depots' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Dépôts de gaz à proximité 📍</Text>
+                  <Text style={styles.cardBoxSub}>Localisez le dépôt le plus proche et vérifiez le stock disponible :</Text>
+
+                  <TextInput
+                    style={[styles.input, focusedInput === 'searchD' && styles.inputFocused]}
+                    onFocus={() => setFocusedInput('searchD')}
+                    onBlur={() => setFocusedInput(null)}
+                    placeholder="🔍 Chercher par quartier ou nom du dépôt..."
+                    placeholderTextColor="#94A3B8"
+                    value={searchDepot}
+                    onChangeText={setSearchDepot}
+                  />
+
+                  {filteredDepots.map((depot) => (
+                    <View key={depot.id} style={styles.depotCard}>
+                      <View style={styles.depotHeader}>
+                        <View>
+                          <Text style={styles.depotTitle}>{depot.nom}</Text>
+                          <Text style={styles.depotSub}>{depot.quartier} • <Text style={styles.depotDistance}>{depot.distance}</Text></Text>
+                        </View>
+                        <View style={styles.depotStatusBadge}>
+                          <Text style={styles.depotStatusText}>● {depot.statut}</Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.depotStockTitle}>Stocks disponibles en temps réel :</Text>
+                      <View style={styles.stockChipsRow}>
+                        <View style={styles.stockChip}>
+                          <Text style={styles.stockChipLabel}>B6 (6kg)</Text>
+                          <Text style={styles.stockChipVal}>{depot.b6} dispo</Text>
+                        </View>
+                        <View style={styles.stockChip}>
+                          <Text style={styles.stockChipLabel}>B12 (12.5kg)</Text>
+                          <Text style={depot.b12 > 0 ? styles.stockChipVal : styles.stockChipValEmpty}>
+                            {depot.b12 > 0 ? `${depot.b12} dispo` : 'Rupture'}
+                          </Text>
+                        </View>
+                        <View style={styles.stockChip}>
+                          <Text style={styles.stockChipLabel}>B28 (28kg)</Text>
+                          <Text style={styles.stockChipVal}>{depot.b28} dispo</Text>
+                        </View>
+                      </View>
+
+                      <AnimatedButton
+                        style={styles.btnDepotSelect}
+                        onPress={() => {
+                          setAdresseLivraison(depot.quartier);
+                          setDashboardTab('order');
+                        }}
+                      >
+                        <Text style={styles.btnDepotSelectText}>Commander depuis ce dépôt</Text>
+                      </AnimatedButton>
+                    </View>
+                  ))}
                 </View>
               )}
 
@@ -311,11 +428,10 @@ export default function App() {
                     {CYLINDER_TYPES.map((cyl) => {
                       const isSelected = selectedCylinder.id === cyl.id;
                       return (
-                        <TouchableOpacity
+                        <AnimatedButton
                           key={cyl.id}
                           style={[styles.cylinderItem, isSelected && styles.cylinderItemActive]}
                           onPress={() => setSelectedCylinder(cyl)}
-                          activeOpacity={0.8}
                         >
                           <View style={styles.cylinderHeader}>
                             <Text style={styles.cylinderIcon}>{cyl.icon}</Text>
@@ -324,7 +440,7 @@ export default function App() {
                           <Text style={[styles.cylinderTitle, isSelected && styles.cylinderTitleActive]}>{cyl.name}</Text>
                           <Text style={styles.cylinderPrice}>{cyl.price.toLocaleString('fr-FR')} FCFA</Text>
                           <Text style={styles.cylinderDesc}>{cyl.desc}</Text>
-                        </TouchableOpacity>
+                        </AnimatedButton>
                       );
                     })}
                   </View>
@@ -357,9 +473,9 @@ export default function App() {
                     </Text>
                   </View>
 
-                  <TouchableOpacity style={styles.btnOrange} onPress={handleCreateOrder} activeOpacity={0.8}>
+                  <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
                     <Text style={styles.btnOrangeText}>Valider la commande</Text>
-                  </TouchableOpacity>
+                  </AnimatedButton>
                 </View>
               )}
 
@@ -369,15 +485,15 @@ export default function App() {
                   <Text style={styles.cardBoxTitle}>Suivi des commandes</Text>
 
                   <View style={styles.filterRow}>
-                    <TouchableOpacity style={[styles.filterBtn, orderFilter === 'all' && styles.filterBtnActive]} onPress={() => setOrderFilter('all')}>
+                    <AnimatedButton style={[styles.filterBtn, orderFilter === 'all' && styles.filterBtnActive]} onPress={() => setOrderFilter('all')}>
                       <Text style={[styles.filterText, orderFilter === 'all' && styles.filterTextActive]}>Toutes</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.filterBtn, orderFilter === 'pending' && styles.filterBtnActive]} onPress={() => setOrderFilter('pending')}>
+                    </AnimatedButton>
+                    <AnimatedButton style={[styles.filterBtn, orderFilter === 'pending' && styles.filterBtnActive]} onPress={() => setOrderFilter('pending')}>
                       <Text style={[styles.filterText, orderFilter === 'pending' && styles.filterTextActive]}>En cours</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.filterBtn, orderFilter === 'delivered' && styles.filterBtnActive]} onPress={() => setOrderFilter('delivered')}>
+                    </AnimatedButton>
+                    <AnimatedButton style={[styles.filterBtn, orderFilter === 'delivered' && styles.filterBtnActive]} onPress={() => setOrderFilter('delivered')}>
                       <Text style={[styles.filterText, orderFilter === 'delivered' && styles.filterTextActive]}>Livrées</Text>
-                    </TouchableOpacity>
+                    </AnimatedButton>
                   </View>
 
                   {filteredCommandes.map((cmd) => (
@@ -406,9 +522,9 @@ export default function App() {
                   <TextInput style={styles.input} keyboardType="numeric" value={stockB12} onChangeText={setStockB12} />
                   <Text style={styles.label}>Bouteilles B28 (28 kg)</Text>
                   <TextInput style={styles.input} keyboardType="numeric" value={stockB28} onChangeText={setStockB28} />
-                  <TouchableOpacity style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Les quantités en stock ont été mises à jour.')}>
+                  <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Les quantités en stock ont été mises à jour.')}>
                     <Text style={styles.btnOrangeText}>Enregistrer la mise à jour</Text>
-                  </TouchableOpacity>
+                  </AnimatedButton>
                 </View>
               )}
 
@@ -431,29 +547,29 @@ export default function App() {
                     <Text style={styles.heroSub}>Commandez vos recharges de gaz directement ou gérez les stocks de votre dépôt.</Text>
                   </View>
 
-                  <TouchableOpacity style={styles.welcomeCardDark} onPress={() => setCurrentScreen('register_client')} activeOpacity={0.85}>
+                  <AnimatedButton style={styles.welcomeCardDark} onPress={() => setCurrentScreen('register_client')}>
                     <Text style={styles.welcomeCardTag}>ESPACE CLIENT</Text>
                     <Text style={styles.welcomeCardTitleLight}>Particuliers & Entreprises</Text>
-                    <Text style={styles.welcomeCardSubLight}>Commandez et faites-vous livrer vos bouteilles à domicile rapidement.</Text>
-                  </TouchableOpacity>
+                    <Text style={styles.welcomeCardSubLight}>Trouvez un dépôt proche et faites-vous livrer vos bouteilles rapidement.</Text>
+                  </AnimatedButton>
 
-                  <TouchableOpacity style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')} activeOpacity={0.85}>
+                  <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
                     <Text style={styles.welcomeCardTagNavy}>ESPACE DÉPÔT</Text>
                     <Text style={styles.welcomeCardTitleDark}>Vendeurs & Dépôts de Gaz</Text>
                     <Text style={styles.welcomeCardSubDark}>Gérez vos réserves et recevez les commandes des clients à proximité.</Text>
-                  </TouchableOpacity>
+                  </AnimatedButton>
 
-                  <TouchableOpacity style={styles.btnNavyOutline} onPress={() => setCurrentScreen('login')} activeOpacity={0.8}>
+                  <AnimatedButton style={styles.btnNavyOutline} onPress={() => setCurrentScreen('login')}>
                     <Text style={styles.btnNavyOutlineText}>Se connecter à un compte existant</Text>
-                  </TouchableOpacity>
+                  </AnimatedButton>
                 </View>
               )}
 
               {(currentScreen === 'register_client' || currentScreen === 'register_depot') && (
                 <View style={styles.cardBox}>
-                  <TouchableOpacity onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 12 }}>
+                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 12 }}>
                     <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour à l'accueil</Text>
-                  </TouchableOpacity>
+                  </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>{currentScreen === 'register_depot' ? 'Compte Vendeur / Dépôt' : 'Créer un Compte Client'}</Text>
 
                   <Text style={styles.label}>Nom complet *</Text>
@@ -471,17 +587,17 @@ export default function App() {
                   <Text style={styles.label}>Mot de passe *</Text>
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" value={password} onChangeText={setPassword} />
 
-                  <TouchableOpacity style={styles.btnOrange} onPress={() => handleRegister(currentScreen === 'register_depot' ? 'depot' : 'client')} disabled={loading}>
+                  <AnimatedButton style={styles.btnOrange} onPress={() => handleRegister(currentScreen === 'register_depot' ? 'depot' : 'client')} disabled={loading}>
                     {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>S'inscrire</Text>}
-                  </TouchableOpacity>
+                  </AnimatedButton>
                 </View>
               )}
 
               {currentScreen === 'login' && (
                 <View style={styles.cardBox}>
-                  <TouchableOpacity onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 12 }}>
+                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 12 }}>
                     <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour à l'accueil</Text>
-                  </TouchableOpacity>
+                  </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
                   <Text style={styles.label}>Adresse Email</Text>
@@ -490,9 +606,9 @@ export default function App() {
                   <Text style={styles.label}>Mot de passe</Text>
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" value={password} onChangeText={setPassword} />
 
-                  <TouchableOpacity style={styles.btnOrange} onPress={handleLogin} disabled={loading}>
+                  <AnimatedButton style={styles.btnOrange} onPress={handleLogin} disabled={loading}>
                     {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Se connecter</Text>}
-                  </TouchableOpacity>
+                  </AnimatedButton>
                 </View>
               )}
             </>
@@ -518,7 +634,7 @@ const styles = StyleSheet.create({
   pillsContainer: { flexDirection: 'row', backgroundColor: '#E2E8F0', padding: 4, borderRadius: 12, marginBottom: 16, gap: 4 },
   pillBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
   pillBtnActive: { backgroundColor: '#FFFFFF', elevation: 2 },
-  pillText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  pillText: { fontSize: 11, fontWeight: '700', color: '#64748B' },
   pillTextActive: { color: '#0F172A' },
   welcomeBanner: { backgroundColor: '#0F172A', borderRadius: 16, padding: 18, marginBottom: 16 },
   welcomeBannerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
@@ -532,9 +648,27 @@ const styles = StyleSheet.create({
   actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 14, padding: 16, marginBottom: 12 },
   actionCardTitle: { fontSize: 15, fontWeight: '800', color: '#C2410C' },
   actionCardSub: { fontSize: 12, color: '#9A3412', marginTop: 2 },
+  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, marginBottom: 12 },
+  actionCardTitleWhite: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
+  actionCardSubWhite: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
   cardBox: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E2E8F0', elevation: 2 },
   cardBoxTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
   cardBoxSub: { fontSize: 12, color: '#64748B', marginBottom: 14 },
+  depotCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 14, padding: 14, marginBottom: 12 },
+  depotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  depotTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+  depotSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  depotDistance: { color: '#F97316', fontWeight: '800' },
+  depotStatusBadge: { backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  depotStatusText: { color: '#15803D', fontSize: 11, fontWeight: '800' },
+  depotStockTitle: { fontSize: 12, fontWeight: '700', color: '#334155', marginTop: 10, marginBottom: 6 },
+  stockChipsRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+  stockChip: { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', padding: 6, borderRadius: 8, alignItems: 'center' },
+  stockChipLabel: { fontSize: 10, color: '#64748B', fontWeight: '700' },
+  stockChipVal: { fontSize: 11, color: '#16A34A', fontWeight: '800', marginTop: 2 },
+  stockChipValEmpty: { fontSize: 11, color: '#DC2626', fontWeight: '800', marginTop: 2 },
+  btnDepotSelect: { backgroundColor: '#0F172A', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  btnDepotSelectText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
   cylinderList: { gap: 10, marginBottom: 16 },
   cylinderItem: { backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, borderWidth: 2, borderColor: '#E2E8F0' },
   cylinderItemActive: { backgroundColor: '#FFF7ED', borderColor: '#F97316' },
