@@ -486,7 +486,7 @@ export default function App() {
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   {user.role === 'depot' && !isTrialExpired && (
                     <AnimatedButton onPress={() => setShowPaymentSection(false)} style={{ marginBottom: 12 }}>
-                      <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour au tableau de bord</Text>
+                      <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
                     </AnimatedButton>
                   )}
 
@@ -542,7 +542,7 @@ export default function App() {
                   <View style={styles.trialBannerRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.trialBannerText}>
-                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `🎁 Essai Vendeur : ${daysLeft} jours restants`}
+                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `Essai Vendeur : ${daysLeft} jours restants`}
                       </Text>
                     </View>
                     {!user.isSubscribed && (
@@ -605,7 +605,7 @@ export default function App() {
                 {dashboardTab === 'home' && (
                   <View style={styles.fullSection}>
                     <View style={styles.welcomeBanner}>
-                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} 👋</Text>
+                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email}</Text>
                     </View>
 
                     <View style={styles.kpiGrid}>
@@ -622,12 +622,12 @@ export default function App() {
                     {user.role === 'depot' ? (
                       <View style={{ gap: 12 }}>
                         <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
-                          <Text style={styles.actionCardTitle}>📦 Gestion des stocks</Text>
+                          <Text style={styles.actionCardTitle}> Gestion des stocks</Text>
                         </AnimatedButton>
 
                         {!user.isSubscribed && (
                           <AnimatedButton style={styles.actionCardNavy} onPress={() => setShowPaymentSection(true)}>
-                            <Text style={styles.actionCardTitleWhite}>💳 Payer l'abonnement sous le champ</Text>
+                            <Text style={styles.actionCardTitleWhite}>Payer ici</Text>
                           </AnimatedButton>
                         )}
                       </View>
@@ -638,7 +638,7 @@ export default function App() {
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.actionCardTitleWhite}>🚀 Commander une recharge</Text>
+                          <Text style={styles.actionCardTitleWhite}>Commander une recharge</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -834,7 +834,7 @@ export default function App() {
                     </AnimatedButton>
 
                     <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
-                      <Text style={styles.welcomeCardTitleDark}>Espace Dépôt / Vendeur</Text>
+                      <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
                     </AnimatedButton>
                   </View>
 
@@ -875,7 +875,7 @@ export default function App() {
               {currentScreen === 'login' && (
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
+                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
                   </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
@@ -914,7 +914,7 @@ export default function App() {
                     }}
                     style={{ marginBottom: 14 }}
                   >
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
+                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
                   </AnimatedButton>
 
                   <Text style={styles.cardBoxTitle}>Réinitialisation</Text>
