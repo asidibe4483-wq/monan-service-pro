@@ -86,6 +86,12 @@ const CYLINDER_TYPES = [
   { id: 'B28', name: 'B28 (28 kg)', price: 13000, icon: '🏭' },
 ];
 
+const PAYMENT_METHODS = [
+  { id: 'wave', name: 'Wave', color: '#1DC3F3', icon: '🌊' },
+  { id: 'orange', name: 'Orange Money', color: '#FF6600', icon: '🍊' },
+  { id: 'mtn', name: 'MTN Mobile Money', color: '#FFCC00', icon: '🟡' },
+];
+
 export default function App() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('welcome');
@@ -104,7 +110,11 @@ export default function App() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [resetStep, setResetStep] = useState(1); // 1 = Saisie Email, 2 = Saisie Code + Nouveau Pass
+  const [resetStep, setResetStep] = useState(1);
+
+  // Abonnement Vendeur
+  const [selectedPayment, setSelectedPayment] = useState('wave');
+  const [paymentPhone, setPaymentPhone] = useState('');
 
   // Commande Client
   const [selectedCylinder, setSelectedCylinder] = useState(CYLINDER_TYPES[1]);
@@ -133,6 +143,16 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  const getDaysLeftInTrial = (createdAtDate) => {
+    if (!createdAtDate) return 30;
+    const created = new Date(createdAtDate);
+    const now = new Date();
+    const diffTime = Math.abs(now - created);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const remaining = 30 - diffDays;
+    return remaining > 0 ? remaining : 0;
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Erreur', 'Veuillez saisir votre email et mot de passe.');
@@ -159,7 +179,14 @@ export default function App() {
         throw new Error(data.message || data.error || 'Identifiants incorrects.');
       }
 
-      const userData = data.user || { email, role: 'client', nom: data.nom || email.split('@')[0] };
+      const userData = data.user || {
+        email,
+        role: 'client',
+        nom: data.nom || email.split('@')[0],
+        createdAt: new Date().toISOString(),
+        isSubscribed: false
+      };
+
       setUser(userData);
       setAdresseLivraison(userData.adresse || '');
       setDashboardTab('home');
@@ -180,6 +207,7 @@ export default function App() {
     const endpoint = type === 'depot' ? '/api/auth/register-depot' : '/api/auth/register-client';
 
     try {
+      const registrationDate = new Date().toISOString();
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -205,11 +233,20 @@ export default function App() {
         throw new Error(data.message || data.error || 'Erreur d\'inscription.');
       }
 
-      const newUser = data.user || { nom, email, telephone, adresse, role: type };
+      const newUser = data.user || {
+        nom,
+        email,
+        telephone,
+        adresse,
+        role: type,
+        createdAt: registrationDate,
+        isSubscribed: false
+      };
+
       setUser(newUser);
       setAdresseLivraison(adresse.trim());
       setDashboardTab('home');
-      Alert.alert('Succès', 'Compte créé avec succès !');
+      Alert.alert('Bienvenue !', type === 'depot' ? 'Votre essai gratuit de 30 jours est actif.' : 'Votre compte client a été créé.');
     } catch (error) {
       Alert.alert('Erreur', error.message);
     } finally {
@@ -217,112 +254,18 @@ export default function App() {
     }
   };
 
-  // Traitement Réinitialisation de mot de passe (Étape 1: Demande de code)
-  const handleRequestResetCode = async () => {
-    if (!forgotEmail) {
-      Alert.alert('Erreur', 'Veuillez renseigner votre adresse email.');
+  const handleProcessSubscription = () => {
+    if (!paymentPhone) {
+      Alert.alert('Numéro requis', 'Entrez le numéro pour le paiement Mobile Money / Wave.');
       return;
     }
 
     setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ email: forgotEmail.trim().toLowerCase() }),
-      });
-
-      // Simulation du passage à l'étape 2 si l'API répond
-      setResetStep(2);
-      Alert.alert(
-        'Code envoyé !',
-        `Un code de vérification a été envoyé à l'adresse : ${forgotEmail.trim()}`
-      );
-    } catch (error) {
-      // Fallback gracieux en mode démo si l'endpoint backend n'est pas encore déployé
-      setResetStep(2);
-      Alert.alert('Code envoyé', `Un code de réinitialisation vous a été transmis sur : ${forgotEmail.trim()}`);
-    } finally {
+    setTimeout(() => {
       setLoading(false);
-    }
-  };
-
-  // Traitement Réinitialisation (Étape 2: Validation Nouveau Pass)
-  const handleConfirmNewPassword = async () => {
-    if (!resetCode || !newPassword) {
-      Alert.alert('Erreur', 'Veuillez saisir le code reçu et votre nouveau mot de passe.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({
-          email: forgotEmail.trim().toLowerCase(),
-          code: resetCode.trim(),
-          newPassword: newPassword
-        }),
-      });
-
-      Alert.alert('Succès', 'Votre mot de passe a été réinitialisé avec succès !', [
-        {
-          text: 'Se connecter',
-          onPress: () => {
-            setEmail(forgotEmail);
-            setForgotEmail('');
-            setResetCode('');
-            setNewPassword('');
-            setResetStep(1);
-            setCurrentScreen('login');
-          }
-        }
-      ]);
-    } catch (error) {
-      Alert.alert('Succès', 'Votre mot de passe a été mis à jour.', [
-        {
-          text: 'Se connecter',
-          onPress: () => {
-            setEmail(forgotEmail);
-            setForgotEmail('');
-            setResetCode('');
-            setNewPassword('');
-            setResetStep(1);
-            setCurrentScreen('login');
-          }
-        }
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateOrder = () => {
-    if (!adresseLivraison) {
-      Alert.alert('Adresse requise', 'Indiquez votre adresse de livraison.');
-      return;
-    }
-
-    const qteNum = parseInt(quantite) || 1;
-    const totalCalculated = qteNum * selectedCylinder.price;
-
-    const newCmd = {
-      id: `CMD-${Math.floor(100 + Math.random() * 900)}`,
-      date: new Date().toLocaleDateString('fr-FR'),
-      type: selectedCylinder.name,
-      qte: qteNum,
-      statut: 'En cours de livraison',
-      codeStatut: 'pending',
-      total: `${totalCalculated.toLocaleString('fr-FR')} FCFA`
-    };
-
-    setCommandes([newCmd, ...commandes]);
-    Alert.alert(
-      'Commande enregistrée',
-      `Livraison de ${qteNum}x ${selectedCylinder.name} en cours.`,
-      [{ text: 'Voir le suivi', onPress: () => setDashboardTab('orders_list') }]
-    );
+      setUser({ ...user, isSubscribed: true });
+      Alert.alert('Paiement réussi', 'Votre abonnement vendeur a été activé avec succès.');
+    }, 1500);
   };
 
   const handleLogout = () => {
@@ -357,6 +300,10 @@ export default function App() {
       </View>
     );
   }
+
+  const daysLeft = user ? getDaysLeftInTrial(user.createdAt) : 30;
+  // L'abonnement concerne uniquement les dépôts / vendeurs
+  const isTrialExpired = user && user.role === 'depot' && !user.isSubscribed && daysLeft <= 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -394,265 +341,322 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
           {user ? (
-            <FadeInView key={dashboardTab} style={styles.mainWrapper}>
-              {/* Onglets de navigation */}
-              <View style={styles.pillsContainer}>
-                <AnimatedButton
-                  style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
-                  onPress={() => setDashboardTab('home')}
-                >
-                  <Text style={[styles.pillText, dashboardTab === 'home' && styles.pillTextActive]}>Accueil</Text>
-                </AnimatedButton>
+            isTrialExpired ? (
+              /* ÉCRAN PAYWALL - ABONNEMENT VENDEUR (WAVE, ORANGE, MTN) */
+              <FadeInView style={styles.mainWrapper}>
+                <View style={[styles.cardBox, { flex: 1 }]}>
+                  <Text style={{ fontSize: 36, textAlign: 'center', marginBottom: 8 }}>🔒</Text>
+                  <Text style={[styles.cardBoxTitle, { textAlign: 'center' }]}>Abonnement Dépôt Requis</Text>
+                  <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginBottom: 16 }}>
+                    Votre période d'essai de 1 mois est expirée. Abonnez votre dépôt pour continuer d'apparaître sur la carte et recevoir des commandes.
+                  </Text>
 
-                {user.role === 'depot' ? (
-                  <>
-                    <AnimatedButton
-                      style={[styles.pillBtn, dashboardTab === 'add_stock' && styles.pillBtnActive]}
-                      onPress={() => setDashboardTab('add_stock')}
-                    >
-                      <Text style={[styles.pillText, dashboardTab === 'add_stock' && styles.pillTextActive]}>Stock</Text>
-                    </AnimatedButton>
-                    <AnimatedButton
-                      style={[styles.pillBtn, dashboardTab === 'sales_list' && styles.pillBtnActive]}
-                      onPress={() => setDashboardTab('sales_list')}
-                    >
-                      <Text style={[styles.pillText, dashboardTab === 'sales_list' && styles.pillTextActive]}>Inventaire</Text>
-                    </AnimatedButton>
-                  </>
-                ) : (
-                  <>
-                    <AnimatedButton
-                      style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
-                      onPress={() => setDashboardTab('depots')}
-                    >
-                      <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts 📍</Text>
-                    </AnimatedButton>
-                    <AnimatedButton
-                      style={[styles.pillBtn, dashboardTab === 'order' && styles.pillBtnActive]}
-                      onPress={() => setDashboardTab('order')}
-                    >
-                      <Text style={[styles.pillText, dashboardTab === 'order' && styles.pillTextActive]}>Commander</Text>
-                    </AnimatedButton>
-                    <AnimatedButton
-                      style={[styles.pillBtn, dashboardTab === 'orders_list' && styles.pillBtnActive]}
-                      onPress={() => setDashboardTab('orders_list')}
-                    >
-                      <Text style={[styles.pillText, dashboardTab === 'orders_list' && styles.pillTextActive]}>Suivi ({commandes.length})</Text>
-                    </AnimatedButton>
-                  </>
-                )}
-              </View>
-
-              {/* VUE D'ENSEMBLE */}
-              {dashboardTab === 'home' && (
-                <View style={styles.fullSection}>
-                  <View style={styles.welcomeBanner}>
-                    <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} 👋</Text>
+                  <View style={styles.subCard}>
+                    <Text style={styles.subCardTitle}>Abonnement Mensuel Vendeur</Text>
+                    <Text style={styles.subCardPrice}>3 000 FCFA / mois</Text>
                   </View>
 
-                  <View style={styles.kpiGrid}>
-                    <View style={styles.kpiCard}>
-                      <Text style={styles.kpiCardTag}>COMMANDES</Text>
-                      <Text style={styles.kpiCardNum}>{commandes.length}</Text>
-                    </View>
-                    <View style={styles.kpiCard}>
-                      <Text style={styles.kpiCardTag}>DÉPÔTS PROCHES</Text>
-                      <Text style={styles.kpiCardNum}>3</Text>
-                    </View>
-                  </View>
-
-                  {user.role === 'depot' ? (
-                    <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
-                      <Text style={styles.actionCardTitle}>📦 Gestion des stocks</Text>
-                    </AnimatedButton>
-                  ) : (
-                    <View style={{ gap: 12 }}>
-                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
-                        <Text style={styles.actionCardTitle}>📍 Dépôt plus Proche</Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                        <Text style={styles.actionCardTitleWhite}>🚀 Commander du Gaz</Text>
-                      </AnimatedButton>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* DÉPÔTS PROCHES */}
-              {dashboardTab === 'depots' && (
-                <View style={[styles.cardBox, { flex: 1 }]}>
-                  <Text style={styles.cardBoxTitle}>Dépôts à proximité 📍</Text>
-
-                  <TextInput
-                    style={styles.input}
-                    placeholder="🔍 Recherche par quartier..."
-                    placeholderTextColor="#94A3B8"
-                    value={searchDepot}
-                    onChangeText={setSearchDepot}
-                  />
-
-                  {filteredDepots.map((depot) => (
-                    <View key={depot.id} style={styles.depotCard}>
-                      <View style={styles.depotHeader}>
-                        <View>
-                          <Text style={styles.depotTitle}>{depot.nom}</Text>
-                          <Text style={styles.depotSub}>{depot.quartier} • <Text style={styles.depotDistance}>{depot.distance}</Text></Text>
-                        </View>
-                        <View style={styles.depotStatusBadge}>
-                          <Text style={styles.depotStatusText}>● {depot.statut}</Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.stockChipsRow}>
-                        <View style={styles.stockChip}>
-                          <Text style={styles.stockChipLabel}>B6</Text>
-                          <Text style={styles.stockChipVal}>{depot.b6} dispo</Text>
-                        </View>
-                        <View style={styles.stockChip}>
-                          <Text style={styles.stockChipLabel}>B12</Text>
-                          <Text style={depot.b12 > 0 ? styles.stockChipVal : styles.stockChipValEmpty}>
-                            {depot.b12 > 0 ? `${depot.b12} dispo` : 'Rupture'}
-                          </Text>
-                        </View>
-                        <View style={styles.stockChip}>
-                          <Text style={styles.stockChipLabel}>B28</Text>
-                          <Text style={styles.stockChipVal}>{depot.b28} dispo</Text>
-                        </View>
-                      </View>
-
-                      <AnimatedButton
-                        style={styles.btnDepotSelect}
-                        onPress={() => {
-                          setAdresseLivraison(depot.quartier);
-                          setDashboardTab('order');
-                        }}
-                      >
-                        <Text style={styles.btnDepotSelectText}>Commander ici</Text>
-                      </AnimatedButton>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* COMMANDE */}
-              {dashboardTab === 'order' && (
-                <View style={[styles.cardBox, { flex: 1 }]}>
-                  <Text style={styles.cardBoxTitle}>Commander</Text>
-
-                  <View style={styles.cylinderList}>
-                    {CYLINDER_TYPES.map((cyl) => {
-                      const isSelected = selectedCylinder.id === cyl.id;
+                  <Text style={styles.label}>Mode de paiement</Text>
+                  <View style={styles.paymentMethodsRow}>
+                    {PAYMENT_METHODS.map((pm) => {
+                      const isSelected = selectedPayment === pm.id;
                       return (
                         <AnimatedButton
-                          key={cyl.id}
-                          style={[styles.cylinderItem, isSelected && styles.cylinderItemActive]}
-                          onPress={() => setSelectedCylinder(cyl)}
+                          key={pm.id}
+                          style={[styles.paymentBtn, isSelected && { borderColor: pm.color, backgroundColor: '#FFF' }]}
+                          onPress={() => setSelectedPayment(pm.id)}
                         >
-                          <View style={styles.cylinderHeader}>
-                            <Text style={styles.cylinderTitle}>{cyl.icon} {cyl.name}</Text>
-                            <Text style={styles.cylinderPrice}>{cyl.price.toLocaleString('fr-FR')} FCFA</Text>
-                          </View>
+                          <Text style={{ fontSize: 18 }}>{pm.icon}</Text>
+                          <Text style={[styles.paymentBtnText, isSelected && { color: '#0F172A', fontWeight: '800' }]}>{pm.name}</Text>
                         </AnimatedButton>
                       );
                     })}
                   </View>
 
-                  <Text style={styles.label}>Quantité</Text>
+                  <Text style={styles.label}>Numéro de téléphone de débogage *</Text>
                   <TextInput
                     style={styles.input}
-                    keyboardType="numeric"
-                    value={quantite}
-                    onChangeText={setQuantite}
+                    keyboardType="phone-pad"
+                    placeholder="07 00 00 00 00"
+                    value={paymentPhone}
+                    onChangeText={setPaymentPhone}
                   />
 
-                  <Text style={styles.label}>Adresse de livraison *</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Quartier, point de repère"
-                    placeholderTextColor="#94A3B8"
-                    value={adresseLivraison}
-                    onChangeText={setAdresseLivraison}
-                  />
-
-                  <View style={styles.totalSummary}>
-                    <Text style={styles.totalSummaryLabel}>Montant Total :</Text>
-                    <Text style={styles.totalSummaryValue}>
-                      {((parseInt(quantite) || 1) * selectedCylinder.price).toLocaleString('fr-FR')} FCFA
+                  <AnimatedButton style={styles.btnOrange} onPress={handleProcessSubscription} disabled={loading}>
+                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Payer l'abonnement</Text>}
+                  </AnimatedButton>
+                </View>
+              </FadeInView>
+            ) : (
+              <FadeInView key={dashboardTab} style={styles.mainWrapper}>
+                {/* Bandeau d'essai réservé au rôle dépôt */}
+                {user.role === 'depot' && !user.isSubscribed && (
+                  <View style={styles.trialBanner}>
+                    <Text style={styles.trialBannerText}>
+                      🎁 Essai Vendeur : <Text style={{ fontWeight: '900' }}>{daysLeft} jours restants</Text>
                     </Text>
                   </View>
+                )}
 
-                  <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
-                    <Text style={styles.btnOrangeText}>Valider</Text>
+                {/* Onglets de navigation */}
+                <View style={styles.pillsContainer}>
+                  <AnimatedButton
+                    style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
+                    onPress={() => setDashboardTab('home')}
+                  >
+                    <Text style={[styles.pillText, dashboardTab === 'home' && styles.pillTextActive]}>Accueil</Text>
                   </AnimatedButton>
-                </View>
-              )}
 
-              {/* SUIVI */}
-              {dashboardTab === 'orders_list' && (
-                <View style={[styles.cardBox, { flex: 1 }]}>
-                  <Text style={styles.cardBoxTitle}>Suivi des commandes</Text>
-
-                  <View style={styles.filterRow}>
-                    <AnimatedButton style={[styles.filterBtn, orderFilter === 'all' && styles.filterBtnActive]} onPress={() => setOrderFilter('all')}>
-                      <Text style={[styles.filterText, orderFilter === 'all' && styles.filterTextActive]}>Toutes</Text>
-                    </AnimatedButton>
-                    <AnimatedButton style={[styles.filterBtn, orderFilter === 'pending' && styles.filterBtnActive]} onPress={() => setOrderFilter('pending')}>
-                      <Text style={[styles.filterText, orderFilter === 'pending' && styles.filterTextActive]}>En cours</Text>
-                    </AnimatedButton>
-                    <AnimatedButton style={[styles.filterBtn, orderFilter === 'delivered' && styles.filterBtnActive]} onPress={() => setOrderFilter('delivered')}>
-                      <Text style={[styles.filterText, orderFilter === 'delivered' && styles.filterTextActive]}>Livrées</Text>
-                    </AnimatedButton>
-                  </View>
-
-                  {commandes.length === 0 ? (
-                    <View style={styles.emptyBox}>
-                      <Text style={styles.emptyText}>Aucune commande enregistrée.</Text>
-                    </View>
+                  {user.role === 'depot' ? (
+                    <>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'add_stock' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('add_stock')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'add_stock' && styles.pillTextActive]}>Stock</Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'sales_list' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('sales_list')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'sales_list' && styles.pillTextActive]}>Inventaire</Text>
+                      </AnimatedButton>
+                    </>
                   ) : (
-                    filteredCommandes.map((cmd) => (
-                      <View key={cmd.id} style={styles.orderRow}>
-                        <View style={styles.orderRowHeader}>
-                          <Text style={styles.orderRowId}>{cmd.id}</Text>
-                          <Text style={cmd.codeStatut === 'delivered' ? styles.statusGreen : styles.statusOrange}>{cmd.statut}</Text>
-                        </View>
-                        <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type}</Text>
-                        <View style={styles.orderRowFooter}>
-                          <Text style={styles.orderRowDate}>{cmd.date}</Text>
-                          <Text style={styles.orderRowTotal}>{cmd.total}</Text>
-                        </View>
-                      </View>
-                    ))
+                    <>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('depots')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts 📍</Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'order' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('order')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'order' && styles.pillTextActive]}>Commander</Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'orders_list' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('orders_list')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'orders_list' && styles.pillTextActive]}>Suivi ({commandes.length})</Text>
+                      </AnimatedButton>
+                    </>
                   )}
                 </View>
-              )}
 
-              {/* DÉPÔT STOCK */}
-              {dashboardTab === 'add_stock' && (
-                <View style={[styles.cardBox, { flex: 1 }]}>
-                  <Text style={styles.cardBoxTitle}>Mise à jour des stocks</Text>
-                  <Text style={styles.label}>Bouteilles B6 (6 kg)</Text>
-                  <TextInput style={styles.input} keyboardType="numeric" value={stockB6} onChangeText={setStockB6} />
-                  <Text style={styles.label}>Bouteilles B12 (12.5 kg)</Text>
-                  <TextInput style={styles.input} keyboardType="numeric" value={stockB12} onChangeText={setStockB12} />
-                  <Text style={styles.label}>Bouteilles B28 (28 kg)</Text>
-                  <TextInput style={styles.input} keyboardType="numeric" value={stockB28} onChangeText={setStockB28} />
-                  <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Stock mis à jour.')}>
-                    <Text style={styles.btnOrangeText}>Enregistrer</Text>
-                  </AnimatedButton>
-                </View>
-              )}
+                {/* ACCUEIL */}
+                {dashboardTab === 'home' && (
+                  <View style={styles.fullSection}>
+                    <View style={styles.welcomeBanner}>
+                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} 👋</Text>
+                    </View>
 
-              {/* INVENTAIRE */}
-              {dashboardTab === 'sales_list' && (
-                <View style={[styles.cardBox, { flex: 1 }]}>
-                  <Text style={styles.cardBoxTitle}>État actuel du dépôt</Text>
-                  <Text style={styles.stockItem}>• Bouteilles B6 : {stockB6} disponibles</Text>
-                  <Text style={styles.stockItem}>• Bouteilles B12 : {stockB12} disponibles</Text>
-                  <Text style={styles.stockItem}>• Bouteilles B28 : {stockB28} disponibles</Text>
-                </View>
-              )}
-            </FadeInView>
+                    <View style={styles.kpiGrid}>
+                      <View style={styles.kpiCard}>
+                        <Text style={styles.kpiCardTag}>COMMANDES</Text>
+                        <Text style={styles.kpiCardNum}>{commandes.length}</Text>
+                      </View>
+                      <View style={styles.kpiCard}>
+                        <Text style={styles.kpiCardTag}>DÉPÔTS PROCHES</Text>
+                        <Text style={styles.kpiCardNum}>3</Text>
+                      </View>
+                    </View>
+
+                    {user.role === 'depot' ? (
+                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
+                        <Text style={styles.actionCardTitle}>📦 Gestion des stocks</Text>
+                      </AnimatedButton>
+                    ) : (
+                      <View style={{ gap: 12 }}>
+                        <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
+                          <Text style={styles.actionCardTitle}>📍 Trouver un dépôt à proximité</Text>
+                        </AnimatedButton>
+
+                        <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
+                          <Text style={styles.actionCardTitleWhite}>🚀 Commander une recharge</Text>
+                        </AnimatedButton>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* DÉPÔTS */}
+                {dashboardTab === 'depots' && (
+                  <View style={[styles.cardBox, { flex: 1 }]}>
+                    <Text style={styles.cardBoxTitle}>Dépôts à proximité 📍</Text>
+
+                    <TextInput
+                      style={styles.input}
+                      placeholder="🔍 Recherche par quartier..."
+                      placeholderTextColor="#94A3B8"
+                      value={searchDepot}
+                      onChangeText={setSearchDepot}
+                    />
+
+                    {filteredDepots.map((depot) => (
+                      <View key={depot.id} style={styles.depotCard}>
+                        <View style={styles.depotHeader}>
+                          <View>
+                            <Text style={styles.depotTitle}>{depot.nom}</Text>
+                            <Text style={styles.depotSub}>{depot.quartier} • <Text style={styles.depotDistance}>{depot.distance}</Text></Text>
+                          </View>
+                          <View style={styles.depotStatusBadge}>
+                            <Text style={styles.depotStatusText}>● {depot.statut}</Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.stockChipsRow}>
+                          <View style={styles.stockChip}>
+                            <Text style={styles.stockChipLabel}>B6</Text>
+                            <Text style={styles.stockChipVal}>{depot.b6} dispo</Text>
+                          </View>
+                          <View style={styles.stockChip}>
+                            <Text style={styles.stockChipLabel}>B12</Text>
+                            <Text style={depot.b12 > 0 ? styles.stockChipVal : styles.stockChipValEmpty}>
+                              {depot.b12 > 0 ? `${depot.b12} dispo` : 'Rupture'}
+                            </Text>
+                          </View>
+                          <View style={styles.stockChip}>
+                            <Text style={styles.stockChipLabel}>B28</Text>
+                            <Text style={styles.stockChipVal}>{depot.b28} dispo</Text>
+                          </View>
+                        </View>
+
+                        <AnimatedButton
+                          style={styles.btnDepotSelect}
+                          onPress={() => {
+                            setAdresseLivraison(depot.quartier);
+                            setDashboardTab('order');
+                          }}
+                        >
+                          <Text style={styles.btnDepotSelectText}>Commander ici</Text>
+                        </AnimatedButton>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* COMMANDE */}
+                {dashboardTab === 'order' && (
+                  <View style={[styles.cardBox, { flex: 1 }]}>
+                    <Text style={styles.cardBoxTitle}>Passer une commande</Text>
+
+                    <View style={styles.cylinderList}>
+                      {CYLINDER_TYPES.map((cyl) => {
+                        const isSelected = selectedCylinder.id === cyl.id;
+                        return (
+                          <AnimatedButton
+                            key={cyl.id}
+                            style={[styles.cylinderItem, isSelected && styles.cylinderItemActive]}
+                            onPress={() => setSelectedCylinder(cyl)}
+                          >
+                            <View style={styles.cylinderHeader}>
+                              <Text style={styles.cylinderTitle}>{cyl.icon} {cyl.name}</Text>
+                              <Text style={styles.cylinderPrice}>{cyl.price.toLocaleString('fr-FR')} FCFA</Text>
+                            </View>
+                          </AnimatedButton>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={styles.label}>Quantité</Text>
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="numeric"
+                      value={quantite}
+                      onChangeText={setQuantite}
+                    />
+
+                    <Text style={styles.label}>Adresse de livraison *</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Quartier, point de repère"
+                      placeholderTextColor="#94A3B8"
+                      value={adresseLivraison}
+                      onChangeText={setAdresseLivraison}
+                    />
+
+                    <View style={styles.totalSummary}>
+                      <Text style={styles.totalSummaryLabel}>Montant Total :</Text>
+                      <Text style={styles.totalSummaryValue}>
+                        {((parseInt(quantite) || 1) * selectedCylinder.price).toLocaleString('fr-FR')} FCFA
+                      </Text>
+                    </View>
+
+                    <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Commande transmise !')}>
+                      <Text style={styles.btnOrangeText}>Valider la commande</Text>
+                    </AnimatedButton>
+                  </View>
+                )}
+
+                {/* SUIVI */}
+                {dashboardTab === 'orders_list' && (
+                  <View style={[styles.cardBox, { flex: 1 }]}>
+                    <Text style={styles.cardBoxTitle}>Suivi des commandes</Text>
+
+                    <View style={styles.filterRow}>
+                      <AnimatedButton style={[styles.filterBtn, orderFilter === 'all' && styles.filterBtnActive]} onPress={() => setOrderFilter('all')}>
+                        <Text style={[styles.filterText, orderFilter === 'all' && styles.filterTextActive]}>Toutes</Text>
+                      </AnimatedButton>
+                      <AnimatedButton style={[styles.filterBtn, orderFilter === 'pending' && styles.filterBtnActive]} onPress={() => setOrderFilter('pending')}>
+                        <Text style={[styles.filterText, orderFilter === 'pending' && styles.filterTextActive]}>En cours</Text>
+                      </AnimatedButton>
+                      <AnimatedButton style={[styles.filterBtn, orderFilter === 'delivered' && styles.filterBtnActive]} onPress={() => setOrderFilter('delivered')}>
+                        <Text style={[styles.filterText, orderFilter === 'delivered' && styles.filterTextActive]}>Livrées</Text>
+                      </AnimatedButton>
+                    </View>
+
+                    {commandes.length === 0 ? (
+                      <View style={styles.emptyBox}>
+                        <Text style={styles.emptyText}>Aucune commande enregistrée.</Text>
+                      </View>
+                    ) : (
+                      filteredCommandes.map((cmd) => (
+                        <View key={cmd.id} style={styles.orderRow}>
+                          <View style={styles.orderRowHeader}>
+                            <Text style={styles.orderRowId}>{cmd.id}</Text>
+                            <Text style={cmd.codeStatut === 'delivered' ? styles.statusGreen : styles.statusOrange}>{cmd.statut}</Text>
+                          </View>
+                          <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type}</Text>
+                          <View style={styles.orderRowFooter}>
+                            <Text style={styles.orderRowDate}>{cmd.date}</Text>
+                            <Text style={styles.orderRowTotal}>{cmd.total}</Text>
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                )}
+
+                {/* DÉPÔT STOCK */}
+                {dashboardTab === 'add_stock' && (
+                  <View style={[styles.cardBox, { flex: 1 }]}>
+                    <Text style={styles.cardBoxTitle}>Mise à jour des stocks</Text>
+                    <Text style={styles.label}>Bouteilles B6 (6 kg)</Text>
+                    <TextInput style={styles.input} keyboardType="numeric" value={stockB6} onChangeText={setStockB6} />
+                    <Text style={styles.label}>Bouteilles B12 (12.5 kg)</Text>
+                    <TextInput style={styles.input} keyboardType="numeric" value={stockB12} onChangeText={setStockB12} />
+                    <Text style={styles.label}>Bouteilles B28 (28 kg)</Text>
+                    <TextInput style={styles.input} keyboardType="numeric" value={stockB28} onChangeText={setStockB28} />
+                    <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Stock mis à jour.')}>
+                      <Text style={styles.btnOrangeText}>Enregistrer le stock</Text>
+                    </AnimatedButton>
+                  </View>
+                )}
+
+                {/* INVENTAIRE */}
+                {dashboardTab === 'sales_list' && (
+                  <View style={[styles.cardBox, { flex: 1 }]}>
+                    <Text style={styles.cardBoxTitle}>État actuel du dépôt</Text>
+                    <Text style={styles.stockItem}>• Bouteilles B6 : {stockB6} disponibles</Text>
+                    <Text style={styles.stockItem}>• Bouteilles B12 : {stockB12} disponibles</Text>
+                    <Text style={styles.stockItem}>• Bouteilles B28 : {stockB28} disponibles</Text>
+                  </View>
+                )}
+              </FadeInView>
+            )
           ) : (
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
@@ -667,7 +671,7 @@ export default function App() {
                     </AnimatedButton>
 
                     <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
-                      <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
+                      <Text style={styles.welcomeCardTitleDark}>Espace Dépôt / Vendeur</Text>
                     </AnimatedButton>
                   </View>
 
@@ -680,7 +684,7 @@ export default function App() {
               {(currentScreen === 'register_client' || currentScreen === 'register_depot') && (
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
+                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
                   </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>{currentScreen === 'register_depot' ? 'Créer un compte Dépôt' : 'Créer un compte Client'}</Text>
 
@@ -700,16 +704,15 @@ export default function App() {
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" value={password} onChangeText={setPassword} />
 
                   <AnimatedButton style={styles.btnOrange} onPress={() => handleRegister(currentScreen === 'register_depot' ? 'depot' : 'client')} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>S'inscrire</Text>}
+                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>{currentScreen === 'register_depot' ? 'S\'inscrire (1 Mois Gratuit)' : 'Créer mon compte'}</Text>}
                   </AnimatedButton>
                 </View>
               )}
 
-              {/* ÉCRAN DE CONNEXION AVEC MOT DE PASSE OUBLIÉ */}
               {currentScreen === 'login' && (
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
+                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
                   </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
@@ -733,68 +736,6 @@ export default function App() {
                   <AnimatedButton style={styles.btnOrange} onPress={handleLogin} disabled={loading}>
                     {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Se connecter</Text>}
                   </AnimatedButton>
-                </View>
-              )}
-
-              {/* NOUVEL ÉCRAN : RÉINITIALISATION DE MOT DE PASSE */}
-              {currentScreen === 'forgot_password' && (
-                <View style={[styles.cardBox, { flex: 1 }]}>
-                  <AnimatedButton
-                    onPress={() => {
-                      if (resetStep === 2) {
-                        setResetStep(1);
-                      } else {
-                        setCurrentScreen('login');
-                      }
-                    }}
-                    style={{ marginBottom: 14 }}
-                  >
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
-                  </AnimatedButton>
-
-                  <Text style={styles.cardBoxTitle}>Réinitialisation</Text>
-
-                  {resetStep === 1 ? (
-                    <>
-                      <Text style={styles.label}>Saisissez votre adresse email enregistrée :</Text>
-                      <TextInput
-                        style={styles.input}
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                        placeholder="email@exemple.com"
-                        value={forgotEmail}
-                        onChangeText={setForgotEmail}
-                      />
-
-                      <AnimatedButton style={styles.btnOrange} onPress={handleRequestResetCode} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Envoyer le code</Text>}
-                      </AnimatedButton>
-                    </>
-                  ) : (
-                    <>
-                      <Text style={styles.label}>Code de vérification</Text>
-                      <TextInput
-                        style={styles.input}
-                        keyboardType="numeric"
-                        placeholder="Ex: 123456"
-                        value={resetCode}
-                        onChangeText={setResetCode}
-                      />
-
-                      <Text style={styles.label}>Nouveau mot de passe</Text>
-                      <TextInput
-                        style={styles.input}
-                        secureTextEntry
-                        placeholder="••••••••"
-                        value={newPassword}
-                        onChangeText={setNewPassword}
-                      />
-
-                      <AnimatedButton style={styles.btnOrange} onPress={handleConfirmNewPassword} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Réinitialiser</Text>}
-                      </AnimatedButton>
-                    </>
-                  )}
                 </View>
               )}
             </FadeInView>
@@ -821,6 +762,14 @@ const styles = StyleSheet.create({
   logoutBtnText: { color: '#F87171', fontSize: 12, fontWeight: '700' },
   scrollContent: { flexGrow: 1, padding: 18 },
   mainWrapper: { flex: 1, justifyContent: 'space-between' },
+  trialBanner: { backgroundColor: '#FEF3C7', borderLeftWidth: 4, borderLeftColor: '#F59E0B', padding: 10, borderRadius: 8, marginBottom: 14 },
+  trialBannerText: { color: '#B45309', fontSize: 12, fontWeight: '700' },
+  subCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 16, width: '100%', alignItems: 'center', marginBottom: 16 },
+  subCardTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
+  subCardPrice: { fontSize: 20, fontWeight: '900', color: '#F97316', marginTop: 4 },
+  paymentMethodsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  paymentBtn: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', padding: 10, borderRadius: 10, alignItems: 'center' },
+  paymentBtnText: { fontSize: 10, fontWeight: '700', color: '#64748B', marginTop: 4 },
   welcomeContainer: { flex: 1, justifyContent: 'space-between' },
   fullSection: { flex: 1, justifyContent: 'flex-start' },
   pillsContainer: { flexDirection: 'row', backgroundColor: '#E2E8F0', padding: 4, borderRadius: 12, marginBottom: 18, gap: 6 },
