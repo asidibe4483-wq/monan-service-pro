@@ -18,7 +18,6 @@ import {
 
 const API_URL = "https://monan-backend.onrender.com";
 
-// Animation d'apparition exécutée uniquement à l'ouverture d'un onglet
 const FadeInView = ({ children, style }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
@@ -37,16 +36,15 @@ const FadeInView = ({ children, style }) => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []); // [] garantit que la saisie au clavier ne relance PAS l'animation
+  }, []);
 
   return (
-    <Animated.View style={[style, { opacity: fadeAnim, transform: [{ translateY }] }]}>
+    <Animated.View style={[{ flex: 1 }, style, { opacity: fadeAnim, transform: [{ translateY }] }]}>
       {children}
     </Animated.View>
   );
 };
 
-// Bouton réactif au clic avec effet de pression doux
 const AnimatedButton = ({ onPress, style, children, disabled }) => {
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -91,11 +89,11 @@ const CYLINDER_TYPES = [
 export default function App() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('welcome');
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(null); // Aucun compte préchargé
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
-  // Authentification
+  // Formulaire vierge
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
@@ -108,7 +106,7 @@ export default function App() {
   const [adresseLivraison, setAdresseLivraison] = useState('');
   const [orderFilter, setOrderFilter] = useState('all');
 
-  // Dépôts
+  // Dépôts de démonstration
   const [searchDepot, setSearchDepot] = useState('');
   const [depotsList] = useState([
     { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distance: '0.8 km', quartier: 'Cocody Angré', statut: 'Ouvert', b6: 14, b12: 28, b28: 5 },
@@ -116,16 +114,13 @@ export default function App() {
     { id: 'DEP-03', nom: 'Dépôt Yopougon Maroc', distance: '5.1 km', quartier: 'Yopougon', statut: 'Ouvert', b6: 22, b12: 35, b28: 10 },
   ]);
 
-  // Commandes
-  const [commandes, setCommandes] = useState([
-    { id: 'CMD-108', date: '29/10/2026', type: 'B12 (12.5 kg)', qte: 1, statut: 'En cours de livraison', total: '5 500 FCFA', codeStatut: 'pending' },
-    { id: 'CMD-094', date: '15/10/2026', type: 'B6 (6 kg)', qte: 2, statut: 'Livrée avec succès', total: '5 000 FCFA', codeStatut: 'delivered' }
-  ]);
+  // Commandes vierges
+  const [commandes, setCommandes] = useState([]);
 
   // Stocks Vendeur
-  const [stockB6, setStockB6] = useState('24');
-  const [stockB12, setStockB12] = useState('42');
-  const [stockB28, setStockB28] = useState('10');
+  const [stockB6, setStockB6] = useState('0');
+  const [stockB12, setStockB12] = useState('0');
+  const [stockB28, setStockB28] = useState('0');
 
   useEffect(() => {
     const timer = setTimeout(() => setIsAppReady(true), 1500);
@@ -134,7 +129,7 @@ export default function App() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Erreur', 'Veuillez remplir votre email et mot de passe.');
+      Alert.alert('Erreur', 'Veuillez saisir votre email et mot de passe.');
       return;
     }
 
@@ -155,7 +150,7 @@ export default function App() {
       }
 
       if (!response.ok) {
-        throw new Error(data.message || data.error || 'Connexion échouée.');
+        throw new Error(data.message || data.error || 'Identifiants incorrects.');
       }
 
       const userData = data.user || { email, role: 'client', nom: data.nom || email.split('@')[0] };
@@ -163,7 +158,7 @@ export default function App() {
       setAdresseLivraison(userData.adresse || '');
       setDashboardTab('home');
     } catch (error) {
-      Alert.alert('Erreur', error.message);
+      Alert.alert('Connexion échouée', error.message);
     } finally {
       setLoading(false);
     }
@@ -208,7 +203,7 @@ export default function App() {
       setUser(newUser);
       setAdresseLivraison(adresse.trim());
       setDashboardTab('home');
-      Alert.alert('Bienvenue !', 'Compte créé avec succès.');
+      Alert.alert('Succès', 'Compte créé avec succès !');
     } catch (error) {
       Alert.alert('Erreur', error.message);
     } finally {
@@ -239,12 +234,17 @@ export default function App() {
     Alert.alert(
       'Commande enregistrée',
       `Livraison de ${qteNum}x ${selectedCylinder.name} en cours.`,
-      [{ text: 'Suivi', onPress: () => setDashboardTab('orders_list') }]
+      [{ text: 'Voir le suivi', onPress: () => setDashboardTab('orders_list') }]
     );
   };
 
   const handleLogout = () => {
     setUser(null);
+    setEmail('');
+    setPassword('');
+    setNom('');
+    setTelephone('');
+    setAdresse('');
     setCurrentScreen('welcome');
     setDashboardTab('home');
   };
@@ -266,7 +266,7 @@ export default function App() {
         <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
         <Image source={require('./assets/splash-icon.png')} style={styles.splashLogo} resizeMode="contain" />
         <Text style={styles.splashTitle}>MONAN SERVICE</Text>
-        <ActivityIndicator size="small" color="#F97316" style={{ marginTop: 20 }} />
+        <ActivityIndicator size="small" color="#F97316" style={{ marginTop: 24 }} />
       </View>
     );
   }
@@ -275,7 +275,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* Barre supérieure */}
+      {/* Barre d'en-tête */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -288,7 +288,7 @@ export default function App() {
           <View>
             <Text style={styles.brandTitle}>MONAN SERVICE</Text>
             <Text style={styles.brandSub}>
-              {user ? (user.role === 'depot' ? 'ESPACE DÉPÔT' : 'ESPACE CLIENT') : 'SERVICES DE GAZ'}
+              {user ? (user.role === 'depot' ? 'ESPACE DÉPÔT' : 'ESPACE CLIENT') : 'LIVRAISON & DISTRIBUTION DE GAZ'}
             </Text>
           </View>
         </View>
@@ -307,8 +307,8 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
           {user ? (
-            <FadeInView key={dashboardTab}>
-              {/* Onglets épurés */}
+            <FadeInView key={dashboardTab} style={styles.mainWrapper}>
+              {/* Onglets de navigation */}
               <View style={styles.pillsContainer}>
                 <AnimatedButton
                   style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
@@ -358,9 +358,12 @@ export default function App() {
 
               {/* VUE D'ENSEMBLE */}
               {dashboardTab === 'home' && (
-                <View>
+                <View style={styles.fullSection}>
                   <View style={styles.welcomeBanner}>
                     <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} 👋</Text>
+                    <Text style={styles.welcomeBannerSub}>
+                      {user.role === 'depot' ? 'Gérez vos réserves et traitez les commandes reçues.' : 'Commandez vos recharges de gaz et localisez les dépôts proches.'}
+                    </Text>
                   </View>
 
                   <View style={styles.kpiGrid}>
@@ -377,24 +380,27 @@ export default function App() {
                   {user.role === 'depot' ? (
                     <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
                       <Text style={styles.actionCardTitle}>📦 Gestion des stocks</Text>
+                      <Text style={styles.actionCardSub}>Ajustez le niveau de vos bouteilles B6, B12 et B28.</Text>
                     </AnimatedButton>
                   ) : (
-                    <>
+                    <View style={{ gap: 12 }}>
                       <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
-                        <Text style={styles.actionCardTitle}>📍 Rechercher un dépôt proche</Text>
+                        <Text style={styles.actionCardTitle}>📍 Trouver un dépôt à proximité</Text>
+                        <Text style={styles.actionCardSub}>Vérifiez la disponibilité du gaz en temps réel.</Text>
                       </AnimatedButton>
 
                       <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
                         <Text style={styles.actionCardTitleWhite}>🚀 Commander une recharge</Text>
+                        <Text style={styles.actionCardSubWhite}>Livraison rapide à l'adresse de votre choix.</Text>
                       </AnimatedButton>
-                    </>
+                    </View>
                   )}
                 </View>
               )}
 
               {/* DÉPÔTS PROCHES */}
               {dashboardTab === 'depots' && (
-                <View style={styles.cardBox}>
+                <View style={[styles.cardBox, { flex: 1 }]}>
                   <Text style={styles.cardBoxTitle}>Dépôts à proximité 📍</Text>
 
                   <TextInput
@@ -450,7 +456,7 @@ export default function App() {
 
               {/* COMMANDE */}
               {dashboardTab === 'order' && (
-                <View style={styles.cardBox}>
+                <View style={[styles.cardBox, { flex: 1 }]}>
                   <Text style={styles.cardBoxTitle}>Passer une commande</Text>
 
                   <View style={styles.cylinderList}>
@@ -482,14 +488,14 @@ export default function App() {
                   <Text style={styles.label}>Adresse de livraison *</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="Quartier, lieu de livraison"
+                    placeholder="Quartier, point de repère"
                     placeholderTextColor="#94A3B8"
                     value={adresseLivraison}
                     onChangeText={setAdresseLivraison}
                   />
 
                   <View style={styles.totalSummary}>
-                    <Text style={styles.totalSummaryLabel}>Total :</Text>
+                    <Text style={styles.totalSummaryLabel}>Montant Total :</Text>
                     <Text style={styles.totalSummaryValue}>
                       {((parseInt(quantite) || 1) * selectedCylinder.price).toLocaleString('fr-FR')} FCFA
                     </Text>
@@ -503,7 +509,7 @@ export default function App() {
 
               {/* SUIVI */}
               {dashboardTab === 'orders_list' && (
-                <View style={styles.cardBox}>
+                <View style={[styles.cardBox, { flex: 1 }]}>
                   <Text style={styles.cardBoxTitle}>Suivi des commandes</Text>
 
                   <View style={styles.filterRow}>
@@ -518,25 +524,31 @@ export default function App() {
                     </AnimatedButton>
                   </View>
 
-                  {filteredCommandes.map((cmd) => (
-                    <View key={cmd.id} style={styles.orderRow}>
-                      <View style={styles.orderRowHeader}>
-                        <Text style={styles.orderRowId}>{cmd.id}</Text>
-                        <Text style={cmd.codeStatut === 'delivered' ? styles.statusGreen : styles.statusOrange}>{cmd.statut}</Text>
-                      </View>
-                      <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type}</Text>
-                      <View style={styles.orderRowFooter}>
-                        <Text style={styles.orderRowDate}>{cmd.date}</Text>
-                        <Text style={styles.orderRowTotal}>{cmd.total}</Text>
-                      </View>
+                  {commandes.length === 0 ? (
+                    <View style={styles.emptyBox}>
+                      <Text style={styles.emptyText}>Aucune commande enregistrée pour le moment.</Text>
                     </View>
-                  ))}
+                  ) : (
+                    filteredCommandes.map((cmd) => (
+                      <View key={cmd.id} style={styles.orderRow}>
+                        <View style={styles.orderRowHeader}>
+                          <Text style={styles.orderRowId}>{cmd.id}</Text>
+                          <Text style={cmd.codeStatut === 'delivered' ? styles.statusGreen : styles.statusOrange}>{cmd.statut}</Text>
+                        </View>
+                        <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type}</Text>
+                        <View style={styles.orderRowFooter}>
+                          <Text style={styles.orderRowDate}>{cmd.date}</Text>
+                          <Text style={styles.orderRowTotal}>{cmd.total}</Text>
+                        </View>
+                      </View>
+                    ))
+                  )}
                 </View>
               )}
 
-              {/* DEPOT STOCK */}
+              {/* DÉPÔT STOCK */}
               {dashboardTab === 'add_stock' && (
-                <View style={styles.cardBox}>
+                <View style={[styles.cardBox, { flex: 1 }]}>
                   <Text style={styles.cardBoxTitle}>Mise à jour des stocks</Text>
                   <Text style={styles.label}>Bouteilles B6 (6 kg)</Text>
                   <TextInput style={styles.input} keyboardType="numeric" value={stockB6} onChangeText={setStockB6} />
@@ -545,48 +557,53 @@ export default function App() {
                   <Text style={styles.label}>Bouteilles B28 (28 kg)</Text>
                   <TextInput style={styles.input} keyboardType="numeric" value={stockB28} onChangeText={setStockB28} />
                   <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Stock mis à jour.')}>
-                    <Text style={styles.btnOrangeText}>Enregistrer</Text>
+                    <Text style={styles.btnOrangeText}>Enregistrer le stock</Text>
                   </AnimatedButton>
                 </View>
               )}
 
               {/* INVENTAIRE */}
               {dashboardTab === 'sales_list' && (
-                <View style={styles.cardBox}>
+                <View style={[styles.cardBox, { flex: 1 }]}>
                   <Text style={styles.cardBoxTitle}>État actuel du dépôt</Text>
-                  <Text style={styles.stockItem}>• B6 : {stockB6} unités</Text>
-                  <Text style={styles.stockItem}>• B12 : {stockB12} unités</Text>
-                  <Text style={styles.stockItem}>• B28 : {stockB28} unités</Text>
+                  <Text style={styles.stockItem}>• Bouteilles B6 : {stockB6} disponibles</Text>
+                  <Text style={styles.stockItem}>• Bouteilles B12 : {stockB12} disponibles</Text>
+                  <Text style={styles.stockItem}>• Bouteilles B28 : {stockB28} disponibles</Text>
                 </View>
               )}
             </FadeInView>
           ) : (
-            <FadeInView key={currentScreen}>
+            <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
-                <View>
+                <View style={styles.welcomeContainer}>
                   <View style={styles.heroSection}>
-                    <Text style={styles.heroTitle}>Distribution de Gaz</Text>
+                    <Text style={styles.heroTitle}>Distribution & Livraison de Gaz</Text>
+                    <Text style={styles.heroSub}>Bienvenue sur Monan Service. Sélectionnez votre profil pour continuer.</Text>
                   </View>
 
-                  <AnimatedButton style={styles.welcomeCardDark} onPress={() => setCurrentScreen('register_client')}>
-                    <Text style={styles.welcomeCardTag}>CLIENT</Text>
-                    <Text style={styles.welcomeCardTitleLight}>Espace Client</Text>
-                  </AnimatedButton>
+                  <View style={styles.cardsWrapper}>
+                    <AnimatedButton style={styles.welcomeCardDark} onPress={() => setCurrentScreen('register_client')}>
+                      <Text style={styles.welcomeCardTag}>ESPACE CLIENT</Text>
+                      <Text style={styles.welcomeCardTitleLight}>Particuliers & Entreprises</Text>
+                      <Text style={styles.welcomeCardSubLight}>Commandez vos recharges de gaz et faites-vous livrer rapidement.</Text>
+                    </AnimatedButton>
 
-                  <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
-                    <Text style={styles.welcomeCardTagNavy}>DÉPÔT</Text>
-                    <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
-                  </AnimatedButton>
+                    <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
+                      <Text style={styles.welcomeCardTagNavy}>ESPACE DÉPÔT</Text>
+                      <Text style={styles.welcomeCardTitleDark}>Vendeurs & Dépôts de Gaz</Text>
+                      <Text style={styles.welcomeCardSubDark}>Gérez vos réserves et recevez les commandes des clients proches.</Text>
+                    </AnimatedButton>
+                  </View>
 
                   <AnimatedButton style={styles.btnNavyOutline} onPress={() => setCurrentScreen('login')}>
-                    <Text style={styles.btnNavyOutlineText}>Se connecter</Text>
+                    <Text style={styles.btnNavyOutlineText}>Se connecter à un compte existant</Text>
                   </AnimatedButton>
                 </View>
               )}
 
               {(currentScreen === 'register_client' || currentScreen === 'register_depot') && (
-                <View style={styles.cardBox}>
-                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 12 }}>
+                <View style={[styles.cardBox, { flex: 1 }]}>
+                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
                     <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
                   </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>{currentScreen === 'register_depot' ? 'Créer un compte Dépôt' : 'Créer un compte Client'}</Text>
@@ -607,14 +624,14 @@ export default function App() {
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" value={password} onChangeText={setPassword} />
 
                   <AnimatedButton style={styles.btnOrange} onPress={() => handleRegister(currentScreen === 'register_depot' ? 'depot' : 'client')} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>S'inscrire</Text>}
+                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Finaliser l'inscription</Text>}
                   </AnimatedButton>
                 </View>
               )}
 
               {currentScreen === 'login' && (
-                <View style={styles.cardBox}>
-                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 12 }}>
+                <View style={[styles.cardBox, { flex: 1 }]}>
+                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
                     <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
                   </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
@@ -642,84 +659,96 @@ export default function App() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   splashContainer: { flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center' },
-  splashLogo: { width: 90, height: 90, marginBottom: 14 },
-  splashTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900', letterSpacing: 1.2 },
-  appBar: { backgroundColor: '#0F172A', paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 3, borderBottomColor: '#F97316' },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandBadge: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
-  brandLogoImage: { width: 26, height: 26 },
-  brandTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  splashLogo: { width: 100, height: 100, marginBottom: 16 },
+  splashTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', letterSpacing: 1.5 },
+  appBar: { backgroundColor: '#0F172A', paddingVertical: 16, paddingHorizontal: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 3, borderBottomColor: '#F97316' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  brandBadge: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  brandLogoImage: { width: 28, height: 28 },
+  brandTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
   brandSub: { color: '#94A3B8', fontSize: 9, fontWeight: '700' },
-  logoutBtn: { backgroundColor: 'rgba(239, 68, 68, 0.15)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  logoutBtn: { backgroundColor: 'rgba(239, 68, 68, 0.15)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
   logoutBtnText: { color: '#F87171', fontSize: 12, fontWeight: '700' },
-  scrollContent: { padding: 16, paddingBottom: 40 },
-  pillsContainer: { flexDirection: 'row', backgroundColor: '#E2E8F0', padding: 4, borderRadius: 12, marginBottom: 16, gap: 4 },
-  pillBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  scrollContent: { flexGrow: 1, padding: 18 },
+  mainWrapper: { flex: 1, justifyContent: 'space-between' },
+  welcomeContainer: { flex: 1, justifyContent: 'space-between' },
+  fullSection: { flex: 1, justifyContent: 'flex-start' },
+  pillsContainer: { flexDirection: 'row', backgroundColor: '#E2E8F0', padding: 4, borderRadius: 12, marginBottom: 18, gap: 6 },
+  pillBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 8 },
   pillBtnActive: { backgroundColor: '#FFFFFF', elevation: 2 },
   pillText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
   pillTextActive: { color: '#0F172A' },
-  welcomeBanner: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, marginBottom: 14 },
+  welcomeBanner: { backgroundColor: '#0F172A', borderRadius: 16, padding: 18, marginBottom: 16 },
   welcomeBannerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
-  kpiGrid: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  kpiCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  welcomeBannerSub: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
+  kpiGrid: { flexDirection: 'row', gap: 12, marginBottom: 18 },
+  kpiCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
   kpiCardTag: { fontSize: 10, fontWeight: '800', color: '#64748B' },
-  kpiCardNum: { fontSize: 20, fontWeight: '900', color: '#F97316', marginTop: 2 },
-  actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 16, marginBottom: 10 },
+  kpiCardNum: { fontSize: 22, fontWeight: '900', color: '#F97316', marginTop: 4 },
+  actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 14, padding: 18 },
   actionCardTitle: { fontSize: 15, fontWeight: '800', color: '#C2410C' },
-  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 12, padding: 16, marginBottom: 10 },
+  actionCardSub: { fontSize: 12, color: '#9A3412', marginTop: 2 },
+  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 14, padding: 18 },
   actionCardTitleWhite: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
-  cardBox: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#E2E8F0', elevation: 1 },
-  cardBoxTitle: { fontSize: 17, fontWeight: '800', color: '#0F172A', marginBottom: 12 },
-  depotCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, marginBottom: 10 },
+  actionCardSubWhite: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  cardBox: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E2E8F0', elevation: 1 },
+  cardBoxTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 14 },
+  depotCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, padding: 14, marginBottom: 12 },
   depotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  depotTitle: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
-  depotSub: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  depotTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+  depotSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
   depotDistance: { color: '#F97316', fontWeight: '800' },
-  depotStatusBadge: { backgroundColor: '#DCFCE7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  depotStatusText: { color: '#15803D', fontSize: 10, fontWeight: '800' },
-  stockChipsRow: { flexDirection: 'row', gap: 6, marginVertical: 8 },
-  stockChip: { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', padding: 6, borderRadius: 8, alignItems: 'center' },
+  depotStatusBadge: { backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  depotStatusText: { color: '#15803D', fontSize: 11, fontWeight: '800' },
+  stockChipsRow: { flexDirection: 'row', gap: 8, marginVertical: 10 },
+  stockChip: { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', padding: 8, borderRadius: 8, alignItems: 'center' },
   stockChipLabel: { fontSize: 10, color: '#64748B', fontWeight: '700' },
-  stockChipVal: { fontSize: 11, color: '#16A34A', fontWeight: '800', marginTop: 1 },
-  stockChipValEmpty: { fontSize: 11, color: '#DC2626', fontWeight: '800', marginTop: 1 },
-  btnDepotSelect: { backgroundColor: '#0F172A', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
+  stockChipVal: { fontSize: 11, color: '#16A34A', fontWeight: '800', marginTop: 2 },
+  stockChipValEmpty: { fontSize: 11, color: '#DC2626', fontWeight: '800', marginTop: 2 },
+  btnDepotSelect: { backgroundColor: '#0F172A', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   btnDepotSelectText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
-  cylinderList: { gap: 8, marginBottom: 14 },
-  cylinderItem: { backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10, borderWidth: 1.5, borderColor: '#E2E8F0' },
+  cylinderList: { gap: 10, marginBottom: 16 },
+  cylinderItem: { backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0' },
   cylinderItemActive: { backgroundColor: '#FFF7ED', borderColor: '#F97316' },
   cylinderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cylinderTitle: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
-  cylinderPrice: { fontSize: 14, fontWeight: '800', color: '#F97316' },
-  label: { fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 4 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#0F172A', marginBottom: 12 },
-  totalSummary: { backgroundColor: '#0F172A', padding: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  totalSummaryLabel: { color: '#FFF', fontWeight: '700', fontSize: 13 },
-  totalSummaryValue: { color: '#F97316', fontSize: 16, fontWeight: '900' },
-  btnOrange: { backgroundColor: '#F97316', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  btnOrangeText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
-  filterRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
-  filterBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8, backgroundColor: '#F1F5F9' },
+  cylinderTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+  cylinderPrice: { fontSize: 15, fontWeight: '800', color: '#F97316' },
+  label: { fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 6 },
+  input: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0F172A', marginBottom: 14 },
+  totalSummary: { backgroundColor: '#0F172A', padding: 14, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  totalSummaryLabel: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  totalSummaryValue: { color: '#F97316', fontSize: 18, fontWeight: '900' },
+  btnOrange: { backgroundColor: '#F97316', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 6 },
+  btnOrangeText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
+  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  filterBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: '#F1F5F9' },
   filterBtnActive: { backgroundColor: '#0F172A' },
-  filterText: { fontSize: 11, fontWeight: '700', color: '#475569' },
+  filterText: { fontSize: 12, fontWeight: '700', color: '#475569' },
   filterTextActive: { color: '#FFFFFF' },
-  orderRow: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 10, marginBottom: 8 },
+  orderRow: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, marginBottom: 10 },
   orderRowHeader: { flexDirection: 'row', justifyContent: 'space-between' },
   orderRowId: { fontWeight: '800', color: '#0F172A' },
   statusOrange: { color: '#D97706', fontWeight: '800', fontSize: 11 },
   statusGreen: { color: '#16A34A', fontWeight: '800', fontSize: 11 },
-  orderRowBody: { fontSize: 12, color: '#334155', marginVertical: 4 },
+  orderRowBody: { fontSize: 13, color: '#334155', marginVertical: 4 },
   orderRowFooter: { flexDirection: 'row', justifyContent: 'space-between' },
-  orderRowDate: { fontSize: 10, color: '#94A3B8' },
+  orderRowDate: { fontSize: 11, color: '#94A3B8' },
   orderRowTotal: { color: '#F97316', fontWeight: '800' },
-  stockItem: { fontSize: 13, color: '#334155', marginVertical: 4 },
-  heroSection: { marginVertical: 10 },
-  heroTitle: { fontSize: 22, fontWeight: '900', color: '#0F172A' },
-  welcomeCardDark: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, marginBottom: 10 },
-  welcomeCardWhite: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' },
-  welcomeCardTag: { backgroundColor: '#F97316', color: '#FFF', fontSize: 9, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 6 },
-  welcomeCardTagNavy: { backgroundColor: '#F1F5F9', color: '#0F172A', fontSize: 9, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 6 },
-  welcomeCardTitleLight: { color: '#FFF', fontSize: 16, fontWeight: '800' },
-  welcomeCardTitleDark: { color: '#0F172A', fontSize: 16, fontWeight: '800' },
-  btnNavyOutline: { borderWidth: 1.5, borderColor: '#0F172A', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  btnNavyOutlineText: { color: '#0F172A', fontWeight: '800', fontSize: 13 }
+  emptyBox: { padding: 24, alignItems: 'center' },
+  emptyText: { color: '#94A3B8', fontSize: 13, textAlign: 'center' },
+  stockItem: { fontSize: 14, color: '#334155', marginVertical: 6 },
+  heroSection: { marginVertical: 16 },
+  heroTitle: { fontSize: 24, fontWeight: '900', color: '#0F172A' },
+  heroSub: { fontSize: 13, color: '#64748B', marginTop: 6 },
+  cardsWrapper: { gap: 14, marginVertical: 12 },
+  welcomeCardDark: { backgroundColor: '#0F172A', borderRadius: 16, padding: 20 },
+  welcomeCardWhite: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#E2E8F0' },
+  welcomeCardTag: { backgroundColor: '#F97316', color: '#FFF', fontSize: 10, fontWeight: '800', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 8 },
+  welcomeCardTagNavy: { backgroundColor: '#F1F5F9', color: '#0F172A', fontSize: 10, fontWeight: '800', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 8 },
+  welcomeCardTitleLight: { color: '#FFF', fontSize: 18, fontWeight: '800' },
+  welcomeCardSubLight: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
+  welcomeCardTitleDark: { color: '#0F172A', fontSize: 18, fontWeight: '800' },
+  welcomeCardSubDark: { color: '#64748B', fontSize: 12, marginTop: 4 },
+  btnNavyOutline: { borderWidth: 1.5, borderColor: '#0F172A', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 12 },
+  btnNavyOutlineText: { color: '#0F172A', fontWeight: '800', fontSize: 14 }
 });
