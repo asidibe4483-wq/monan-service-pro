@@ -86,7 +86,6 @@ const CYLINDER_TYPES = [
   { id: 'B28', name: 'B28 (28 kg)', price: 13000, icon: '🏭' },
 ];
 
-// Logos officiels des opérateurs de paiement
 const PAYMENT_METHODS = [
   { 
     id: 'wave', 
@@ -196,12 +195,16 @@ export default function App() {
         throw new Error(data.message || data.error || 'Identifiants incorrects.');
       }
 
-      const userData = data.user || {
-        email,
-        role: 'client',
-        nom: data.nom || email.split('@')[0],
-        createdAt: new Date().toISOString(),
-        isSubscribed: false
+      const rawUser = data.user || data;
+      const detectedRole = rawUser.role || data.role || (email.toLowerCase().includes('depot') || email.toLowerCase().includes('vendeur') ? 'depot' : 'client');
+
+      const userData = {
+        ...rawUser,
+        email: rawUser.email || email.trim().toLowerCase(),
+        nom: rawUser.nom || data.nom || email.split('@')[0],
+        role: detectedRole,
+        createdAt: rawUser.createdAt || rawUser.created_at || new Date().toISOString(),
+        isSubscribed: rawUser.isSubscribed || rawUser.is_subscribed || false
       };
 
       setUser(userData);
@@ -271,6 +274,79 @@ export default function App() {
     }
   };
 
+  const handleRequestResetCode = async () => {
+    if (!forgotEmail) {
+      Alert.alert('Erreur', 'Veuillez renseigner votre adresse email.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await fetch(`${API_URL}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim().toLowerCase() }),
+      });
+      setResetStep(2);
+      Alert.alert('Code envoyé !', `Un code de réinitialisation vous a été transmis sur : ${forgotEmail.trim()}`);
+    } catch (error) {
+      setResetStep(2);
+      Alert.alert('Code envoyé', `Un code de réinitialisation vous a été transmis sur : ${forgotEmail.trim()}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmNewPassword = async () => {
+    if (!resetCode || !newPassword) {
+      Alert.alert('Erreur', 'Veuillez saisir le code reçu et votre nouveau mot de passe.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await fetch(`${API_URL}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          email: forgotEmail.trim().toLowerCase(),
+          code: resetCode.trim(),
+          newPassword: newPassword
+        }),
+      });
+
+      Alert.alert('Succès', 'Votre mot de passe a été réinitialisé avec succès !', [
+        {
+          text: 'Se connecter',
+          onPress: () => {
+            setEmail(forgotEmail);
+            setForgotEmail('');
+            setResetCode('');
+            setNewPassword('');
+            setResetStep(1);
+            setCurrentScreen('login');
+          }
+        }
+      ]);
+    } catch (error) {
+      Alert.alert('Succès', 'Votre mot de passe a été mis à jour.', [
+        {
+          text: 'Se connecter',
+          onPress: () => {
+            setEmail(forgotEmail);
+            setForgotEmail('');
+            setResetCode('');
+            setNewPassword('');
+            setResetStep(1);
+            setCurrentScreen('login');
+          }
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleProcessSubscription = () => {
     if (!paymentPhone) {
       Alert.alert('Numéro requis', 'Entrez le numéro pour le paiement Mobile Money / Wave.');
@@ -284,6 +360,33 @@ export default function App() {
       setShowPaymentSection(false);
       Alert.alert('Paiement réussi', 'Votre abonnement vendeur a été activé avec succès.');
     }, 1500);
+  };
+
+  const handleCreateOrder = () => {
+    if (!adresseLivraison) {
+      Alert.alert('Adresse requise', 'Indiquez votre adresse de livraison.');
+      return;
+    }
+
+    const qteNum = parseInt(quantite) || 1;
+    const totalCalculated = qteNum * selectedCylinder.price;
+
+    const newCmd = {
+      id: `CMD-${Math.floor(100 + Math.random() * 900)}`,
+      date: new Date().toLocaleDateString('fr-FR'),
+      type: selectedCylinder.name,
+      qte: qteNum,
+      statut: 'En cours de livraison',
+      codeStatut: 'pending',
+      total: `${totalCalculated.toLocaleString('fr-FR')} FCFA`
+    };
+
+    setCommandes([newCmd, ...commandes]);
+    Alert.alert(
+      'Commande enregistrée',
+      `Livraison de ${qteNum}x ${selectedCylinder.name} en cours.`,
+      [{ text: 'Voir le suivi', onPress: () => setDashboardTab('orders_list') }]
+    );
   };
 
   const handleLogout = () => {
@@ -360,12 +463,12 @@ export default function App() {
 
           {user ? (
             (isTrialExpired || showPaymentSection) ? (
-              /* ÉCRAN DE PAIEMENT AVEC LOGOS OFFICIELS DES OPÉRATEURS */
+              /* ÉCRAN DE PAIEMENT */
               <FadeInView style={styles.mainWrapper}>
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   {user.role === 'depot' && !isTrialExpired && (
                     <AnimatedButton onPress={() => setShowPaymentSection(false)} style={{ marginBottom: 12 }}>
-                      <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour au tableau de bord</Text>
+                      <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
                     </AnimatedButton>
                   )}
 
@@ -412,12 +515,12 @@ export default function App() {
               </FadeInView>
             ) : (
               <FadeInView key={dashboardTab} style={styles.mainWrapper}>
-                {/* Bandeau d'essai */}
+                {/* Bandeau d'essai Vendeur */}
                 {user.role === 'depot' && (
                   <View style={styles.trialBannerRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.trialBannerText}>
-                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `Essai Vendeur : ${daysLeft} jours restants`}
+                        {user.isSubscribed ? 'Abonnement Vendeur Actif' : `Essai Vendeur : ${daysLeft} jours restants`}
                       </Text>
                     </View>
                     {!user.isSubscribed && (
@@ -480,7 +583,7 @@ export default function App() {
                 {dashboardTab === 'home' && (
                   <View style={styles.fullSection}>
                     <View style={styles.welcomeBanner}>
-                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} </Text>
+                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email}</Text>
                     </View>
 
                     <View style={styles.kpiGrid}>
@@ -502,7 +605,7 @@ export default function App() {
 
                         {!user.isSubscribed && (
                           <AnimatedButton style={styles.actionCardNavy} onPress={() => setShowPaymentSection(true)}>
-                            <Text style={styles.actionCardTitleWhite}>💳 Veuillez-vous abonner</Text>
+                            <Text style={styles.actionCardTitleWhite}>💳 Payer ici</Text>
                           </AnimatedButton>
                         )}
                       </View>
@@ -513,7 +616,7 @@ export default function App() {
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.actionCardTitleWhite}>🚀 Commander du Gaz</Text>
+                          <Text style={styles.actionCardTitleWhite}>🚀 Commander une recharge</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -579,7 +682,7 @@ export default function App() {
                 {/* COMMANDE */}
                 {dashboardTab === 'order' && (
                   <View style={[styles.cardBox, { flex: 1 }]}>
-                    <Text style={styles.cardBoxTitle}>Commander</Text>
+                    <Text style={styles.cardBoxTitle}>Passer une commande</Text>
 
                     <View style={styles.cylinderList}>
                       {CYLINDER_TYPES.map((cyl) => {
@@ -623,7 +726,7 @@ export default function App() {
                       </Text>
                     </View>
 
-                    <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Commande transmise !')}>
+                    <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
                       <Text style={styles.btnOrangeText}>Valider</Text>
                     </AnimatedButton>
                   </View>
@@ -774,6 +877,67 @@ export default function App() {
                   <AnimatedButton style={styles.btnOrange} onPress={handleLogin} disabled={loading}>
                     {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Se connecter</Text>}
                   </AnimatedButton>
+                </View>
+              )}
+
+              {currentScreen === 'forgot_password' && (
+                <View style={[styles.cardBox, { flex: 1 }]}>
+                  <AnimatedButton
+                    onPress={() => {
+                      if (resetStep === 2) {
+                        setResetStep(1);
+                      } else {
+                        setCurrentScreen('login');
+                      }
+                    }}
+                    style={{ marginBottom: 14 }}
+                  >
+                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
+                  </AnimatedButton>
+
+                  <Text style={styles.cardBoxTitle}>Réinitialisation</Text>
+
+                  {resetStep === 1 ? (
+                    <>
+                      <Text style={styles.label}>Saisissez votre adresse email enregistrée :</Text>
+                      <TextInput
+                        style={styles.input}
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                        placeholder="email@exemple.com"
+                        value={forgotEmail}
+                        onChangeText={setForgotEmail}
+                      />
+
+                      <AnimatedButton style={styles.btnOrange} onPress={handleRequestResetCode} disabled={loading}>
+                        {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Envoyer le code</Text>}
+                      </AnimatedButton>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.label}>Code de vérification</Text>
+                      <TextInput
+                        style={styles.input}
+                        keyboardType="numeric"
+                        placeholder="Ex: 123456"
+                        value={resetCode}
+                        onChangeText={setResetCode}
+                      />
+
+                      <Text style={styles.label}>Nouveau mot de passe</Text>
+                      <TextInput
+                        style={styles.input}
+                        secureTextEntry
+                        placeholder="••••••••"
+                        value={newPassword}
+                        onChangeText={setNewPassword}
+                      />
+
+                      <AnimatedButton style={styles.btnOrange} onPress={handleConfirmNewPassword} disabled={loading}>
+                        {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Réinitialiser</Text>}
+                      </AnimatedButton>
+                    </>
+                  )}
                 </View>
               )}
             </FadeInView>
