@@ -86,24 +86,31 @@ const CYLINDER_TYPES = [
   { id: 'B28', name: 'B28 (28 kg)', price: 13000, icon: '🏭' },
 ];
 
+// Configuration avec vos logos JPEG locaux du dossier assets/
 const PAYMENT_METHODS = [
   { 
     id: 'wave', 
     name: 'Wave', 
     color: '#1DC3F3', 
-    logo: 'https://pay.wave.com/static/media/wave-logo.0c3c6f05.png'
+    logo: require('./assets/wave.jpeg')
   },
   { 
     id: 'orange', 
     name: 'Orange', 
     color: '#FF6600', 
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Orange_logo.svg/1200px-Orange_logo.svg.png'
+    logo: require('./assets/Orange.jpeg')
   },
   { 
     id: 'mtn', 
     name: 'MTN MoMo', 
     color: '#FFCC00', 
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/af/MTN_Logo.svg/1200px-MTN_Logo.svg.png'
+    logo: require('./assets/MTN.jpeg')
+  },
+  { 
+    id: 'moov', 
+    name: 'Moov Money', 
+    color: '#0055A5', 
+    logo: require('./assets/Moov.jpeg')
   },
 ];
 
@@ -196,13 +203,21 @@ export default function App() {
       }
 
       const rawUser = data.user || data;
-      const detectedRole = rawUser.role || data.role || (email.toLowerCase().includes('depot') || email.toLowerCase().includes('vendeur') ? 'depot' : 'client');
+      const fetchedRole = String(
+        rawUser.role || data.role || rawUser.user_type || ''
+      ).toLowerCase().trim();
+
+      const isDepotUser = 
+        fetchedRole === 'depot' || 
+        fetchedRole === 'vendeur' || 
+        email.toLowerCase().includes('depot') || 
+        email.toLowerCase().includes('vendeur');
 
       const userData = {
         ...rawUser,
         email: rawUser.email || email.trim().toLowerCase(),
         nom: rawUser.nom || data.nom || email.split('@')[0],
-        role: detectedRole,
+        role: isDepotUser ? 'depot' : 'client',
         createdAt: rawUser.createdAt || rawUser.created_at || new Date().toISOString(),
         isSubscribed: rawUser.isSubscribed || rawUser.is_subscribed || false
       };
@@ -263,7 +278,10 @@ export default function App() {
         isSubscribed: false
       };
 
-      setUser(newUser);
+      setUser({
+        ...newUser,
+        role: type
+      });
       setAdresseLivraison(adresse.trim());
       setDashboardTab('home');
       Alert.alert('Bienvenue !', type === 'depot' ? 'Votre essai gratuit de 30 jours est actif.' : 'Votre compte client a été créé.');
@@ -468,7 +486,7 @@ export default function App() {
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   {user.role === 'depot' && !isTrialExpired && (
                     <AnimatedButton onPress={() => setShowPaymentSection(false)} style={{ marginBottom: 12 }}>
-                      <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
+                      <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour au tableau de bord</Text>
                     </AnimatedButton>
                   )}
 
@@ -492,7 +510,11 @@ export default function App() {
                           style={[styles.paymentBtn, isSelected && { borderColor: pm.color, borderWidth: 2, backgroundColor: '#FFF' }]}
                           onPress={() => setSelectedPayment(pm.id)}
                         >
-                          <Image source={{ uri: pm.logo }} style={styles.paymentLogoImage} resizeMode="contain" />
+                          <Image 
+                            source={pm.logo} 
+                            style={styles.paymentLogoImage} 
+                            resizeMode="contain" 
+                          />
                           <Text style={[styles.paymentBtnText, isSelected && { color: '#0F172A', fontWeight: '800' }]}>{pm.name}</Text>
                         </AnimatedButton>
                       );
@@ -520,7 +542,7 @@ export default function App() {
                   <View style={styles.trialBannerRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.trialBannerText}>
-                        {user.isSubscribed ? 'Abonnement Vendeur Actif' : `Essai Vendeur : ${daysLeft} jours restants`}
+                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `🎁 Essai Vendeur : ${daysLeft} jours restants`}
                       </Text>
                     </View>
                     {!user.isSubscribed && (
@@ -583,7 +605,7 @@ export default function App() {
                 {dashboardTab === 'home' && (
                   <View style={styles.fullSection}>
                     <View style={styles.welcomeBanner}>
-                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email}</Text>
+                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} 👋</Text>
                     </View>
 
                     <View style={styles.kpiGrid}>
@@ -605,7 +627,7 @@ export default function App() {
 
                         {!user.isSubscribed && (
                           <AnimatedButton style={styles.actionCardNavy} onPress={() => setShowPaymentSection(true)}>
-                            <Text style={styles.actionCardTitleWhite}>💳 Payer ici</Text>
+                            <Text style={styles.actionCardTitleWhite}>💳 Payer l'abonnement sous le champ</Text>
                           </AnimatedButton>
                         )}
                       </View>
@@ -651,7 +673,7 @@ export default function App() {
                         <View style={styles.stockChipsRow}>
                           <View style={styles.stockChip}>
                             <Text style={styles.stockChipLabel}>B6</Text>
-                            <Text style={styles.stockChipVal}>{depot.b6} disponibles</Text>
+                            <Text style={styles.stockChipVal}>{depot.b6} dispo</Text>
                           </View>
                           <View style={styles.stockChip}>
                             <Text style={styles.stockChipLabel}>B12</Text>
@@ -661,7 +683,7 @@ export default function App() {
                           </View>
                           <View style={styles.stockChip}>
                             <Text style={styles.stockChipLabel}>B28</Text>
-                            <Text style={styles.stockChipVal}>{depot.b28} disponibles</Text>
+                            <Text style={styles.stockChipVal}>{depot.b28} dispo</Text>
                           </View>
                         </View>
 
@@ -727,7 +749,7 @@ export default function App() {
                     </View>
 
                     <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
-                      <Text style={styles.btnOrangeText}>Valider</Text>
+                      <Text style={styles.btnOrangeText}>Valider la commande</Text>
                     </AnimatedButton>
                   </View>
                 )}
@@ -782,7 +804,7 @@ export default function App() {
                     <Text style={styles.label}>Bouteilles B28 (28 kg)</Text>
                     <TextInput style={styles.input} keyboardType="numeric" value={stockB28} onChangeText={setStockB28} />
                     <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Stock mis à jour.')}>
-                      <Text style={styles.btnOrangeText}>Enregistrer</Text>
+                      <Text style={styles.btnOrangeText}>Enregistrer le stock</Text>
                     </AnimatedButton>
                   </View>
                 )}
@@ -812,7 +834,7 @@ export default function App() {
                     </AnimatedButton>
 
                     <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
-                      <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
+                      <Text style={styles.welcomeCardTitleDark}>Espace Dépôt / Vendeur</Text>
                     </AnimatedButton>
                   </View>
 
@@ -825,7 +847,7 @@ export default function App() {
               {(currentScreen === 'register_client' || currentScreen === 'register_depot') && (
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
+                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
                   </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>{currentScreen === 'register_depot' ? 'Créer un compte Dépôt' : 'Créer un compte Client'}</Text>
 
@@ -853,7 +875,7 @@ export default function App() {
               {currentScreen === 'login' && (
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
+                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
                   </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
@@ -971,10 +993,10 @@ const styles = StyleSheet.create({
   subCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 16, width: '100%', alignItems: 'center', marginBottom: 16 },
   subCardTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
   subCardPrice: { fontSize: 20, fontWeight: '900', color: '#F97316', marginTop: 4 },
-  paymentMethodsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  paymentBtn: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', padding: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  paymentLogoImage: { width: 32, height: 26 },
-  paymentBtnText: { fontSize: 10, fontWeight: '700', color: '#64748B', marginTop: 4 },
+  paymentMethodsRow: { flexDirection: 'row', gap: 6, marginBottom: 16 },
+  paymentBtn: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', padding: 8, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  paymentLogoImage: { width: 28, height: 24 },
+  paymentBtnText: { fontSize: 9, fontWeight: '700', color: '#64748B', marginTop: 4, textAlign: 'center' },
   welcomeContainer: { flex: 1, justifyContent: 'space-between' },
   fullSection: { flex: 1, justifyContent: 'flex-start' },
   pillsContainer: { flexDirection: 'row', backgroundColor: '#E2E8F0', padding: 4, borderRadius: 12, marginBottom: 18, gap: 6 },
