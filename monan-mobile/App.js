@@ -349,7 +349,7 @@ export default function App() {
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   {user.role === 'depot' && !isTrialExpired && (
                     <AnimatedButton onPress={() => setShowPaymentSection(false)} style={{ marginBottom: 12 }}>
-                      <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour au tableau de bord</Text>
+                      <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
                     </AnimatedButton>
                   )}
 
@@ -407,7 +407,7 @@ export default function App() {
                     </View>
                     {!user.isSubscribed && (
                       <AnimatedButton style={styles.btnPayNowInline} onPress={() => setShowPaymentSection(true)}>
-                        <Text style={styles.btnPayNowInlineText}>Payer l'abonnement</Text>
+                        <Text style={styles.btnPayNowInlineText}>Payer</Text>
                       </AnimatedButton>
                     )}
                   </View>
@@ -487,7 +487,7 @@ export default function App() {
 
                         {!user.isSubscribed && (
                           <AnimatedButton style={styles.actionCardNavy} onPress={() => setShowPaymentSection(true)}>
-                            <Text style={styles.actionCardTitleWhite}>💳 Payer l'abonnement sous le champ</Text>
+                            <Text style={styles.actionCardTitleWhite}>💳 Abonnez-vous</Text>
                           </AnimatedButton>
                         )}
                       </View>
@@ -564,7 +564,7 @@ export default function App() {
                 {/* COMMANDE */}
                 {dashboardTab === 'order' && (
                   <View style={[styles.cardBox, { flex: 1 }]}>
-                    <Text style={styles.cardBoxTitle}>Passer une commande</Text>
+                    <Text style={styles.cardBoxTitle}>Commander</Text>
 
                     <View style={styles.cylinderList}>
                       {CYLINDER_TYPES.map((cyl) => {
@@ -609,7 +609,7 @@ export default function App() {
                     </View>
 
                     <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Commande transmise !')}>
-                      <Text style={styles.btnOrangeText}>Valider la commande</Text>
+                      <Text style={styles.btnOrangeText}>Valider</Text>
                     </AnimatedButton>
                   </View>
                 )}
