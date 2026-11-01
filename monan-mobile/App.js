@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -18,26 +18,71 @@ import {
 
 const API_URL = "https://monan-backend.onrender.com";
 
-// Composant Bouton Animé avec effet de pression réactif (Tactile Feedback)
+// Composant pour l'apparition fluide des cartes et onglets (FadeIn + SlideUp)
+const FadeInView = ({ children, style }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(15)).current;
+
+  useEffect(() => {
+    fadeAnim.setValue(0);
+    translateY.setValue(15);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.spring(translateY, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [children]);
+
+  return (
+    <Animated.View style={[style, { opacity: fadeAnim, transform: [{ translateY }] }]}>
+      {children}
+    </Animated.View>
+  );
+};
+
+// Composant Bouton Tactile Ultra-Fluid avec effet de ressort (Micro-interaction)
 const AnimatedButton = ({ onPress, style, children, disabled }) => {
   const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scale, {
-      toValue: 0.95,
-      useNativeDriver: true,
-      speed: 50,
-      bounciness: 10,
-    }).start();
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 0.93,
+        useNativeDriver: true,
+        speed: 60,
+        bounciness: 12,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0.85,
+        duration: 100,
+        useNativeDriver: true,
+      })
+    ]).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 30,
-      bounciness: 8,
-    }).start();
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 35,
+        bounciness: 10,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      })
+    ]).start();
   };
 
   return (
@@ -47,7 +92,7 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
       onPress={onPress}
       disabled={disabled}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>
+      <Animated.View style={[style, { transform: [{ scale }], opacity }]}>
         {children}
       </Animated.View>
     </Pressable>
@@ -61,6 +106,7 @@ const CYLINDER_TYPES = [
 ];
 
 export default function App() {
+  const [isAppReady, setIsAppReady] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('welcome');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -82,7 +128,7 @@ export default function App() {
 
   // Recherche Dépôt Proche
   const [searchDepot, setSearchDepot] = useState('');
-  const [depotsList, setDepotsList] = useState([
+  const [depotsList] = useState([
     { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distance: '0.8 km', quartier: 'Cocody Angré', statut: 'Ouvert', b6: 14, b12: 28, b28: 5 },
     { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distance: '2.3 km', quartier: 'Cocody Centre', statut: 'Ouvert', b6: 8, b12: 12, b28: 0 },
     { id: 'DEP-03', nom: 'Dépôt Yopougon Maroc', distance: '5.1 km', quartier: 'Yopougon', statut: 'Ouvert', b6: 22, b12: 35, b28: 10 },
@@ -98,6 +144,14 @@ export default function App() {
   const [stockB6, setStockB6] = useState('24');
   const [stockB12, setStockB12] = useState('42');
   const [stockB28, setStockB28] = useState('10');
+
+  // Tempo pour donner du corps à la page de démarrage
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsAppReady(true);
+    }, 1800); // 1.8 seconde pour apprécier l'écran de démarrage
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -227,11 +281,23 @@ export default function App() {
     return true;
   });
 
+  // Écran de chargement initial fluide
+  if (!isAppReady) {
+    return (
+      <View style={styles.splashContainer}>
+        <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
+        <Image source={require('./assets/splash-icon.png')} style={styles.splashLogo} resizeMode="contain" />
+        <Text style={styles.splashTitle}>MONAN SERVICE</Text>
+        <ActivityIndicator size="small" color="#F97316" style={{ marginTop: 20 }} />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* Header / App Bar */}
+      {/* Header Pro */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -263,8 +329,8 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
           {user ? (
-            <View>
-              {/* Onglets Pille de navigation */}
+            <FadeInView key={dashboardTab}>
+              {/* Onglets de Navigation en pilule */}
               <View style={styles.pillsContainer}>
                 <AnimatedButton
                   style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
@@ -358,7 +424,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* FONCTIONNALITÉ RECHERCHE DÉPÔTS PROCHES EN TEMPS RÉEL */}
+              {/* DÉPÔTS PROCHES EN TEMPS RÉEL */}
               {dashboardTab === 'depots' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Dépôts de gaz à proximité 📍</Text>
@@ -537,9 +603,9 @@ export default function App() {
                   <Text style={styles.stockItem}>• Stock B28 (28 kg) : {stockB28} unités</Text>
                 </View>
               )}
-            </View>
+            </FadeInView>
           ) : (
-            <>
+            <FadeInView key={currentScreen}>
               {currentScreen === 'welcome' && (
                 <View>
                   <View style={styles.heroSection}>
@@ -611,7 +677,7 @@ export default function App() {
                   </AnimatedButton>
                 </View>
               )}
-            </>
+            </FadeInView>
           )}
 
         </ScrollView>
@@ -622,6 +688,9 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
+  splashContainer: { flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center' },
+  splashLogo: { width: 100, height: 100, marginBottom: 16 },
+  splashTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', letterSpacing: 1.5 },
   appBar: { backgroundColor: '#0F172A', paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 3, borderBottomColor: '#F97316' },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brandBadge: { width: 38, height: 38, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
