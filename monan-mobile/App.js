@@ -86,10 +86,26 @@ const CYLINDER_TYPES = [
   { id: 'B28', name: 'B28 (28 kg)', price: 13000, icon: '🏭' },
 ];
 
+// Logos officiels des opérateurs de paiement
 const PAYMENT_METHODS = [
-  { id: 'wave', name: 'Wave', color: '#1DC3F3', icon: '🌊' },
-  { id: 'orange', name: 'Orange Money', color: '#FF6600', icon: '🍊' },
-  { id: 'mtn', name: 'MTN Mobile Money', color: '#FFCC00', icon: '🟡' },
+  { 
+    id: 'wave', 
+    name: 'Wave', 
+    color: '#1DC3F3', 
+    logo: 'https://pay.wave.com/static/media/wave-logo.0c3c6f05.png'
+  },
+  { 
+    id: 'orange', 
+    name: 'Orange', 
+    color: '#FF6600', 
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Orange_logo.svg/1200px-Orange_logo.svg.png'
+  },
+  { 
+    id: 'mtn', 
+    name: 'MTN MoMo', 
+    color: '#FFCC00', 
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/af/MTN_Logo.svg/1200px-MTN_Logo.svg.png'
+  },
 ];
 
 export default function App() {
@@ -344,19 +360,18 @@ export default function App() {
 
           {user ? (
             (isTrialExpired || showPaymentSection) ? (
-              /* ÉCRAN OU MODULE DE PAIEMENT D'ABONNEMENT */
+              /* ÉCRAN DE PAIEMENT AVEC LOGOS OFFICIELS DES OPÉRATEURS */
               <FadeInView style={styles.mainWrapper}>
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   {user.role === 'depot' && !isTrialExpired && (
                     <AnimatedButton onPress={() => setShowPaymentSection(false)} style={{ marginBottom: 12 }}>
-                      <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
+                      <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour au tableau de bord</Text>
                     </AnimatedButton>
                   )}
 
-                  <Text style={{ fontSize: 36, textAlign: 'center', marginBottom: 8 }}>💳</Text>
                   <Text style={[styles.cardBoxTitle, { textAlign: 'center' }]}>Abonnement Vendeur</Text>
                   <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginBottom: 16 }}>
-                    Payez votre abonnement mensuel pour conserver la visibilité de votre dépôt et traiter vos commandes.
+                    Sélectionnez votre moyen de paiement Mobile Money ou Wave :
                   </Text>
 
                   <View style={styles.subCard}>
@@ -371,17 +386,17 @@ export default function App() {
                       return (
                         <AnimatedButton
                           key={pm.id}
-                          style={[styles.paymentBtn, isSelected && { borderColor: pm.color, backgroundColor: '#FFF' }]}
+                          style={[styles.paymentBtn, isSelected && { borderColor: pm.color, borderWidth: 2, backgroundColor: '#FFF' }]}
                           onPress={() => setSelectedPayment(pm.id)}
                         >
-                          <Text style={{ fontSize: 18 }}>{pm.icon}</Text>
+                          <Image source={{ uri: pm.logo }} style={styles.paymentLogoImage} resizeMode="contain" />
                           <Text style={[styles.paymentBtnText, isSelected && { color: '#0F172A', fontWeight: '800' }]}>{pm.name}</Text>
                         </AnimatedButton>
                       );
                     })}
                   </View>
 
-                  <Text style={styles.label}>Numéro de téléphone *</Text>
+                  <Text style={styles.label}>Numéro de téléphone de débit *</Text>
                   <TextInput
                     style={styles.input}
                     keyboardType="phone-pad"
@@ -397,17 +412,17 @@ export default function App() {
               </FadeInView>
             ) : (
               <FadeInView key={dashboardTab} style={styles.mainWrapper}>
-                {/* Bandeau d'essai avec bouton d'accès direct au paiement sous le champ */}
+                {/* Bandeau d'essai */}
                 {user.role === 'depot' && (
                   <View style={styles.trialBannerRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.trialBannerText}>
-                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `🎁 Essai Vendeur : ${daysLeft} jours restants`}
+                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `Essai Vendeur : ${daysLeft} jours restants`}
                       </Text>
                     </View>
                     {!user.isSubscribed && (
                       <AnimatedButton style={styles.btnPayNowInline} onPress={() => setShowPaymentSection(true)}>
-                        <Text style={styles.btnPayNowInlineText}>Payer</Text>
+                        <Text style={styles.btnPayNowInlineText}>Payer l'abonnement</Text>
                       </AnimatedButton>
                     )}
                   </View>
@@ -465,7 +480,7 @@ export default function App() {
                 {dashboardTab === 'home' && (
                   <View style={styles.fullSection}>
                     <View style={styles.welcomeBanner}>
-                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} 👋</Text>
+                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} </Text>
                     </View>
 
                     <View style={styles.kpiGrid}>
@@ -487,7 +502,7 @@ export default function App() {
 
                         {!user.isSubscribed && (
                           <AnimatedButton style={styles.actionCardNavy} onPress={() => setShowPaymentSection(true)}>
-                            <Text style={styles.actionCardTitleWhite}>💳 Abonnez-vous</Text>
+                            <Text style={styles.actionCardTitleWhite}>💳 Veuillez-vous abonner</Text>
                           </AnimatedButton>
                         )}
                       </View>
@@ -498,7 +513,7 @@ export default function App() {
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.actionCardTitleWhite}>🚀 Commander une recharge</Text>
+                          <Text style={styles.actionCardTitleWhite}>🚀 Commander du Gaz</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -533,7 +548,7 @@ export default function App() {
                         <View style={styles.stockChipsRow}>
                           <View style={styles.stockChip}>
                             <Text style={styles.stockChipLabel}>B6</Text>
-                            <Text style={styles.stockChipVal}>{depot.b6} dispo</Text>
+                            <Text style={styles.stockChipVal}>{depot.b6} disponibles</Text>
                           </View>
                           <View style={styles.stockChip}>
                             <Text style={styles.stockChipLabel}>B12</Text>
@@ -543,7 +558,7 @@ export default function App() {
                           </View>
                           <View style={styles.stockChip}>
                             <Text style={styles.stockChipLabel}>B28</Text>
-                            <Text style={styles.stockChipVal}>{depot.b28} dispo</Text>
+                            <Text style={styles.stockChipVal}>{depot.b28} disponibles</Text>
                           </View>
                         </View>
 
@@ -664,7 +679,7 @@ export default function App() {
                     <Text style={styles.label}>Bouteilles B28 (28 kg)</Text>
                     <TextInput style={styles.input} keyboardType="numeric" value={stockB28} onChangeText={setStockB28} />
                     <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Stock mis à jour.')}>
-                      <Text style={styles.btnOrangeText}>Enregistrer le stock</Text>
+                      <Text style={styles.btnOrangeText}>Enregistrer</Text>
                     </AnimatedButton>
                   </View>
                 )}
@@ -694,7 +709,7 @@ export default function App() {
                     </AnimatedButton>
 
                     <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
-                      <Text style={styles.welcomeCardTitleDark}>Espace Dépôt / Vendeur</Text>
+                      <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
                     </AnimatedButton>
                   </View>
 
@@ -707,7 +722,7 @@ export default function App() {
               {(currentScreen === 'register_client' || currentScreen === 'register_depot') && (
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
+                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
                   </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>{currentScreen === 'register_depot' ? 'Créer un compte Dépôt' : 'Créer un compte Client'}</Text>
 
@@ -735,7 +750,7 @@ export default function App() {
               {currentScreen === 'login' && (
                 <View style={[styles.cardBox, { flex: 1 }]}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
+                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
                   </AnimatedButton>
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
@@ -793,7 +808,8 @@ const styles = StyleSheet.create({
   subCardTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
   subCardPrice: { fontSize: 20, fontWeight: '900', color: '#F97316', marginTop: 4 },
   paymentMethodsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  paymentBtn: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', padding: 10, borderRadius: 10, alignItems: 'center' },
+  paymentBtn: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', padding: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  paymentLogoImage: { width: 32, height: 26 },
   paymentBtnText: { fontSize: 10, fontWeight: '700', color: '#64748B', marginTop: 4 },
   welcomeContainer: { flex: 1, justifyContent: 'space-between' },
   fullSection: { flex: 1, justifyContent: 'flex-start' },
