@@ -113,6 +113,7 @@ export default function App() {
   const [resetStep, setResetStep] = useState(1);
 
   // Abonnement Vendeur
+  const [showPaymentSection, setShowPaymentSection] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState('wave');
   const [paymentPhone, setPaymentPhone] = useState('');
 
@@ -264,6 +265,7 @@ export default function App() {
     setTimeout(() => {
       setLoading(false);
       setUser({ ...user, isSubscribed: true });
+      setShowPaymentSection(false);
       Alert.alert('Paiement réussi', 'Votre abonnement vendeur a été activé avec succès.');
     }, 1500);
   };
@@ -275,6 +277,7 @@ export default function App() {
     setNom('');
     setTelephone('');
     setAdresse('');
+    setShowPaymentSection(false);
     setCurrentScreen('welcome');
     setDashboardTab('home');
   };
@@ -302,7 +305,6 @@ export default function App() {
   }
 
   const daysLeft = user ? getDaysLeftInTrial(user.createdAt) : 30;
-  // L'abonnement concerne uniquement les dépôts / vendeurs
   const isTrialExpired = user && user.role === 'depot' && !user.isSubscribed && daysLeft <= 0;
 
   return (
@@ -341,18 +343,24 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
           {user ? (
-            isTrialExpired ? (
-              /* ÉCRAN PAYWALL - ABONNEMENT VENDEUR (WAVE, ORANGE, MTN) */
+            (isTrialExpired || showPaymentSection) ? (
+              /* ÉCRAN OU MODULE DE PAIEMENT D'ABONNEMENT */
               <FadeInView style={styles.mainWrapper}>
                 <View style={[styles.cardBox, { flex: 1 }]}>
-                  <Text style={{ fontSize: 36, textAlign: 'center', marginBottom: 8 }}>🔒</Text>
-                  <Text style={[styles.cardBoxTitle, { textAlign: 'center' }]}>Abonnement Dépôt Requis</Text>
+                  {user.role === 'depot' && !isTrialExpired && (
+                    <AnimatedButton onPress={() => setShowPaymentSection(false)} style={{ marginBottom: 12 }}>
+                      <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour au tableau de bord</Text>
+                    </AnimatedButton>
+                  )}
+
+                  <Text style={{ fontSize: 36, textAlign: 'center', marginBottom: 8 }}>💳</Text>
+                  <Text style={[styles.cardBoxTitle, { textAlign: 'center' }]}>Abonnement Vendeur</Text>
                   <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginBottom: 16 }}>
-                    Votre période d'essai de 1 mois est expirée. Abonnez votre dépôt pour continuer d'apparaître sur la carte et recevoir des commandes.
+                    Payez votre abonnement mensuel pour conserver la visibilité de votre dépôt et traiter vos commandes.
                   </Text>
 
                   <View style={styles.subCard}>
-                    <Text style={styles.subCardTitle}>Abonnement Mensuel Vendeur</Text>
+                    <Text style={styles.subCardTitle}>Pass Pro Dépôt</Text>
                     <Text style={styles.subCardPrice}>3 000 FCFA / mois</Text>
                   </View>
 
@@ -373,7 +381,7 @@ export default function App() {
                     })}
                   </View>
 
-                  <Text style={styles.label}>Numéro de téléphone de débogage *</Text>
+                  <Text style={styles.label}>Numéro de téléphone *</Text>
                   <TextInput
                     style={styles.input}
                     keyboardType="phone-pad"
@@ -383,22 +391,29 @@ export default function App() {
                   />
 
                   <AnimatedButton style={styles.btnOrange} onPress={handleProcessSubscription} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Payer l'abonnement</Text>}
+                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Valider et Payer sur le champ</Text>}
                   </AnimatedButton>
                 </View>
               </FadeInView>
             ) : (
               <FadeInView key={dashboardTab} style={styles.mainWrapper}>
-                {/* Bandeau d'essai réservé au rôle dépôt */}
-                {user.role === 'depot' && !user.isSubscribed && (
-                  <View style={styles.trialBanner}>
-                    <Text style={styles.trialBannerText}>
-                      🎁 Essai Vendeur : <Text style={{ fontWeight: '900' }}>{daysLeft} jours restants</Text>
-                    </Text>
+                {/* Bandeau d'essai avec bouton d'accès direct au paiement sous le champ */}
+                {user.role === 'depot' && (
+                  <View style={styles.trialBannerRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.trialBannerText}>
+                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `🎁 Essai Vendeur : ${daysLeft} jours restants`}
+                      </Text>
+                    </View>
+                    {!user.isSubscribed && (
+                      <AnimatedButton style={styles.btnPayNowInline} onPress={() => setShowPaymentSection(true)}>
+                        <Text style={styles.btnPayNowInlineText}>Payer l'abonnement</Text>
+                      </AnimatedButton>
+                    )}
                   </View>
                 )}
 
-                {/* Onglets de navigation */}
+                {/* Onglets */}
                 <View style={styles.pillsContainer}>
                   <AnimatedButton
                     style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
@@ -465,9 +480,17 @@ export default function App() {
                     </View>
 
                     {user.role === 'depot' ? (
-                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
-                        <Text style={styles.actionCardTitle}>📦 Gestion des stocks</Text>
-                      </AnimatedButton>
+                      <View style={{ gap: 12 }}>
+                        <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
+                          <Text style={styles.actionCardTitle}>📦 Gestion des stocks</Text>
+                        </AnimatedButton>
+
+                        {!user.isSubscribed && (
+                          <AnimatedButton style={styles.actionCardNavy} onPress={() => setShowPaymentSection(true)}>
+                            <Text style={styles.actionCardTitleWhite}>💳 Payer l'abonnement sous le champ</Text>
+                          </AnimatedButton>
+                        )}
+                      </View>
                     ) : (
                       <View style={{ gap: 12 }}>
                         <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
@@ -762,8 +785,10 @@ const styles = StyleSheet.create({
   logoutBtnText: { color: '#F87171', fontSize: 12, fontWeight: '700' },
   scrollContent: { flexGrow: 1, padding: 18 },
   mainWrapper: { flex: 1, justifyContent: 'space-between' },
-  trialBanner: { backgroundColor: '#FEF3C7', borderLeftWidth: 4, borderLeftColor: '#F59E0B', padding: 10, borderRadius: 8, marginBottom: 14 },
+  trialBannerRow: { backgroundColor: '#FEF3C7', borderLeftWidth: 4, borderLeftColor: '#F59E0B', padding: 12, borderRadius: 10, marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   trialBannerText: { color: '#B45309', fontSize: 12, fontWeight: '700' },
+  btnPayNowInline: { backgroundColor: '#F59E0B', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  btnPayNowInlineText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   subCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 16, width: '100%', alignItems: 'center', marginBottom: 16 },
   subCardTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
   subCardPrice: { fontSize: 20, fontWeight: '900', color: '#F97316', marginTop: 4 },
