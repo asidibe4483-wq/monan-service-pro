@@ -81,19 +81,19 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
 };
 
 const CYLINDER_TYPES = [
-  { id: 'B6', name: 'B6 (6 kg)', price: 2500, icon: '🔥', popular: false },
-  { id: 'B12', name: 'B12 (12.5 kg)', price: 5500, icon: '⚡', popular: true },
-  { id: 'B28', name: 'B28 (28 kg)', price: 13000, icon: '🏭', popular: false },
+  { id: 'B6', name: 'B6 (6 kg)', price: 2500, icon: '🔥' },
+  { id: 'B12', name: 'B12 (12.5 kg)', price: 5500, icon: '⚡' },
+  { id: 'B28', name: 'B28 (28 kg)', price: 13000, icon: '🏭' },
 ];
 
 export default function App() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('welcome');
-  const [user, setUser] = useState(null); // Aucun compte préchargé
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
-  // Formulaire vierge
+  // Formulaire
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
@@ -106,7 +106,7 @@ export default function App() {
   const [adresseLivraison, setAdresseLivraison] = useState('');
   const [orderFilter, setOrderFilter] = useState('all');
 
-  // Dépôts de démonstration
+  // Dépôts
   const [searchDepot, setSearchDepot] = useState('');
   const [depotsList] = useState([
     { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distance: '0.8 km', quartier: 'Cocody Angré', statut: 'Ouvert', b6: 14, b12: 28, b28: 5 },
@@ -114,7 +114,7 @@ export default function App() {
     { id: 'DEP-03', nom: 'Dépôt Yopougon Maroc', distance: '5.1 km', quartier: 'Yopougon', statut: 'Ouvert', b6: 22, b12: 35, b28: 10 },
   ]);
 
-  // Commandes vierges
+  // Commandes
   const [commandes, setCommandes] = useState([]);
 
   // Stocks Vendeur
@@ -123,7 +123,7 @@ export default function App() {
   const [stockB28, setStockB28] = useState('0');
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsAppReady(true), 1500);
+    const timer = setTimeout(() => setIsAppReady(true), 1200);
     return () => clearTimeout(timer);
   }, []);
 
@@ -275,7 +275,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* Barre d'en-tête */}
+      {/* Header */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -288,7 +288,7 @@ export default function App() {
           <View>
             <Text style={styles.brandTitle}>MONAN SERVICE</Text>
             <Text style={styles.brandSub}>
-              {user ? (user.role === 'depot' ? 'ESPACE DÉPÔT' : 'ESPACE CLIENT') : 'LIVRAISON & DISTRIBUTION DE GAZ'}
+              {user ? (user.role === 'depot' ? 'ESPACE DÉPÔT' : 'ESPACE CLIENT') : 'DISTRIBUTION DE GAZ'}
             </Text>
           </View>
         </View>
@@ -361,9 +361,6 @@ export default function App() {
                 <View style={styles.fullSection}>
                   <View style={styles.welcomeBanner}>
                     <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email} 👋</Text>
-                    <Text style={styles.welcomeBannerSub}>
-                      {user.role === 'depot' ? 'Gérez vos réserves et traitez les commandes reçues.' : 'Commandez vos recharges de gaz et localisez les dépôts proches.'}
-                    </Text>
                   </View>
 
                   <View style={styles.kpiGrid}>
@@ -380,18 +377,15 @@ export default function App() {
                   {user.role === 'depot' ? (
                     <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
                       <Text style={styles.actionCardTitle}>📦 Gestion des stocks</Text>
-                      <Text style={styles.actionCardSub}>Ajustez le niveau de vos bouteilles B6, B12 et B28.</Text>
                     </AnimatedButton>
                   ) : (
                     <View style={{ gap: 12 }}>
                       <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
                         <Text style={styles.actionCardTitle}>📍 Trouver un dépôt à proximité</Text>
-                        <Text style={styles.actionCardSub}>Vérifiez la disponibilité du gaz en temps réel.</Text>
                       </AnimatedButton>
 
                       <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
                         <Text style={styles.actionCardTitleWhite}>🚀 Commander une recharge</Text>
-                        <Text style={styles.actionCardSubWhite}>Livraison rapide à l'adresse de votre choix.</Text>
                       </AnimatedButton>
                     </View>
                   )}
@@ -526,7 +520,7 @@ export default function App() {
 
                   {commandes.length === 0 ? (
                     <View style={styles.emptyBox}>
-                      <Text style={styles.emptyText}>Aucune commande enregistrée pour le moment.</Text>
+                      <Text style={styles.emptyText}>Aucune commande enregistrée.</Text>
                     </View>
                   ) : (
                     filteredCommandes.map((cmd) => (
@@ -578,25 +572,20 @@ export default function App() {
                 <View style={styles.welcomeContainer}>
                   <View style={styles.heroSection}>
                     <Text style={styles.heroTitle}>Distribution & Livraison de Gaz</Text>
-                    <Text style={styles.heroSub}>Bienvenue sur Monan Service. Sélectionnez votre profil pour continuer.</Text>
                   </View>
 
                   <View style={styles.cardsWrapper}>
                     <AnimatedButton style={styles.welcomeCardDark} onPress={() => setCurrentScreen('register_client')}>
-                      <Text style={styles.welcomeCardTag}>ESPACE CLIENT</Text>
-                      <Text style={styles.welcomeCardTitleLight}>Particuliers & Entreprises</Text>
-                      <Text style={styles.welcomeCardSubLight}>Commandez vos recharges de gaz et faites-vous livrer rapidement.</Text>
+                      <Text style={styles.welcomeCardTitleLight}>Espace Client</Text>
                     </AnimatedButton>
 
                     <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
-                      <Text style={styles.welcomeCardTagNavy}>ESPACE DÉPÔT</Text>
-                      <Text style={styles.welcomeCardTitleDark}>Vendeurs & Dépôts de Gaz</Text>
-                      <Text style={styles.welcomeCardSubDark}>Gérez vos réserves et recevez les commandes des clients proches.</Text>
+                      <Text style={styles.welcomeCardTitleDark}>Espace Dépôt / Vendeur</Text>
                     </AnimatedButton>
                   </View>
 
                   <AnimatedButton style={styles.btnNavyOutline} onPress={() => setCurrentScreen('login')}>
-                    <Text style={styles.btnNavyOutlineText}>Se connecter à un compte existant</Text>
+                    <Text style={styles.btnNavyOutlineText}>Se connecter</Text>
                   </AnimatedButton>
                 </View>
               )}
@@ -624,7 +613,7 @@ export default function App() {
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" value={password} onChangeText={setPassword} />
 
                   <AnimatedButton style={styles.btnOrange} onPress={() => handleRegister(currentScreen === 'register_depot' ? 'depot' : 'client')} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Finaliser l'inscription</Text>}
+                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>S'inscrire</Text>}
                   </AnimatedButton>
                 </View>
               )}
@@ -680,17 +669,14 @@ const styles = StyleSheet.create({
   pillTextActive: { color: '#0F172A' },
   welcomeBanner: { backgroundColor: '#0F172A', borderRadius: 16, padding: 18, marginBottom: 16 },
   welcomeBannerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
-  welcomeBannerSub: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
   kpiGrid: { flexDirection: 'row', gap: 12, marginBottom: 18 },
   kpiCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
   kpiCardTag: { fontSize: 10, fontWeight: '800', color: '#64748B' },
   kpiCardNum: { fontSize: 22, fontWeight: '900', color: '#F97316', marginTop: 4 },
-  actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 14, padding: 18 },
+  actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 14, padding: 18, alignItems: 'center' },
   actionCardTitle: { fontSize: 15, fontWeight: '800', color: '#C2410C' },
-  actionCardSub: { fontSize: 12, color: '#9A3412', marginTop: 2 },
-  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 14, padding: 18 },
+  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 14, padding: 18, alignItems: 'center' },
   actionCardTitleWhite: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
-  actionCardSubWhite: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
   cardBox: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E2E8F0', elevation: 1 },
   cardBoxTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 14 },
   depotCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, padding: 14, marginBottom: 12 },
@@ -739,16 +725,11 @@ const styles = StyleSheet.create({
   stockItem: { fontSize: 14, color: '#334155', marginVertical: 6 },
   heroSection: { marginVertical: 16 },
   heroTitle: { fontSize: 24, fontWeight: '900', color: '#0F172A' },
-  heroSub: { fontSize: 13, color: '#64748B', marginTop: 6 },
   cardsWrapper: { gap: 14, marginVertical: 12 },
-  welcomeCardDark: { backgroundColor: '#0F172A', borderRadius: 16, padding: 20 },
-  welcomeCardWhite: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#E2E8F0' },
-  welcomeCardTag: { backgroundColor: '#F97316', color: '#FFF', fontSize: 10, fontWeight: '800', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 8 },
-  welcomeCardTagNavy: { backgroundColor: '#F1F5F9', color: '#0F172A', fontSize: 10, fontWeight: '800', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 8 },
+  welcomeCardDark: { backgroundColor: '#0F172A', borderRadius: 16, padding: 22, alignItems: 'center' },
+  welcomeCardWhite: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 22, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
   welcomeCardTitleLight: { color: '#FFF', fontSize: 18, fontWeight: '800' },
-  welcomeCardSubLight: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
   welcomeCardTitleDark: { color: '#0F172A', fontSize: 18, fontWeight: '800' },
-  welcomeCardSubDark: { color: '#64748B', fontSize: 12, marginTop: 4 },
   btnNavyOutline: { borderWidth: 1.5, borderColor: '#0F172A', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 12 },
   btnNavyOutlineText: { color: '#0F172A', fontWeight: '800', fontSize: 14 }
 });
