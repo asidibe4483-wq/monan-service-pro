@@ -80,7 +80,6 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
   );
 };
 
-// Stepper Ergonomique de Quantité
 const QuantityStepper = ({ value, onChange }) => {
   const qty = parseInt(value, 10) || 1;
   return (
@@ -250,7 +249,7 @@ export default function App() {
       setAdresseLivraison(userData.adresse || '');
       setDashboardTab('home');
     } catch (error) {
-      Alert.alert('Connexion échouée', error.message);
+      Alert.alert('Connexion impossible', error.message);
     } finally {
       setLoading(false);
     }
@@ -315,10 +314,10 @@ export default function App() {
     }
   };
 
-  // 🔒 DEMANDE DE CODE DE RÉINITIALISATION STRICTE
+  // 🔒 VÉRIFICATION D'EMAIL AVANT D'ENVOYER LE CODE À 5 CHIFFRES
   const handleRequestResetCode = async () => {
     if (!forgotEmail) {
-      Alert.alert('Champ requis', 'Veuillez renseigner votre adresse email.');
+      Alert.alert('Champ requis', 'Veuillez saisir votre adresse email.');
       return;
     }
 
@@ -333,23 +332,27 @@ export default function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Adresse email non reconnue.");
+        throw new Error(data.error || "Adresse email introuvable.");
       }
 
-      // Progression autorisée uniquement si l'email existe
       setResetStep(2);
-      Alert.alert('Code envoyé !', data.message || `Un code de sécurité valable 5 minutes a été envoyé à ${forgotEmail.trim()}`);
+      Alert.alert('Code transmis !', data.message);
     } catch (error) {
-      Alert.alert('Email introuvable', error.message);
+      Alert.alert('Erreur de réinitialisation', error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔒 VALIDATION DU CODE ET NOUVEAU MOT DE PASSE STRICTE
+  // 🔒 VÉRIFICATION STRICTE DU CODE À 5 CHIFFRES
   const handleConfirmNewPassword = async () => {
     if (!resetCode || !newPassword) {
-      Alert.alert('Champs requis', 'Veuillez saisir le code à 6 chiffres reçu et le nouveau mot de passe.');
+      Alert.alert('Champs requis', 'Veuillez saisir le code à 5 chiffres et le nouveau mot de passe.');
+      return;
+    }
+
+    if (resetCode.trim().length !== 5) {
+      Alert.alert('Code invalide', 'Le code de sécurité doit comporter exactement 5 chiffres.');
       return;
     }
 
@@ -368,10 +371,10 @@ export default function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Code invalide ou expiré.");
+        throw new Error(data.error || "Code incorrect ou expiré.");
       }
 
-      Alert.alert('Mot de passe mis à jour !', data.message, [
+      Alert.alert('Succès', data.message, [
         {
           text: 'Se connecter',
           onPress: () => {
@@ -508,7 +511,6 @@ export default function App() {
 
           {user ? (
             (isTrialExpired || showPaymentSection) ? (
-              /* ÉCRAN DE PAIEMENT */
               <FadeInView style={styles.mainWrapper}>
                 <View style={styles.cardBox}>
                   {user.role === 'depot' && !isTrialExpired && (
@@ -566,7 +568,6 @@ export default function App() {
               </FadeInView>
             ) : (
               <FadeInView key={dashboardTab} style={styles.mainWrapper}>
-                {/* Bandeau d'essai Vendeur */}
                 {user.role === 'depot' && (
                   <View style={styles.trialBannerRow}>
                     <View style={{ flex: 1 }}>
@@ -585,7 +586,6 @@ export default function App() {
                   </View>
                 )}
 
-                {/* Onglets Défilants */}
                 <View style={styles.pillsContainerOuter}>
                   <ScrollView
                     horizontal
@@ -641,7 +641,6 @@ export default function App() {
                   </ScrollView>
                 </View>
 
-                {/* ACCUEIL */}
                 {dashboardTab === 'home' && (
                   <View style={styles.fullSection}>
                     <View style={styles.userGreetingCard}>
@@ -699,7 +698,6 @@ export default function App() {
                   </View>
                 )}
 
-                {/* DÉPÔTS */}
                 {dashboardTab === 'depots' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Dépôts à proximité 📍</Text>
@@ -758,7 +756,6 @@ export default function App() {
                   </View>
                 )}
 
-                {/* COMMANDER */}
                 {dashboardTab === 'order' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Passer une commande</Text>
@@ -807,7 +804,6 @@ export default function App() {
                   </View>
                 )}
 
-                {/* SUIVI */}
                 {dashboardTab === 'orders_list' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Suivi des commandes</Text>
@@ -858,7 +854,6 @@ export default function App() {
                   </View>
                 )}
 
-                {/* STOCK VENDEUR */}
                 {dashboardTab === 'add_stock' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Mise à jour des stocks</Text>
@@ -878,7 +873,6 @@ export default function App() {
                   </View>
                 )}
 
-                {/* INVENTAIRE VENDEUR */}
                 {dashboardTab === 'sales_list' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>État actuel du dépôt</Text>
@@ -900,7 +894,6 @@ export default function App() {
             )
           ) : (
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
-              {/* ACCUEIL */}
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
                   <View style={styles.heroSection}>
@@ -929,7 +922,6 @@ export default function App() {
                 </View>
               )}
 
-              {/* INSCRIPTIONS */}
               {(currentScreen === 'register_client' || currentScreen === 'register_depot') && (
                 <View style={styles.cardBox}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
@@ -961,7 +953,6 @@ export default function App() {
                 </View>
               )}
 
-              {/* CONNEXION */}
               {currentScreen === 'login' && (
                 <View style={styles.cardBox}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
@@ -993,7 +984,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* RÉINITIALISATION SÉCURISÉE DE MOT DE PASSE */}
+              {/* ÉCRAN DE RÉINITIALISATION SÉCURISÉ (5 CHIFFRES) */}
               {currentScreen === 'forgot_password' && (
                 <View style={styles.cardBox}>
                   <AnimatedButton
@@ -1025,16 +1016,17 @@ export default function App() {
                       />
 
                       <AnimatedButton style={styles.btnOrange} onPress={handleRequestResetCode} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Envoyer le code OTP</Text>}
+                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Envoyer le code (5 chiffres)</Text>}
                       </AnimatedButton>
                     </>
                   ) : (
                     <>
-                      <Text style={styles.label}>Code de vérification (valable 5 minutes)</Text>
+                      <Text style={styles.label}>Code de sécurité à 5 chiffres (valable 5 min)</Text>
                       <TextInput
                         style={styles.input}
                         keyboardType="numeric"
-                        placeholder="Ex: 849201"
+                        maxLength={5}
+                        placeholder="Ex: 84920"
                         placeholderTextColor="#94A3B8"
                         value={resetCode}
                         onChangeText={setResetCode}

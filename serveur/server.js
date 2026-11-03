@@ -11,24 +11,24 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Configuration Base de Données PostgreSQL (Render / Supabase)
+// Configuration Base de Données PostgreSQL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
-// Service d'envoi d'emails (Nodemailer avec variables d'environnement)
+// Service SMTP d'envoi d'emails (Nodemailer)
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: process.env.SMTP_PORT || 587,
-  secure: false, // true pour le port 465, false pour les autres
+  secure: false,
   auth: {
-    user: process.env.SMTP_USER, // Votre adresse email d'envoi
-    pass: process.env.SMTP_PASS, // Votre mot de passe d'application SMTP
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
   },
 });
 
-// Initialisation & Mise à jour des colonnes de la table users
+// Initialisation BDD & Colonnes de sécurité
 const initDb = async () => {
   try {
     await pool.query(`
@@ -47,20 +47,19 @@ const initDb = async () => {
       );
     `);
 
-    // Ajout dynamique des colonnes de sécurité si la table existait déjà
     await pool.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code VARCHAR(10);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_expires_at TIMESTAMP WITH TIME ZONE;
     `);
 
-    console.log("✅ Table 'users' et colonnes de sécurité vérifiées.");
+    console.log("✅ Table 'users' prête avec colonnes OTP à 5 chiffres.");
   } catch (err) {
-    console.error("❌ Erreur d'initialisation de la base de données :", err.message);
+    console.error("❌ Erreur BDD :", err.message);
   }
 };
 initDb();
 
-// --- ROUTES AUTHENTIFICATION ---
+// --- ROUTES D'AUTHENTIFICATION ---
 
 // 1. Inscription Client
 app.post('/api/auth/register-client', async (req, res) => {
@@ -74,7 +73,7 @@ app.post('/api/auth/register-client', async (req, res) => {
 
     const checkUser = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
     if (checkUser.rows.length > 0) {
-      return res.status(400).json({ error: "Un compte existe déjà avec cette adresse email." });
+      return res.status(400).json({ error: "Un compte existe déjà avec cet email." });
     }
 
     const insertResult = await pool.query(
@@ -99,7 +98,6 @@ app.post('/api/auth/register-client', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Erreur register-client :", error);
     return res.status(500).json({ error: error.message });
   }
 });
@@ -116,7 +114,7 @@ app.post('/api/auth/register-depot', async (req, res) => {
 
     const checkUser = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
     if (checkUser.rows.length > 0) {
-      return res.status(400).json({ error: "Un compte existe déjà avec cette adresse email." });
+      return res.status(400).json({ error: "Un compte existe déjà avec cet email." });
     }
 
     const insertResult = await pool.query(
@@ -141,12 +139,11 @@ app.post('/api/auth/register-depot', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Erreur register-depot :", error);
     return res.status(500).json({ error: error.message });
   }
 });
 
-// 3. Connexion Utilisateur
+// 3. Connexion
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -163,7 +160,7 @@ app.post('/api/auth/login', async (req, res) => {
     );
 
     if (userResult.rows.length === 0) {
-      return res.status(401).json({ error: "Aucun compte associé à cette adresse email." });
+      return res.status(401).json({ error: "Aucun compte n'est enregistré avec cette adresse email." });
     }
 
     const foundUser = userResult.rows[0];
@@ -188,73 +185,72 @@ app.post('/api/auth/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Erreur login :", error);
     return res.status(500).json({ error: error.message });
   }
 });
 
-// 4. Demande de code de réinitialisation (OTP)
+// 4. Génération & Envoi du Code à 5 chiffres (Validité : 5 minutes)
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
     const cleanEmail = email ? email.trim().toLowerCase() : '';
 
     if (!cleanEmail) {
-      return res.status(400).json({ error: "Adresse email requise." });
+      return res.status(400).json({ error: "Veuillez saisir votre adresse email." });
     }
 
-    // VÉRIFICATION D'EXISTENCE DU COMPTE
+    // VÉRIFICATION D'EXISTENCE EN BDD
     const userResult = await pool.query('SELECT id, nom FROM users WHERE LOWER(email) = $1', [cleanEmail]);
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "Aucun compte n'est enregistré avec cet email." });
+      return res.status(404).json({ error: "Cette adresse email n'est liée à aucun compte Monan Service." });
     }
 
     const user = userResult.rows[0];
 
-    // Génération d'un code OTP aléatoire à 6 chiffres
-    const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Date d'expiration fixée à 5 minutes (300 000 ms)
+    // Génération exacte d'un code OTP à 5 chiffres (entre 10000 et 99999)
+    const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
+
+    // Expiration à 5 minutes
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Enregistrement de l'OTP temporaire en base de données
+    // Mise à jour BDD
     await pool.query(
       'UPDATE users SET reset_code = $1, reset_expires_at = $2 WHERE LOWER(email) = $3',
       [generatedCode, expiresAt, cleanEmail]
     );
 
-    // Envoi de l'email si le serveur SMTP est configuré
+    // Envoi de l'email via SMTP s'il est configuré
     if (process.env.SMTP_USER && process.env.SMTP_PASS) {
       await transporter.sendMail({
         from: '"Monan Service" <no-reply@monan-service.com>',
         to: cleanEmail,
-        subject: "Code de réinitialisation - Monan Service",
+        subject: "Code de réinitialisation (5 chiffres) - Monan Service",
         html: `
           <div style="font-family: Arial, sans-serif; padding: 20px; color: #0F172A;">
-            <h2>Réinitialisation de mot de passe</h2>
+            <h2 style="color: #F97316;">Monan Service</h2>
             <p>Bonjour <strong>${user.nom}</strong>,</p>
-            <p>Voici votre code de sécurité unique pour réinitialiser votre mot de passe :</p>
-            <div style="font-size: 28px; font-weight: bold; color: #F97316; letter-spacing: 4px; margin: 20px 0;">
+            <p>Voici votre code de réinitialisation de mot de passe à 5 chiffres :</p>
+            <div style="font-size: 32px; font-weight: bold; color: #0F172A; letter-spacing: 6px; background: #F1F5F9; padding: 12px 20px; display: inline-block; border-radius: 8px; margin: 16px 0;">
               ${generatedCode}
             </div>
-            <p>Ce code est valable pendant <strong>5 minutes</strong>. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.</p>
+            <p>Ce code est strictement personnel et expire dans <strong>5 minutes</strong>.</p>
           </div>
         `
       });
     } else {
-      console.log(`⚠️ Mode Développement (SMTP non configuré) : Code généré pour ${cleanEmail} = ${generatedCode}`);
+      console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${cleanEmail} : ${generatedCode}`);
     }
 
-    return res.json({ 
-      message: `Code de vérification envoyé à l'adresse ${cleanEmail}. Il expirera dans 5 minutes.` 
+    return res.json({
+      message: `Un code de sécurité à 5 chiffres a été envoyé à ${cleanEmail}. Il est valable pendant 5 minutes.`
     });
   } catch (error) {
-    console.error("Erreur forgot-password :", error);
-    return res.status(500).json({ error: "Erreur lors de la génération du code de sécurité." });
+    console.error("Erreur forgot-password:", error);
+    return res.status(500).json({ error: "Erreur lors de la création du code de réinitialisation." });
   }
 });
 
-// 5. Validation du code et mise à jour du mot de passe
+// 5. Vérification du Code 5 chiffres & Mise à jour du mot de passe
 app.post('/api/auth/reset-password', async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
@@ -262,60 +258,58 @@ app.post('/api/auth/reset-password', async (req, res) => {
     const cleanCode = code ? code.trim() : '';
 
     if (!cleanEmail || !cleanCode || !newPassword) {
-      return res.status(400).json({ error: "Veuillez remplir tous les champs requis." });
+      return res.status(400).json({ error: "Tous les champs sont obligatoires." });
     }
 
-    if (newPassword.length < 4) {
-      return res.status(400).json({ error: "Le mot de passe doit contenir au moins 4 caractères." });
+    if (cleanCode.length !== 5) {
+      return res.status(400).json({ error: "Le code de réinitialisation doit comporter exactement 5 chiffres." });
     }
 
-    // Récupération des informations de sécurité de l'utilisateur
     const userResult = await pool.query(
       'SELECT id, reset_code, reset_expires_at FROM users WHERE LOWER(email) = $1',
       [cleanEmail]
     );
 
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "Compte introuvable." });
+      return res.status(404).json({ error: "Compte utilisateur introuvable." });
     }
 
     const user = userResult.rows[0];
 
     if (!user.reset_code || !user.reset_expires_at) {
-      return res.status(400).json({ error: "Aucune demande de réinitialisation active. Veuillez redemander un code." });
+      return res.status(400).json({ error: "Aucun code actif. Veuillez demander un nouveau code à 5 chiffres." });
     }
 
-    // VÉRIFICATION DE LA CORRESPONDANCE DU CODE
+    // VÉRIFICATION DE LA CORRESPONDANCE DU CODE (STRICT)
     if (user.reset_code !== cleanCode) {
-      return res.status(400).json({ error: "Code de vérification incorrect." });
+      return res.status(400).json({ error: "Le code à 5 chiffres saisi est incorrect." });
     }
 
-    // VÉRIFICATION DE LA PÉREMPTION (5 MINUTES)
+    // VÉRIFICATION D'EXPIRATION (5 MINUTES)
     const now = new Date();
     const expiresAt = new Date(user.reset_expires_at);
 
     if (now > expiresAt) {
-      return res.status(400).json({ error: "Le code de vérification a expiré (valable 5 minutes). Veuillez en demander un nouveau." });
+      return res.status(400).json({ error: "Ce code à 5 chiffres a expiré (valable 5 minutes). Veuillez en générer un nouveau." });
     }
 
-    // Mettre à jour le mot de passe et réinitialiser les jetons OTP
+    // Mise à jour du mot de passe et suppression du jeton
     await pool.query(
       'UPDATE users SET password = $1, reset_code = NULL, reset_expires_at = NULL WHERE LOWER(email) = $2',
       [newPassword, cleanEmail]
     );
 
-    return res.json({ message: "Mot de passe réinitialisé avec succès. Vous pouvez maintenant vous connecter." });
+    return res.json({ message: "Votre mot de passe a été modifié avec succès. Vous pouvez vous connecter." });
   } catch (error) {
-    console.error("Erreur reset-password :", error);
-    return res.status(500).json({ error: "Impossible de mettre à jour le mot de passe." });
+    console.error("Erreur reset-password:", error);
+    return res.status(500).json({ error: "Échec de la réinitialisation du mot de passe." });
   }
 });
 
-// Root Health Check
 app.get('/', (req, res) => {
   res.send('API Monan Service Operational 🚀');
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Serveur Monan backend démarré sur le port ${PORT}`);
+  console.log(`🚀 Serveur backend démarré sur le port ${PORT}`);
 });
