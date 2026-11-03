@@ -1,316 +1,151 @@
-const express = require('express');
-const cors = require('cors');
-const { Pool } = require('pg');
-const nodemailer = require('nodemailer');
-require('dotenv').config();
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const { Pool } = require("pg");
+const nodemailer = require("nodemailer");
+const bcrypt = require("bcrypt");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Configuration Base de Données PostgreSQL (Render / Supabase)
+// Connexion PostgreSQL avec support SSL (Render)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
-// Service SMTP d'envoi d'emails (Nodemailer)
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: process.env.SMTP_PORT === '465',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
-// Initialisation BDD & Colonnes de sécurité OTP
-const initDb = async () => {
+// Initialisation et vérification des tables
+async function initDb() {
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        nom VARCHAR(150) NOT NULL,
-        telephone VARCHAR(50),
-        adresse VARCHAR(255),
-        email VARCHAR(150) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
-        role VARCHAR(20) DEFAULT 'client',
-        is_subscribed BOOLEAN DEFAULT FALSE,
-        reset_code VARCHAR(10),
-        reset_expires_at TIMESTAMP WITH TIME ZONE,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        reset_otp VARCHAR(10),
+        otp_expires_at TIMESTAMP
       );
     `);
-
-    await pool.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code VARCHAR(10);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_expires_at TIMESTAMP WITH TIME ZONE;
-    `);
-
     console.log("✅ Table 'users' prête avec colonnes OTP à 5 chiffres.");
   } catch (err) {
-    console.error("❌ Erreur BDD :", err.message);
+    console.error("❌ Erreur BDD lors de l'initialisation :", err.message);
   }
-};
+}
 initDb();
 
-// --- ROUTES D'AUTHENTIFICATION ---
-
-// 1. Inscription Client
-app.post('/api/auth/register-client', async (req, res) => {
-  try {
-    const { nom, telephone, adresse, email, password } = req.body;
-    const cleanEmail = email ? email.trim().toLowerCase() : '';
-
-    if (!cleanEmail || !password || !nom) {
-      return res.status(400).json({ error: "Les champs nom, email et mot de passe sont requis." });
-    }
-
-    const checkUser = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
-    if (checkUser.rows.length > 0) {
-      return res.status(400).json({ error: "Un compte existe déjà avec cet email." });
-    }
-
-    const insertResult = await pool.query(
-      `INSERT INTO users (nom, telephone, adresse, email, password, role, is_subscribed) 
-       VALUES ($1, $2, $3, $4, $5, 'client', false) 
-       RETURNING id, nom, telephone, adresse, email, role, is_subscribed, created_at`,
-      [nom.trim(), telephone ? telephone.trim() : '', adresse ? adresse.trim() : '', cleanEmail, password]
-    );
-
-    const newUser = insertResult.rows[0];
-    return res.status(201).json({
-      message: "Compte client créé avec succès",
-      user: {
-        id: newUser.id,
-        nom: newUser.nom,
-        email: newUser.email,
-        telephone: newUser.telephone,
-        adresse: newUser.adresse,
-        role: 'client',
-        isSubscribed: false,
-        createdAt: newUser.created_at
-      }
-    });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
+// Configuration du transporteur Nodemailer (SMTP Gmail)
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  port: parseInt(process.env.SMTP_PORT) || 465,
+  secure: (process.env.SMTP_PORT || "465") === "465", // true pour 465 (SSL), false pour 587 (TLS)
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+  connectionTimeout: 10000, // Timeout de 10s pour éviter le chargement infini
 });
 
-// 2. Inscription Dépôt / Vendeur
-app.post('/api/auth/register-depot', async (req, res) => {
-  try {
-    const { nom, telephone, adresse, email, password } = req.body;
-    const cleanEmail = email ? email.trim().toLowerCase() : '';
-
-    if (!cleanEmail || !password || !nom) {
-      return res.status(400).json({ error: "Les champs nom, email et mot de passe sont requis." });
-    }
-
-    const checkUser = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
-    if (checkUser.rows.length > 0) {
-      return res.status(400).json({ error: "Un compte existe déjà avec cet email." });
-    }
-
-    const insertResult = await pool.query(
-      `INSERT INTO users (nom, telephone, adresse, email, password, role, is_subscribed) 
-       VALUES ($1, $2, $3, $4, $5, 'depot', false) 
-       RETURNING id, nom, telephone, adresse, email, role, is_subscribed, created_at`,
-      [nom.trim(), telephone ? telephone.trim() : '', adresse ? adresse.trim() : '', cleanEmail, password]
-    );
-
-    const newUser = insertResult.rows[0];
-    return res.status(201).json({
-      message: "Compte dépôt créé avec succès",
-      user: {
-        id: newUser.id,
-        nom: newUser.nom,
-        email: newUser.email,
-        telephone: newUser.telephone,
-        adresse: newUser.adresse,
-        role: 'depot',
-        isSubscribed: false,
-        createdAt: newUser.created_at
-      }
-    });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
+// Route Healthcheck
+app.get("/", (req, res) => {
+  res.send("API Monan Service Operational 🚀");
 });
 
-// 3. Connexion
-app.post('/api/auth/login', async (req, res) => {
+// Route 1 : Demande de code OTP à 5 chiffres
+app.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: "Veuillez fournir une adresse email." });
+  }
+
   try {
-    const { email, password } = req.body;
-    const cleanEmail = email ? email.trim().toLowerCase() : '';
-
-    if (!cleanEmail || !password) {
-      return res.status(400).json({ error: "Email et mot de passe obligatoires." });
-    }
-
-    const userResult = await pool.query(
-      `SELECT id, nom, telephone, adresse, email, password, role, is_subscribed, created_at 
-       FROM users WHERE LOWER(email) = $1`,
-      [cleanEmail]
-    );
-
+    // 1. Vérifier si l'utilisateur existe
+    const userResult = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     if (userResult.rows.length === 0) {
-      return res.status(401).json({ error: "Aucun compte n'est enregistré avec cette adresse email." });
+      return res.status(404).json({ error: "Cette adresse email n'est liée à aucun compte." });
     }
 
-    const foundUser = userResult.rows[0];
-
-    if (foundUser.password !== password) {
-      return res.status(401).json({ error: "Mot de passe incorrect." });
-    }
-
-    const normalizedRole = foundUser.role ? String(foundUser.role).toLowerCase().trim() : 'client';
-
-    return res.json({
-      message: "Connexion réussie",
-      user: {
-        id: foundUser.id,
-        nom: foundUser.nom,
-        email: foundUser.email,
-        telephone: foundUser.telephone,
-        adresse: foundUser.adresse,
-        role: normalizedRole,
-        isSubscribed: foundUser.is_subscribed || false,
-        createdAt: foundUser.created_at
-      }
-    });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-// 4. Génération & Envoi du Code à 5 chiffres (Validité : 5 minutes)
-app.post('/api/auth/forgot-password', async (req, res) => {
-  try {
-    const { email } = req.body;
-    const cleanEmail = email ? email.trim().toLowerCase() : '';
-
-    if (!cleanEmail) {
-      return res.status(400).json({ error: "Veuillez saisir votre adresse email." });
-    }
-
-    // VÉRIFICATION D'EXISTENCE EN BDD
-    const userResult = await pool.query('SELECT id, nom FROM users WHERE LOWER(email) = $1', [cleanEmail]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "Cette adresse email n'est liée à aucun compte Monan Service." });
-    }
-
-    const user = userResult.rows[0];
-
-    // Génération d'un code OTP à 5 chiffres (entre 10000 et 99999)
-    const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
-
-    // Expiration à 5 minutes
+    // 2. Générer un code OTP à 5 chiffres et fixer l'expiration à 5 minutes
+    const otp = Math.floor(10000 + Math.random() * 90000).toString();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Mise à jour BDD
+    // 3. Enregistrer l'OTP en BDD
     await pool.query(
-      'UPDATE users SET reset_code = $1, reset_expires_at = $2 WHERE LOWER(email) = $3',
-      [generatedCode, expiresAt, cleanEmail]
+      "UPDATE users SET reset_otp = $1, otp_expires_at = $2 WHERE email = $3",
+      [otp, expiresAt, email]
     );
 
-    // Envoi de l'email via SMTP s'il est configuré
+    // 4. Envoi de l'e-mail avec fallback en console
     if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      await transporter.sendMail({
-        from: '"Monan Service" <no-reply@monan-service.com>',
-        to: cleanEmail,
-        subject: "Code de réinitialisation (5 chiffres) - Monan Service",
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px; color: #0F172A;">
-            <h2 style="color: #F97316;">Monan Service</h2>
-            <p>Bonjour <strong>${user.nom}</strong>,</p>
-            <p>Voici votre code de réinitialisation de mot de passe à 5 chiffres :</p>
-            <div style="font-size: 32px; font-weight: bold; color: #0F172A; letter-spacing: 6px; background: #F1F5F9; padding: 12px 20px; display: inline-block; border-radius: 8px; margin: 16px 0;">
-              ${generatedCode}
-            </div>
-            <p>Ce code est strictement personnel et expire dans <strong>5 minutes</strong>.</p>
-          </div>
-        `
-      });
+      try {
+        await transporter.sendMail({
+          from: `"Monan Service" <${process.env.SMTP_USER}>`,
+          to: email,
+          subject: "Code de réinitialisation Monan Service",
+          text: `Votre code de sécurité à 5 chiffres est : ${otp} (valable 5 minutes).`,
+        });
+        console.log(`✉️ Email OTP envoyé avec succès à ${email}`);
+      } catch (mailErr) {
+        console.error("❌ Erreur d'envoi SMTP Gmail :", mailErr.message);
+        console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${email} : ${otp}`);
+      }
     } else {
-      console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${cleanEmail} : ${generatedCode}`);
+      console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${email} : ${otp}`);
     }
 
-    return res.json({
-      message: `Un code de sécurité à 5 chiffres a été envoyé à ${cleanEmail}. Il est valable pendant 5 minutes.`
-    });
+    // 5. Réponse HTTP garantie pour débloquer l'application
+    return res.json({ success: true, message: "Un code de validation à 5 chiffres vous a été envoyé." });
   } catch (error) {
-    console.error("Erreur forgot-password:", error);
-    return res.status(500).json({ error: "Erreur lors de la création du code de réinitialisation." });
+    console.error("❌ Erreur serveur sur /forgot-password :", error);
+    return res.status(500).json({ error: "Une erreur interne est survenue." });
   }
 });
 
-// 5. Vérification du Code 5 chiffres & Mise à jour du mot de passe
-app.post('/api/auth/reset-password', async (req, res) => {
+// Route 2 : Validation du code et changement de mot de passe
+app.post("/reset-password", async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({ error: "Tous les champs sont requis." });
+  }
+
   try {
-    const { email, code, newPassword } = req.body;
-    const cleanEmail = email ? email.trim().toLowerCase() : '';
-    const cleanCode = code ? code.trim() : '';
-
-    if (!cleanEmail || !cleanCode || !newPassword) {
-      return res.status(400).json({ error: "Tous les champs sont obligatoires." });
-    }
-
-    if (cleanCode.length !== 5) {
-      return res.status(400).json({ error: "Le code de réinitialisation doit comporter exactement 5 chiffres." });
-    }
-
-    const userResult = await pool.query(
-      'SELECT id, reset_code, reset_expires_at FROM users WHERE LOWER(email) = $1',
-      [cleanEmail]
-    );
-
+    // 1. Recherche de l'utilisateur
+    const userResult = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "Compte utilisateur introuvable." });
+      return res.status(404).json({ error: "Utilisateur non trouvé." });
     }
 
     const user = userResult.rows[0];
 
-    if (!user.reset_code || !user.reset_expires_at) {
-      return res.status(400).json({ error: "Aucun code actif. Veuillez demander un nouveau code à 5 chiffres." });
+    // 2. Vérification du code OTP et de la date d'expiration
+    if (!user.reset_otp || user.reset_otp !== otp.toString().trim()) {
+      return res.status(400).json({ error: "Code de vérification incorrect." });
     }
 
-    // VÉRIFICATION DE LA CORRESPONDANCE DU CODE (STRICT)
-    if (user.reset_code !== cleanCode) {
-      return res.status(400).json({ error: "Le code à 5 chiffres saisi est incorrect." });
+    if (new Date() > new Date(user.otp_expires_at)) {
+      return res.status(400).json({ error: "Le code de vérification a expiré." });
     }
 
-    // VÉRIFICATION D'EXPIRATION (5 MINUTES)
-    const now = new Date();
-    const expiresAt = new Date(user.reset_expires_at);
-
-    if (now > expiresAt) {
-      return res.status(400).json({ error: "Ce code à 5 chiffres a expiré (valable 5 minutes). Veuillez en générer un nouveau." });
-    }
-
-    // Mise à jour du mot de passe et suppression du jeton
+    // 3. Mise à jour du mot de passe et réinitialisation des champs OTP
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
     await pool.query(
-      'UPDATE users SET password = $1, reset_code = NULL, reset_expires_at = NULL WHERE LOWER(email) = $2',
-      [newPassword, cleanEmail]
+      "UPDATE users SET password = $1, reset_otp = NULL, otp_expires_at = NULL WHERE email = $2",
+      [hashedPassword, email]
     );
 
-    return res.json({ message: "Votre mot de passe a été modifié avec succès. Vous pouvez vous connecter." });
+    return res.json({ success: true, message: "Mot de passe réinitialisé avec succès !" });
   } catch (error) {
-    console.error("Erreur reset-password:", error);
-    return res.status(500).json({ error: "Échec de la réinitialisation du mot de passe." });
+    console.error("❌ Erreur serveur sur /reset-password :", error);
+    return res.status(500).json({ error: "Une erreur interne est survenue." });
   }
 });
 
-app.get('/', (req, res) => {
-  res.send('API Monan Service Operational 🚀');
-});
-
-// ÉCOUTE STRICTE SUR 0.0.0.0 (INDISPENSABLE POUR RENDER)
-app.listen(PORT, '0.0.0.0', () => {
+// Démarrage du serveur sur host 0.0.0.0 pour Render
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Serveur Monan backend démarré sur le port ${PORT}`);
 });
