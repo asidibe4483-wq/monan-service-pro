@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Configuration Base de Données PostgreSQL
+// Configuration Base de Données PostgreSQL (Render / Supabase)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
@@ -20,15 +20,15 @@ const pool = new Pool({
 // Service SMTP d'envoi d'emails (Nodemailer)
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: process.env.SMTP_PORT || 587,
-  secure: false,
+  port: parseInt(process.env.SMTP_PORT || '587', 10),
+  secure: process.env.SMTP_PORT === '465',
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
 });
 
-// Initialisation BDD & Colonnes de sécurité
+// Initialisation BDD & Colonnes de sécurité OTP
 const initDb = async () => {
   try {
     await pool.query(`
@@ -207,7 +207,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Génération exacte d'un code OTP à 5 chiffres (entre 10000 et 99999)
+    // Génération d'un code OTP à 5 chiffres (entre 10000 et 99999)
     const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
 
     // Expiration à 5 minutes
@@ -310,6 +310,7 @@ app.get('/', (req, res) => {
   res.send('API Monan Service Operational 🚀');
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Serveur backend démarré sur le port ${PORT}`);
+// ÉCOUTE STRICTE SUR 0.0.0.0 (INDISPENSABLE POUR RENDER)
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Serveur Monan backend démarré sur le port ${PORT}`);
 });
