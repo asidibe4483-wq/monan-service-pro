@@ -20,19 +20,19 @@ const API_URL = "https://monan-backend.onrender.com";
 
 const FadeInView = ({ children, style }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(12)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 250,
+        duration: 220,
         useNativeDriver: true,
       }),
       Animated.spring(translateY, {
         toValue: 0,
-        friction: 8,
-        tension: 40,
+        friction: 9,
+        tension: 45,
         useNativeDriver: true,
       }),
     ]).start();
@@ -50,10 +50,10 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
 
   const handlePressIn = () => {
     Animated.spring(scale, {
-      toValue: 0.96,
+      toValue: 0.97,
       useNativeDriver: true,
-      speed: 50,
-      bounciness: 6,
+      speed: 60,
+      bounciness: 4,
     }).start();
   };
 
@@ -61,8 +61,8 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
     Animated.spring(scale, {
       toValue: 1,
       useNativeDriver: true,
-      speed: 35,
-      bounciness: 6,
+      speed: 40,
+      bounciness: 4,
     }).start();
   };
 
@@ -80,13 +80,37 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
   );
 };
 
+// Stepper Ergonomique de Quantité
+const QuantityStepper = ({ value, onChange }) => {
+  const qty = parseInt(value, 10) || 1;
+  return (
+    <View style={styles.stepperContainer}>
+      <Pressable
+        style={[styles.stepperBtn, qty <= 1 && styles.stepperBtnDisabled]}
+        onPress={() => onChange(Math.max(1, qty - 1).toString())}
+        disabled={qty <= 1}
+      >
+        <Text style={styles.stepperBtnText}>−</Text>
+      </Pressable>
+      <View style={styles.stepperValueBox}>
+        <Text style={styles.stepperValueText}>{qty}</Text>
+      </View>
+      <Pressable
+        style={styles.stepperBtn}
+        onPress={() => onChange((qty + 1).toString())}
+      >
+        <Text style={styles.stepperBtnText}>+</Text>
+      </Pressable>
+    </View>
+  );
+};
+
 const CYLINDER_TYPES = [
-  { id: 'B6', name: 'B6 (6 kg)', price: 2500, icon: '🔥' },
-  { id: 'B12', name: 'B12 (12.5 kg)', price: 5500, icon: '⚡' },
+  { id: 'B6', name: 'B6 (6 kg)', price: 2500, icon: '⚡' },
+  { id: 'B12', name: 'B12 (12.5 kg)', price: 5500, icon: '🔥' },
   { id: 'B28', name: 'B28 (28 kg)', price: 13000, icon: '🏭' },
 ];
 
-// Configuration avec vos logos JPEG locaux du dossier assets/
 const PAYMENT_METHODS = [
   { 
     id: 'wave', 
@@ -121,7 +145,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
-  // Formulaire d'authentification
+  // Authentification
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
@@ -157,12 +181,12 @@ export default function App() {
   const [commandes, setCommandes] = useState([]);
 
   // Stocks Vendeur
-  const [stockB6, setStockB6] = useState('0');
-  const [stockB12, setStockB12] = useState('0');
-  const [stockB28, setStockB28] = useState('0');
+  const [stockB6, setStockB6] = useState('10');
+  const [stockB12, setStockB12] = useState('25');
+  const [stockB28, setStockB28] = useState('5');
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsAppReady(true), 1200);
+    const timer = setTimeout(() => setIsAppReady(true), 1000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -178,7 +202,7 @@ export default function App() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Erreur', 'Veuillez saisir votre email et mot de passe.');
+      Alert.alert('Champs requis', 'Veuillez saisir votre email et votre mot de passe.');
       return;
     }
 
@@ -199,7 +223,7 @@ export default function App() {
       }
 
       if (!response.ok) {
-        throw new Error(data.message || data.error || 'Identifiants incorrects.');
+        throw new Error(data.error || data.message || 'Identifiants incorrects.');
       }
 
       const rawUser = data.user || data;
@@ -234,7 +258,7 @@ export default function App() {
 
   const handleRegister = async (type) => {
     if (!nom || !telephone || !email || !password) {
-      Alert.alert('Erreur', 'Veuillez remplir les champs obligatoires (*).');
+      Alert.alert('Formulaire incomplet', 'Veuillez remplir les champs obligatoires (*).');
       return;
     }
 
@@ -265,7 +289,7 @@ export default function App() {
       }
 
       if (!response.ok) {
-        throw new Error(data.message || data.error || 'Erreur d\'inscription.');
+        throw new Error(data.error || data.message || 'Échec de la création du compte.');
       }
 
       const newUser = data.user || {
@@ -284,46 +308,54 @@ export default function App() {
       });
       setAdresseLivraison(adresse.trim());
       setDashboardTab('home');
-      Alert.alert('Bienvenue !', type === 'depot' ? 'Votre essai gratuit de 30 jours est actif.' : 'Votre compte client a été créé.');
     } catch (error) {
-      Alert.alert('Erreur', error.message);
+      Alert.alert('Inscription échouée', error.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // 🔒 DEMANDE DE CODE DE RÉINITIALISATION STRICTE
   const handleRequestResetCode = async () => {
     if (!forgotEmail) {
-      Alert.alert('Erreur', 'Veuillez renseigner votre adresse email.');
+      Alert.alert('Champ requis', 'Veuillez renseigner votre adresse email.');
       return;
     }
 
     setLoading(true);
     try {
-      await fetch(`${API_URL}/api/auth/forgot-password`, {
+      const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim().toLowerCase() }),
       });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Adresse email non reconnue.");
+      }
+
+      // Progression autorisée uniquement si l'email existe
       setResetStep(2);
-      Alert.alert('Code envoyé !', `Un code de réinitialisation vous a été transmis sur : ${forgotEmail.trim()}`);
+      Alert.alert('Code envoyé !', data.message || `Un code de sécurité valable 5 minutes a été envoyé à ${forgotEmail.trim()}`);
     } catch (error) {
-      setResetStep(2);
-      Alert.alert('Code envoyé', `Un code de réinitialisation vous a été transmis sur : ${forgotEmail.trim()}`);
+      Alert.alert('Email introuvable', error.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // 🔒 VALIDATION DU CODE ET NOUVEAU MOT DE PASSE STRICTE
   const handleConfirmNewPassword = async () => {
     if (!resetCode || !newPassword) {
-      Alert.alert('Erreur', 'Veuillez saisir le code reçu et votre nouveau mot de passe.');
+      Alert.alert('Champs requis', 'Veuillez saisir le code à 6 chiffres reçu et le nouveau mot de passe.');
       return;
     }
 
     setLoading(true);
     try {
-      await fetch(`${API_URL}/api/auth/reset-password`, {
+      const response = await fetch(`${API_URL}/api/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({
@@ -333,7 +365,13 @@ export default function App() {
         }),
       });
 
-      Alert.alert('Succès', 'Votre mot de passe a été réinitialisé avec succès !', [
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Code invalide ou expiré.");
+      }
+
+      Alert.alert('Mot de passe mis à jour !', data.message, [
         {
           text: 'Se connecter',
           onPress: () => {
@@ -347,19 +385,7 @@ export default function App() {
         }
       ]);
     } catch (error) {
-      Alert.alert('Succès', 'Votre mot de passe a été mis à jour.', [
-        {
-          text: 'Se connecter',
-          onPress: () => {
-            setEmail(forgotEmail);
-            setForgotEmail('');
-            setResetCode('');
-            setNewPassword('');
-            setResetStep(1);
-            setCurrentScreen('login');
-          }
-        }
-      ]);
+      Alert.alert('Échec de validation', error.message);
     } finally {
       setLoading(false);
     }
@@ -367,7 +393,7 @@ export default function App() {
 
   const handleProcessSubscription = () => {
     if (!paymentPhone) {
-      Alert.alert('Numéro requis', 'Entrez le numéro pour le paiement Mobile Money / Wave.');
+      Alert.alert('Numéro requis', 'Veuillez saisir le numéro de débit Mobile Money.');
       return;
     }
 
@@ -376,17 +402,17 @@ export default function App() {
       setLoading(false);
       setUser({ ...user, isSubscribed: true });
       setShowPaymentSection(false);
-      Alert.alert('Paiement réussi', 'Votre abonnement vendeur a été activé avec succès.');
-    }, 1500);
+      Alert.alert('Paiement confirmé', 'Votre abonnement Pass Pro Dépôt est maintenant actif.');
+    }, 1400);
   };
 
   const handleCreateOrder = () => {
     if (!adresseLivraison) {
-      Alert.alert('Adresse requise', 'Indiquez votre adresse de livraison.');
+      Alert.alert('Adresse requise', 'Veuillez préciser votre adresse de livraison.');
       return;
     }
 
-    const qteNum = parseInt(quantite) || 1;
+    const qteNum = parseInt(quantite, 10) || 1;
     const totalCalculated = qteNum * selectedCylinder.price;
 
     const newCmd = {
@@ -401,9 +427,9 @@ export default function App() {
 
     setCommandes([newCmd, ...commandes]);
     Alert.alert(
-      'Commande enregistrée',
-      `Livraison de ${qteNum}x ${selectedCylinder.name} en cours.`,
-      [{ text: 'Voir le suivi', onPress: () => setDashboardTab('orders_list') }]
+      'Commande enregistrée !',
+      `Votre recharge de ${qteNum}x ${selectedCylinder.name} est en cours de préparation.`,
+      [{ text: 'Suivre ma commande', onPress: () => setDashboardTab('orders_list') }]
     );
   };
 
@@ -436,7 +462,8 @@ export default function App() {
         <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
         <Image source={require('./assets/splash-icon.png')} style={styles.splashLogo} resizeMode="contain" />
         <Text style={styles.splashTitle}>MONAN SERVICE</Text>
-        <ActivityIndicator size="small" color="#F97316" style={{ marginTop: 24 }} />
+        <Text style={styles.splashSubTitle}>DISTRIBUTION DE GAZ</Text>
+        <ActivityIndicator size="small" color="#F97316" style={{ marginTop: 28 }} />
       </View>
     );
   }
@@ -483,31 +510,32 @@ export default function App() {
             (isTrialExpired || showPaymentSection) ? (
               /* ÉCRAN DE PAIEMENT */
               <FadeInView style={styles.mainWrapper}>
-                <View style={[styles.cardBox, { flex: 1 }]}>
+                <View style={styles.cardBox}>
                   {user.role === 'depot' && !isTrialExpired && (
-                    <AnimatedButton onPress={() => setShowPaymentSection(false)} style={{ marginBottom: 12 }}>
-                      <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
+                    <AnimatedButton onPress={() => setShowPaymentSection(false)} style={styles.backBtnInline}>
+                      <Text style={styles.backBtnInlineText}>← Retour au tableau de bord</Text>
                     </AnimatedButton>
                   )}
 
                   <Text style={[styles.cardBoxTitle, { textAlign: 'center' }]}>Abonnement Vendeur</Text>
-                  <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginBottom: 16 }}>
-                    Sélectionnez votre moyen de paiement Mobile Money ou Wave :
+                  <Text style={styles.subTitleCenter}>
+                    Sélectionnez votre mode de paiement Mobile Money :
                   </Text>
 
                   <View style={styles.subCard}>
+                    <Text style={styles.subCardBadge}>ACCÈS ILLIMITÉ</Text>
                     <Text style={styles.subCardTitle}>Pass Pro Dépôt</Text>
-                    <Text style={styles.subCardPrice}>3 000 FCFA / mois</Text>
+                    <Text style={styles.subCardPrice}>3 000 FCFA <Text style={styles.subCardMonth}>/ mois</Text></Text>
                   </View>
 
                   <Text style={styles.label}>Mode de paiement</Text>
-                  <View style={styles.paymentMethodsRow}>
+                  <View style={styles.paymentMethodsGrid}>
                     {PAYMENT_METHODS.map((pm) => {
                       const isSelected = selectedPayment === pm.id;
                       return (
                         <AnimatedButton
                           key={pm.id}
-                          style={[styles.paymentBtn, isSelected && { borderColor: pm.color, borderWidth: 2, backgroundColor: '#FFF' }]}
+                          style={[styles.paymentBtn, isSelected && { borderColor: pm.color, borderWidth: 2, backgroundColor: '#FFFFFF' }]}
                           onPress={() => setSelectedPayment(pm.id)}
                         >
                           <Image 
@@ -526,12 +554,13 @@ export default function App() {
                     style={styles.input}
                     keyboardType="phone-pad"
                     placeholder="07 00 00 00 00"
+                    placeholderTextColor="#94A3B8"
                     value={paymentPhone}
                     onChangeText={setPaymentPhone}
                   />
 
                   <AnimatedButton style={styles.btnOrange} onPress={handleProcessSubscription} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Valider et Payer sur le champ</Text>}
+                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Valider et Payer l'abonnement</Text>}
                   </AnimatedButton>
                 </View>
               </FadeInView>
@@ -541,71 +570,92 @@ export default function App() {
                 {user.role === 'depot' && (
                   <View style={styles.trialBannerRow}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.trialBannerText}>
-                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `Essai Vendeur : ${daysLeft} jours restants`}
+                      <Text style={styles.trialBannerTitle}>
+                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `Essai gratuit : ${daysLeft} jours restants`}
                       </Text>
+                      {!user.isSubscribed && (
+                        <Text style={styles.trialBannerSub}>Passez au Pass Pro pour conserver la gestion de vos stocks.</Text>
+                      )}
                     </View>
                     {!user.isSubscribed && (
                       <AnimatedButton style={styles.btnPayNowInline} onPress={() => setShowPaymentSection(true)}>
-                        <Text style={styles.btnPayNowInlineText}>Payer l'abonnement</Text>
+                        <Text style={styles.btnPayNowInlineText}>Activer</Text>
                       </AnimatedButton>
                     )}
                   </View>
                 )}
 
-                {/* Onglets */}
-                <View style={styles.pillsContainer}>
-                  <AnimatedButton
-                    style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
-                    onPress={() => setDashboardTab('home')}
+                {/* Onglets Défilants */}
+                <View style={styles.pillsContainerOuter}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.pillsScrollContent}
                   >
-                    <Text style={[styles.pillText, dashboardTab === 'home' && styles.pillTextActive]}>Accueil</Text>
-                  </AnimatedButton>
+                    <AnimatedButton
+                      style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
+                      onPress={() => setDashboardTab('home')}
+                    >
+                      <Text style={[styles.pillText, dashboardTab === 'home' && styles.pillTextActive]}>Accueil</Text>
+                    </AnimatedButton>
 
-                  {user.role === 'depot' ? (
-                    <>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'add_stock' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('add_stock')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'add_stock' && styles.pillTextActive]}>Stock</Text>
-                      </AnimatedButton>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'sales_list' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('sales_list')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'sales_list' && styles.pillTextActive]}>Inventaire</Text>
-                      </AnimatedButton>
-                    </>
-                  ) : (
-                    <>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('depots')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts 📍</Text>
-                      </AnimatedButton>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'order' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('order')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'order' && styles.pillTextActive]}>Commander</Text>
-                      </AnimatedButton>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'orders_list' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('orders_list')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'orders_list' && styles.pillTextActive]}>Suivi ({commandes.length})</Text>
-                      </AnimatedButton>
-                    </>
-                  )}
+                    {user.role === 'depot' ? (
+                      <>
+                        <AnimatedButton
+                          style={[styles.pillBtn, dashboardTab === 'add_stock' && styles.pillBtnActive]}
+                          onPress={() => setDashboardTab('add_stock')}
+                        >
+                          <Text style={[styles.pillText, dashboardTab === 'add_stock' && styles.pillTextActive]}>Gestion Stock</Text>
+                        </AnimatedButton>
+                        <AnimatedButton
+                          style={[styles.pillBtn, dashboardTab === 'sales_list' && styles.pillBtnActive]}
+                          onPress={() => setDashboardTab('sales_list')}
+                        >
+                          <Text style={[styles.pillText, dashboardTab === 'sales_list' && styles.pillTextActive]}>Inventaire</Text>
+                        </AnimatedButton>
+                      </>
+                    ) : (
+                      <>
+                        <AnimatedButton
+                          style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
+                          onPress={() => setDashboardTab('depots')}
+                        >
+                          <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts 📍</Text>
+                        </AnimatedButton>
+                        <AnimatedButton
+                          style={[styles.pillBtn, dashboardTab === 'order' && styles.pillBtnActive]}
+                          onPress={() => setDashboardTab('order')}
+                        >
+                          <Text style={[styles.pillText, dashboardTab === 'order' && styles.pillTextActive]}>Commander</Text>
+                        </AnimatedButton>
+                        <AnimatedButton
+                          style={[styles.pillBtn, dashboardTab === 'orders_list' && styles.pillBtnActive]}
+                          onPress={() => setDashboardTab('orders_list')}
+                        >
+                          <Text style={[styles.pillText, dashboardTab === 'orders_list' && styles.pillTextActive]}>
+                            Suivi ({commandes.length})
+                          </Text>
+                        </AnimatedButton>
+                      </>
+                    )}
+                  </ScrollView>
                 </View>
 
                 {/* ACCUEIL */}
                 {dashboardTab === 'home' && (
                   <View style={styles.fullSection}>
-                    <View style={styles.welcomeBanner}>
-                      <Text style={styles.welcomeBannerTitle}>Bonjour, {user.nom || user.email}</Text>
+                    <View style={styles.userGreetingCard}>
+                      <View style={styles.avatarCircle}>
+                        <Text style={styles.avatarText}>
+                          {(user.nom || user.email || 'U').charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Cher client'} 👋</Text>
+                        <Text style={styles.greetingSubtitle}>
+                          {user.role === 'depot' ? 'Gérez vos stocks et votre activité' : 'Rechargez votre bouteille de gaz en quelques clics'}
+                        </Text>
+                      </View>
                     </View>
 
                     <View style={styles.kpiGrid}>
@@ -614,7 +664,7 @@ export default function App() {
                         <Text style={styles.kpiCardNum}>{commandes.length}</Text>
                       </View>
                       <View style={styles.kpiCard}>
-                        <Text style={styles.kpiCardTag}>DÉPÔTS PROCHES</Text>
+                        <Text style={styles.kpiCardTag}>DÉPÔTS ACTIFS</Text>
                         <Text style={styles.kpiCardNum}>3</Text>
                       </View>
                     </View>
@@ -622,12 +672,14 @@ export default function App() {
                     {user.role === 'depot' ? (
                       <View style={{ gap: 12 }}>
                         <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
-                          <Text style={styles.actionCardTitle}> Gestion des stocks</Text>
+                          <Text style={styles.actionCardTitle}>📦 Mettre à jour les stocks</Text>
+                          <Text style={styles.actionCardSub}>Modifiez les quantités de bouteilles B6, B12 et B28</Text>
                         </AnimatedButton>
 
                         {!user.isSubscribed && (
                           <AnimatedButton style={styles.actionCardNavy} onPress={() => setShowPaymentSection(true)}>
-                            <Text style={styles.actionCardTitleWhite}>Payer ici</Text>
+                            <Text style={styles.actionCardTitleWhite}>💳 Activer le Pass Pro Dépôt</Text>
+                            <Text style={styles.actionCardSubWhite}>Accédez à toutes les fonctionnalités vendeurs</Text>
                           </AnimatedButton>
                         )}
                       </View>
@@ -635,10 +687,12 @@ export default function App() {
                       <View style={{ gap: 12 }}>
                         <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
                           <Text style={styles.actionCardTitle}>📍 Trouver un dépôt à proximité</Text>
+                          <Text style={styles.actionCardSub}>Consultez la disponibilité en temps réel autour de vous</Text>
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.actionCardTitleWhite}>Commander une recharge</Text>
+                          <Text style={styles.actionCardTitleWhite}>🚀 Commander une livraison</Text>
+                          <Text style={styles.actionCardSubWhite}>Recevez votre recharge directement à domicile</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -647,21 +701,24 @@ export default function App() {
 
                 {/* DÉPÔTS */}
                 {dashboardTab === 'depots' && (
-                  <View style={[styles.cardBox, { flex: 1 }]}>
+                  <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Dépôts à proximité 📍</Text>
 
-                    <TextInput
-                      style={styles.input}
-                      placeholder="🔍 Recherche par quartier..."
-                      placeholderTextColor="#94A3B8"
-                      value={searchDepot}
-                      onChangeText={setSearchDepot}
-                    />
+                    <View style={styles.searchBoxContainer}>
+                      <Text style={styles.searchIcon}>🔍</Text>
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Recherche par quartier ou commune..."
+                        placeholderTextColor="#94A3B8"
+                        value={searchDepot}
+                        onChangeText={setSearchDepot}
+                      />
+                    </View>
 
                     {filteredDepots.map((depot) => (
                       <View key={depot.id} style={styles.depotCard}>
                         <View style={styles.depotHeader}>
-                          <View>
+                          <View style={{ flex: 1 }}>
                             <Text style={styles.depotTitle}>{depot.nom}</Text>
                             <Text style={styles.depotSub}>{depot.quartier} • <Text style={styles.depotDistance}>{depot.distance}</Text></Text>
                           </View>
@@ -694,18 +751,19 @@ export default function App() {
                             setDashboardTab('order');
                           }}
                         >
-                          <Text style={styles.btnDepotSelectText}>Commander ici</Text>
+                          <Text style={styles.btnDepotSelectText}>Commander dans ce dépôt</Text>
                         </AnimatedButton>
                       </View>
                     ))}
                   </View>
                 )}
 
-                {/* COMMANDE */}
+                {/* COMMANDER */}
                 {dashboardTab === 'order' && (
-                  <View style={[styles.cardBox, { flex: 1 }]}>
+                  <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Passer une commande</Text>
 
+                    <Text style={styles.label}>Type de bouteille</Text>
                     <View style={styles.cylinderList}>
                       {CYLINDER_TYPES.map((cyl) => {
                         const isSelected = selectedCylinder.id === cyl.id;
@@ -724,18 +782,13 @@ export default function App() {
                       })}
                     </View>
 
-                    <Text style={styles.label}>Quantité</Text>
-                    <TextInput
-                      style={styles.input}
-                      keyboardType="numeric"
-                      value={quantite}
-                      onChangeText={setQuantite}
-                    />
+                    <Text style={styles.label}>Quantité désirée</Text>
+                    <QuantityStepper value={quantite} onChange={setQuantite} />
 
-                    <Text style={styles.label}>Adresse de livraison *</Text>
+                    <Text style={styles.label}>Adresse ou repère de livraison *</Text>
                     <TextInput
                       style={styles.input}
-                      placeholder="Quartier, point de repère"
+                      placeholder="Ex: Cocody Angré 8ème Tranche, près de la pharmacie"
                       placeholderTextColor="#94A3B8"
                       value={adresseLivraison}
                       onChangeText={setAdresseLivraison}
@@ -744,7 +797,7 @@ export default function App() {
                     <View style={styles.totalSummary}>
                       <Text style={styles.totalSummaryLabel}>Montant Total :</Text>
                       <Text style={styles.totalSummaryValue}>
-                        {((parseInt(quantite) || 1) * selectedCylinder.price).toLocaleString('fr-FR')} FCFA
+                        {((parseInt(quantite, 10) || 1) * selectedCylinder.price).toLocaleString('fr-FR')} FCFA
                       </Text>
                     </View>
 
@@ -756,7 +809,7 @@ export default function App() {
 
                 {/* SUIVI */}
                 {dashboardTab === 'orders_list' && (
-                  <View style={[styles.cardBox, { flex: 1 }]}>
+                  <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Suivi des commandes</Text>
 
                     <View style={styles.filterRow}>
@@ -772,8 +825,20 @@ export default function App() {
                     </View>
 
                     {commandes.length === 0 ? (
-                      <View style={styles.emptyBox}>
-                        <Text style={styles.emptyText}>Aucune commande enregistrée.</Text>
+                      <View style={styles.emptyCard}>
+                        <View style={styles.emptyIconCircle}>
+                          <Text style={styles.emptyIconText}>📦</Text>
+                        </View>
+                        <Text style={styles.emptyTitle}>Aucune commande enregistrée</Text>
+                        <Text style={styles.emptySubtitle}>
+                          Vos recharges de gaz commandées s'afficheront ici en temps réel.
+                        </Text>
+                        <AnimatedButton
+                          style={styles.btnOrangeCompact}
+                          onPress={() => setDashboardTab('order')}
+                        >
+                          <Text style={styles.btnOrangeCompactText}>Commander du gaz maintenant</Text>
+                        </AnimatedButton>
                       </View>
                     ) : (
                       filteredCommandes.map((cmd) => (
@@ -793,48 +858,68 @@ export default function App() {
                   </View>
                 )}
 
-                {/* DÉPÔT STOCK */}
+                {/* STOCK VENDEUR */}
                 {dashboardTab === 'add_stock' && (
-                  <View style={[styles.cardBox, { flex: 1 }]}>
+                  <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Mise à jour des stocks</Text>
+                    
                     <Text style={styles.label}>Bouteilles B6 (6 kg)</Text>
                     <TextInput style={styles.input} keyboardType="numeric" value={stockB6} onChangeText={setStockB6} />
+                    
                     <Text style={styles.label}>Bouteilles B12 (12.5 kg)</Text>
                     <TextInput style={styles.input} keyboardType="numeric" value={stockB12} onChangeText={setStockB12} />
+                    
                     <Text style={styles.label}>Bouteilles B28 (28 kg)</Text>
                     <TextInput style={styles.input} keyboardType="numeric" value={stockB28} onChangeText={setStockB28} />
-                    <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Stock mis à jour.')}>
+                    
+                    <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Stock enregistré', 'Les quantités ont été mises à jour.')}>
                       <Text style={styles.btnOrangeText}>Enregistrer le stock</Text>
                     </AnimatedButton>
                   </View>
                 )}
 
-                {/* INVENTAIRE */}
+                {/* INVENTAIRE VENDEUR */}
                 {dashboardTab === 'sales_list' && (
-                  <View style={[styles.cardBox, { flex: 1 }]}>
+                  <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>État actuel du dépôt</Text>
-                    <Text style={styles.stockItem}>• Bouteilles B6 : {stockB6} disponibles</Text>
-                    <Text style={styles.stockItem}>• Bouteilles B12 : {stockB12} disponibles</Text>
-                    <Text style={styles.stockItem}>• Bouteilles B28 : {stockB28} disponibles</Text>
+                    <View style={styles.inventoryRow}>
+                      <Text style={styles.inventoryLabel}>• Bouteilles B6 :</Text>
+                      <Text style={styles.inventoryValue}>{stockB6} disponibles</Text>
+                    </View>
+                    <View style={styles.inventoryRow}>
+                      <Text style={styles.inventoryLabel}>• Bouteilles B12 :</Text>
+                      <Text style={styles.inventoryValue}>{stockB12} disponibles</Text>
+                    </View>
+                    <View style={styles.inventoryRow}>
+                      <Text style={styles.inventoryLabel}>• Bouteilles B28 :</Text>
+                      <Text style={styles.inventoryValue}>{stockB28} disponibles</Text>
+                    </View>
                   </View>
                 )}
               </FadeInView>
             )
           ) : (
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
+              {/* ACCUEIL */}
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
                   <View style={styles.heroSection}>
+                    <View style={styles.heroBadge}>
+                      <Text style={styles.heroBadgeText}>SERVICE RAPIDE & SÉCURISÉ</Text>
+                    </View>
                     <Text style={styles.heroTitle}>Distribution & Livraison de Gaz</Text>
+                    <Text style={styles.heroSub}>Commandez votre recharge ou gérez votre dépôt en toute simplicité.</Text>
                   </View>
 
                   <View style={styles.cardsWrapper}>
                     <AnimatedButton style={styles.welcomeCardDark} onPress={() => setCurrentScreen('register_client')}>
                       <Text style={styles.welcomeCardTitleLight}>Espace Client</Text>
+                      <Text style={styles.welcomeCardSubLight}>Commandez et faites-vous livrer à domicile</Text>
                     </AnimatedButton>
 
                     <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
-                      <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
+                      <Text style={styles.welcomeCardTitleDark}>Espace Dépôt / Vendeur</Text>
+                      <Text style={styles.welcomeCardSubDark}>Gérez vos stocks et recevez des commandes</Text>
                     </AnimatedButton>
                   </View>
 
@@ -844,46 +929,52 @@ export default function App() {
                 </View>
               )}
 
+              {/* INSCRIPTIONS */}
               {(currentScreen === 'register_client' || currentScreen === 'register_depot') && (
-                <View style={[styles.cardBox, { flex: 1 }]}>
-                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>← Retour</Text>
+                <View style={styles.cardBox}>
+                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
+                    <Text style={styles.backBtnInlineText}>← Retour</Text>
                   </AnimatedButton>
-                  <Text style={styles.cardBoxTitle}>{currentScreen === 'register_depot' ? 'Créer un compte Dépôt' : 'Créer un compte Client'}</Text>
+                  
+                  <Text style={styles.cardBoxTitle}>
+                    {currentScreen === 'register_depot' ? 'Créer un compte Dépôt' : 'Créer un compte Client'}
+                  </Text>
 
                   <Text style={styles.label}>Nom complet *</Text>
-                  <TextInput style={styles.input} placeholder="Ex: Jean Kouassi" value={nom} onChangeText={setNom} />
+                  <TextInput style={styles.input} placeholder="Ex: Jean Kouassi" placeholderTextColor="#94A3B8" value={nom} onChangeText={setNom} />
 
                   <Text style={styles.label}>Téléphone *</Text>
-                  <TextInput style={styles.input} keyboardType="phone-pad" placeholder="07 00 00 00 00" value={telephone} onChangeText={setTelephone} />
+                  <TextInput style={styles.input} keyboardType="phone-pad" placeholder="07 00 00 00 00" placeholderTextColor="#94A3B8" value={telephone} onChangeText={setTelephone} />
 
                   <Text style={styles.label}>Adresse / Quartier</Text>
-                  <TextInput style={styles.input} placeholder="Ex: Cocody Angré" value={adresse} onChangeText={setAdresse} />
+                  <TextInput style={styles.input} placeholder="Ex: Cocody Angré" placeholderTextColor="#94A3B8" value={adresse} onChangeText={setAdresse} />
 
-                  <Text style={styles.label}>Email *</Text>
-                  <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" value={email} onChangeText={setEmail} />
+                  <Text style={styles.label}>Adresse Email *</Text>
+                  <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#94A3B8" value={email} onChangeText={setEmail} />
 
                   <Text style={styles.label}>Mot de passe *</Text>
-                  <TextInput style={styles.input} secureTextEntry placeholder="••••••••" value={password} onChangeText={setPassword} />
+                  <TextInput style={styles.input} secureTextEntry placeholder="••••••••" placeholderTextColor="#94A3B8" value={password} onChangeText={setPassword} />
 
                   <AnimatedButton style={styles.btnOrange} onPress={() => handleRegister(currentScreen === 'register_depot' ? 'depot' : 'client')} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>{currentScreen === 'register_depot' ? 'S\'inscrire (1 Mois Gratuit)' : 'Créer mon compte'}</Text>}
+                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>{currentScreen === 'register_depot' ? 'S\'inscrire (1 Mois Gratuit)' : 'Créer mon compte'}</Text>}
                   </AnimatedButton>
                 </View>
               )}
 
+              {/* CONNEXION */}
               {currentScreen === 'login' && (
-                <View style={[styles.cardBox, { flex: 1 }]}>
-                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={{ marginBottom: 14 }}>
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
+                <View style={styles.cardBox}>
+                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
+                    <Text style={styles.backBtnInlineText}>← Retour</Text>
                   </AnimatedButton>
+                  
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
-                  <Text style={styles.label}>Email</Text>
-                  <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" value={email} onChangeText={setEmail} />
+                  <Text style={styles.label}>Adresse Email</Text>
+                  <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#94A3B8" value={email} onChangeText={setEmail} />
 
                   <Text style={styles.label}>Mot de passe</Text>
-                  <TextInput style={styles.input} secureTextEntry placeholder="••••••••" value={password} onChangeText={setPassword} />
+                  <TextInput style={styles.input} secureTextEntry placeholder="••••••••" placeholderTextColor="#94A3B8" value={password} onChangeText={setPassword} />
 
                   <AnimatedButton
                     style={{ alignSelf: 'flex-end', marginBottom: 16 }}
@@ -897,13 +988,14 @@ export default function App() {
                   </AnimatedButton>
 
                   <AnimatedButton style={styles.btnOrange} onPress={handleLogin} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Se connecter</Text>}
+                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Se connecter</Text>}
                   </AnimatedButton>
                 </View>
               )}
 
+              {/* RÉINITIALISATION SÉCURISÉE DE MOT DE PASSE */}
               {currentScreen === 'forgot_password' && (
-                <View style={[styles.cardBox, { flex: 1 }]}>
+                <View style={styles.cardBox}>
                   <AnimatedButton
                     onPress={() => {
                       if (resetStep === 2) {
@@ -912,36 +1004,38 @@ export default function App() {
                         setCurrentScreen('login');
                       }
                     }}
-                    style={{ marginBottom: 14 }}
+                    style={styles.backBtnInline}
                   >
-                    <Text style={{ color: '#F97316', fontWeight: '700' }}>Retour</Text>
+                    <Text style={styles.backBtnInlineText}>← Retour</Text>
                   </AnimatedButton>
 
-                  <Text style={styles.cardBoxTitle}>Réinitialisation</Text>
+                  <Text style={styles.cardBoxTitle}>Réinitialisation sécurisée</Text>
 
                   {resetStep === 1 ? (
                     <>
-                      <Text style={styles.label}>Saisissez votre adresse email enregistrée :</Text>
+                      <Text style={styles.label}>Saisissez l'adresse email de votre compte :</Text>
                       <TextInput
                         style={styles.input}
                         autoCapitalize="none"
                         keyboardType="email-address"
                         placeholder="email@exemple.com"
+                        placeholderTextColor="#94A3B8"
                         value={forgotEmail}
                         onChangeText={setForgotEmail}
                       />
 
                       <AnimatedButton style={styles.btnOrange} onPress={handleRequestResetCode} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Envoyer le code</Text>}
+                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Envoyer le code OTP</Text>}
                       </AnimatedButton>
                     </>
                   ) : (
                     <>
-                      <Text style={styles.label}>Code de vérification</Text>
+                      <Text style={styles.label}>Code de vérification (valable 5 minutes)</Text>
                       <TextInput
                         style={styles.input}
                         keyboardType="numeric"
-                        placeholder="Ex: 123456"
+                        placeholder="Ex: 849201"
+                        placeholderTextColor="#94A3B8"
                         value={resetCode}
                         onChangeText={setResetCode}
                       />
@@ -951,12 +1045,13 @@ export default function App() {
                         style={styles.input}
                         secureTextEntry
                         placeholder="••••••••"
+                        placeholderTextColor="#94A3B8"
                         value={newPassword}
                         onChangeText={setNewPassword}
                       />
 
                       <AnimatedButton style={styles.btnOrange} onPress={handleConfirmNewPassword} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnOrangeText}>Réinitialiser</Text>}
+                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Mettre à jour le mot de passe</Text>}
                       </AnimatedButton>
                     </>
                   )}
@@ -974,49 +1069,63 @@ export default function App() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   splashContainer: { flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center' },
-  splashLogo: { width: 100, height: 100, marginBottom: 16 },
-  splashTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', letterSpacing: 1.5 },
-  appBar: { backgroundColor: '#0F172A', paddingVertical: 16, paddingHorizontal: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 3, borderBottomColor: '#F97316' },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  brandBadge: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
-  brandLogoImage: { width: 28, height: 28 },
-  brandTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  splashLogo: { width: 96, height: 96, marginBottom: 16 },
+  splashTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '900', letterSpacing: 1.2 },
+  splashSubTitle: { color: '#94A3B8', fontSize: 11, fontWeight: '700', letterSpacing: 2, marginTop: 4 },
+  
+  appBar: { backgroundColor: '#0F172A', paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 3, borderBottomColor: '#F97316' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandBadge: { width: 38, height: 38, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  brandLogoImage: { width: 26, height: 26 },
+  brandTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   brandSub: { color: '#94A3B8', fontSize: 9, fontWeight: '700' },
-  logoutBtn: { backgroundColor: 'rgba(239, 68, 68, 0.15)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  logoutBtn: { backgroundColor: 'rgba(239, 68, 68, 0.15)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8 },
   logoutBtnText: { color: '#F87171', fontSize: 12, fontWeight: '700' },
-  scrollContent: { flexGrow: 1, padding: 18 },
+  
+  scrollContent: { flexGrow: 1, padding: 16 },
   mainWrapper: { flex: 1, justifyContent: 'space-between' },
-  trialBannerRow: { backgroundColor: '#FEF3C7', borderLeftWidth: 4, borderLeftColor: '#F59E0B', padding: 12, borderRadius: 10, marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  trialBannerText: { color: '#B45309', fontSize: 12, fontWeight: '700' },
-  btnPayNowInline: { backgroundColor: '#F59E0B', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  
+  trialBannerRow: { backgroundColor: '#FEF3C7', borderLeftWidth: 4, borderLeftColor: '#F59E0B', padding: 12, borderRadius: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  trialBannerTitle: { color: '#B45309', fontSize: 13, fontWeight: '800' },
+  trialBannerSub: { color: '#D97706', fontSize: 11, marginTop: 2 },
+  btnPayNowInline: { backgroundColor: '#F59E0B', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
   btnPayNowInlineText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
-  subCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 16, width: '100%', alignItems: 'center', marginBottom: 16 },
-  subCardTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
-  subCardPrice: { fontSize: 20, fontWeight: '900', color: '#F97316', marginTop: 4 },
-  paymentMethodsRow: { flexDirection: 'row', gap: 6, marginBottom: 16 },
-  paymentBtn: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', padding: 8, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  paymentLogoImage: { width: 28, height: 24 },
-  paymentBtnText: { fontSize: 9, fontWeight: '700', color: '#64748B', marginTop: 4, textAlign: 'center' },
-  welcomeContainer: { flex: 1, justifyContent: 'space-between' },
-  fullSection: { flex: 1, justifyContent: 'flex-start' },
-  pillsContainer: { flexDirection: 'row', backgroundColor: '#E2E8F0', padding: 4, borderRadius: 12, marginBottom: 18, gap: 6 },
-  pillBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 8 },
-  pillBtnActive: { backgroundColor: '#FFFFFF', elevation: 2 },
+  
+  pillsContainerOuter: { backgroundColor: '#E2E8F0', borderRadius: 14, padding: 4, marginBottom: 16 },
+  pillsScrollContent: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  pillBtn: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  pillBtnActive: { backgroundColor: '#FFFFFF', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
   pillText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
-  pillTextActive: { color: '#0F172A' },
-  welcomeBanner: { backgroundColor: '#0F172A', borderRadius: 16, padding: 18, marginBottom: 16 },
-  welcomeBannerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
-  kpiGrid: { flexDirection: 'row', gap: 12, marginBottom: 18 },
-  kpiCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
+  pillTextActive: { color: '#0F172A', fontWeight: '800' },
+  
+  userGreetingCard: { backgroundColor: '#0F172A', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center' },
+  avatarText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
+  greetingTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
+  greetingSubtitle: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
+  
+  kpiGrid: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  kpiCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0' },
   kpiCardTag: { fontSize: 10, fontWeight: '800', color: '#64748B' },
   kpiCardNum: { fontSize: 22, fontWeight: '900', color: '#F97316', marginTop: 4 },
-  actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 14, padding: 18, alignItems: 'center' },
+  
+  actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 14, padding: 16 },
   actionCardTitle: { fontSize: 15, fontWeight: '800', color: '#C2410C' },
-  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 14, padding: 18, alignItems: 'center' },
+  actionCardSub: { fontSize: 12, color: '#EA580C', marginTop: 4 },
+  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16 },
   actionCardTitleWhite: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
+  actionCardSubWhite: { fontSize: 12, color: '#94A3B8', marginTop: 4 },
+  
   cardBox: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E2E8F0', elevation: 1 },
   cardBoxTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 14 },
-  depotCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, padding: 14, marginBottom: 12 },
+  subTitleCenter: { textAlign: 'center', color: '#64748B', fontSize: 13, marginBottom: 16 },
+  backBtnInline: { marginBottom: 12 },
+  backBtnInlineText: { color: '#F97316', fontWeight: '800', fontSize: 13 },
+  
+  searchBoxContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 12, marginBottom: 14 },
+  searchIcon: { fontSize: 14, marginRight: 8 },
+  searchInput: { flex: 1, paddingVertical: 10, fontSize: 14, color: '#0F172A' },
+  depotCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 14, padding: 14, marginBottom: 12 },
   depotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   depotTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
   depotSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
@@ -1028,24 +1137,34 @@ const styles = StyleSheet.create({
   stockChipLabel: { fontSize: 10, color: '#64748B', fontWeight: '700' },
   stockChipVal: { fontSize: 11, color: '#16A34A', fontWeight: '800', marginTop: 2 },
   stockChipValEmpty: { fontSize: 11, color: '#DC2626', fontWeight: '800', marginTop: 2 },
-  btnDepotSelect: { backgroundColor: '#0F172A', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  btnDepotSelect: { backgroundColor: '#0F172A', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
   btnDepotSelectText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
+  
   cylinderList: { gap: 10, marginBottom: 16 },
   cylinderItem: { backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0' },
   cylinderItemActive: { backgroundColor: '#FFF7ED', borderColor: '#F97316' },
   cylinderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cylinderTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
   cylinderPrice: { fontSize: 15, fontWeight: '800', color: '#F97316' },
+  
+  stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, padding: 4, width: 140, justifyContent: 'space-between', marginBottom: 16 },
+  stepperBtn: { width: 36, height: 36, backgroundColor: '#0F172A', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  stepperBtnDisabled: { backgroundColor: '#CBD5E1' },
+  stepperBtnText: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
+  stepperValueBox: { flex: 1, alignItems: 'center' },
+  stepperValueText: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
+  
   label: { fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 6 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0F172A', marginBottom: 14 },
-  forgotLinkText: { color: '#F97316', fontSize: 12, fontWeight: '700' },
+  input: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#0F172A', marginBottom: 14 },
+  forgotLinkText: { color: '#F97316', fontSize: 12, fontWeight: '800' },
   totalSummary: { backgroundColor: '#0F172A', padding: 14, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  totalSummaryLabel: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  totalSummaryLabel: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   totalSummaryValue: { color: '#F97316', fontSize: 18, fontWeight: '900' },
-  btnOrange: { backgroundColor: '#F97316', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 6 },
+  btnOrange: { backgroundColor: '#F97316', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 4 },
   btnOrangeText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
+  
   filterRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  filterBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: '#F1F5F9' },
+  filterBtn: { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 8, backgroundColor: '#F1F5F9' },
   filterBtnActive: { backgroundColor: '#0F172A' },
   filterText: { fontSize: 12, fontWeight: '700', color: '#475569' },
   filterTextActive: { color: '#FFFFFF' },
@@ -1058,16 +1177,42 @@ const styles = StyleSheet.create({
   orderRowFooter: { flexDirection: 'row', justifyContent: 'space-between' },
   orderRowDate: { fontSize: 11, color: '#94A3B8' },
   orderRowTotal: { color: '#F97316', fontWeight: '800' },
-  emptyBox: { padding: 24, alignItems: 'center' },
-  emptyText: { color: '#94A3B8', fontSize: 13, textAlign: 'center' },
-  stockItem: { fontSize: 14, color: '#334155', marginVertical: 6 },
-  heroSection: { marginVertical: 16 },
-  heroTitle: { fontSize: 24, fontWeight: '900', color: '#0F172A' },
-  cardsWrapper: { gap: 14, marginVertical: 12 },
-  welcomeCardDark: { backgroundColor: '#0F172A', borderRadius: 16, padding: 22, alignItems: 'center' },
-  welcomeCardWhite: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 22, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
-  welcomeCardTitleLight: { color: '#FFF', fontSize: 18, fontWeight: '800' },
-  welcomeCardTitleDark: { color: '#0F172A', fontSize: 18, fontWeight: '800' },
-  btnNavyOutline: { borderWidth: 1.5, borderColor: '#0F172A', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 12 },
+  
+  emptyCard: { padding: 24, alignItems: 'center', justifyContent: 'center' },
+  emptyIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  emptyIconText: { fontSize: 24 },
+  emptyTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A', textAlign: 'center' },
+  emptySubtitle: { fontSize: 12, color: '#64748B', textAlign: 'center', marginTop: 4, marginBottom: 16 },
+  btnOrangeCompact: { backgroundColor: '#F97316', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
+  btnOrangeCompactText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  
+  subCard: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 14, padding: 16, alignItems: 'center', marginBottom: 16 },
+  subCardBadge: { backgroundColor: '#FFF7ED', color: '#C2410C', fontSize: 10, fontWeight: '800', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginBottom: 6 },
+  subCardTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
+  subCardPrice: { fontSize: 22, fontWeight: '900', color: '#F97316', marginTop: 4 },
+  subCardMonth: { fontSize: 12, color: '#64748B', fontWeight: '600' },
+  paymentMethodsGrid: { flexDirection: 'row', gap: 6, marginBottom: 16 },
+  paymentBtn: { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', padding: 8, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  paymentLogoImage: { width: 28, height: 24 },
+  paymentBtnText: { fontSize: 9, fontWeight: '700', color: '#64748B', marginTop: 4, textAlign: 'center' },
+  
+  inventoryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  inventoryLabel: { fontSize: 14, color: '#334155', fontWeight: '600' },
+  inventoryValue: { fontSize: 14, color: '#F97316', fontWeight: '800' },
+  
+  welcomeContainer: { flex: 1, justifyContent: 'space-between' },
+  heroSection: { marginVertical: 12 },
+  heroBadge: { backgroundColor: '#FFF7ED', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginBottom: 10 },
+  heroBadgeText: { color: '#C2410C', fontSize: 10, fontWeight: '800' },
+  heroTitle: { fontSize: 26, fontWeight: '900', color: '#0F172A', lineHeight: 32 },
+  heroSub: { fontSize: 13, color: '#64748B', marginTop: 6 },
+  cardsWrapper: { gap: 12, marginVertical: 12 },
+  welcomeCardDark: { backgroundColor: '#0F172A', borderRadius: 16, padding: 18 },
+  welcomeCardWhite: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E2E8F0' },
+  welcomeCardTitleLight: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
+  welcomeCardSubLight: { color: '#94A3B8', fontSize: 12, marginTop: 4 },
+  welcomeCardTitleDark: { color: '#0F172A', fontSize: 17, fontWeight: '800' },
+  welcomeCardSubDark: { color: '#64748B', fontSize: 12, marginTop: 4 },
+  btnNavyOutline: { borderWidth: 1.5, borderColor: '#0F172A', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
   btnNavyOutlineText: { color: '#0F172A', fontWeight: '800', fontSize: 14 }
 });
