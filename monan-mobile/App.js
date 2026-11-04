@@ -151,11 +151,11 @@ export default function App() {
   const [telephone, setTelephone] = useState('');
   const [adresse, setAdresse] = useState('');
 
-  // Réinitialisation de mot de passe
+  // Réinitialisation de mot de passe (3 Étapes)
   const [forgotEmail, setForgotEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [resetStep, setResetStep] = useState(1);
+  const [resetStep, setResetStep] = useState(1); // 1: Email | 2: Code OTP | 3: Nouveau MDP
 
   // Abonnement Vendeur
   const [showPaymentSection, setShowPaymentSection] = useState(false);
@@ -314,7 +314,7 @@ export default function App() {
     }
   };
 
-  // 🔒 VÉRIFICATION D'EMAIL AVANT D'ENVOYER LE CODE À 5 CHIFFRES
+  // ÉTAPE 1 : Demande du code par e-mail
   const handleRequestResetCode = async () => {
     if (!forgotEmail) {
       Alert.alert('Champ requis', 'Veuillez saisir votre adresse email.');
@@ -344,15 +344,42 @@ export default function App() {
     }
   };
 
-  // 🔒 VÉRIFICATION STRICTE DU CODE À 5 CHIFFRES
-  const handleConfirmNewPassword = async () => {
-    if (!resetCode || !newPassword) {
-      Alert.alert('Champs requis', 'Veuillez saisir le code à 5 chiffres et le nouveau mot de passe.');
+  // ÉTAPE 2 : Vérification du code à 5 chiffres
+  const handleVerifyResetCode = async () => {
+    if (!resetCode || resetCode.trim().length !== 5) {
+      Alert.alert('Code invalide', 'Veuillez saisir le code de sécurité à 5 chiffres.');
       return;
     }
 
-    if (resetCode.trim().length !== 5) {
-      Alert.alert('Code invalide', 'Le code de sécurité doit comporter exactement 5 chiffres.');
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          email: forgotEmail.trim().toLowerCase(),
+          code: resetCode.trim()
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Code incorrect ou expiré.");
+      }
+
+      setResetStep(3);
+    } catch (error) {
+      Alert.alert('Échec de vérification', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ÉTAPE 3 : Validation du nouveau mot de passe
+  const handleConfirmNewPassword = async () => {
+    if (!newPassword || newPassword.trim().length < 6) {
+      Alert.alert('Mot de passe invalide', 'Le mot de passe doit contenir au moins 6 caractères.');
       return;
     }
 
@@ -364,17 +391,17 @@ export default function App() {
         body: JSON.stringify({
           email: forgotEmail.trim().toLowerCase(),
           code: resetCode.trim(),
-          newPassword: newPassword
+          newPassword: newPassword.trim()
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Code incorrect ou expiré.");
+        throw new Error(data.error || "Impossible de mettre à jour le mot de passe.");
       }
 
-      Alert.alert('Succès', data.message, [
+      Alert.alert('Mot de passe mis à jour !', data.message, [
         {
           text: 'Se connecter',
           onPress: () => {
@@ -388,7 +415,7 @@ export default function App() {
         }
       ]);
     } catch (error) {
-      Alert.alert('Échec de validation', error.message);
+      Alert.alert('Erreur', error.message);
     } finally {
       setLoading(false);
     }
@@ -396,7 +423,7 @@ export default function App() {
 
   const handleProcessSubscription = () => {
     if (!paymentPhone) {
-      Alert.alert('Numéro requis', 'Veuillez saisir le numéro de débit Mobile Money.');
+      Alert.alert('Numéro requis', 'Veuillez saisir le numéro à débiter.');
       return;
     }
 
@@ -405,7 +432,7 @@ export default function App() {
       setLoading(false);
       setUser({ ...user, isSubscribed: true });
       setShowPaymentSection(false);
-      Alert.alert('Paiement confirmé', 'Votre abonnement Pass Pro Dépôt est maintenant actif.');
+      Alert.alert('Paiement confirmé', 'Votre abonnement Monan Pro est maintenant actif.');
     }, 1400);
   };
 
@@ -515,7 +542,7 @@ export default function App() {
                 <View style={styles.cardBox}>
                   {user.role === 'depot' && !isTrialExpired && (
                     <AnimatedButton onPress={() => setShowPaymentSection(false)} style={styles.backBtnInline}>
-                      <Text style={styles.backBtnInlineText}>← Retour au tableau de bord</Text>
+                      <Text style={styles.backBtnInlineText}>Retour </Text>
                     </AnimatedButton>
                   )}
 
@@ -526,7 +553,7 @@ export default function App() {
 
                   <View style={styles.subCard}>
                     <Text style={styles.subCardBadge}>ACCÈS ILLIMITÉ</Text>
-                    <Text style={styles.subCardTitle}>Pass Pro Dépôt</Text>
+                    <Text style={styles.subCardTitle}>Monan Pro</Text>
                     <Text style={styles.subCardPrice}>3 000 FCFA <Text style={styles.subCardMonth}>/ mois</Text></Text>
                   </View>
 
@@ -650,7 +677,7 @@ export default function App() {
                         </Text>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Cher client'} 👋</Text>
+                        <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Cher client'} </Text>
                         <Text style={styles.greetingSubtitle}>
                           {user.role === 'depot' ? 'Gérez vos stocks et votre activité' : 'Rechargez votre bouteille de gaz en quelques clics'}
                         </Text>
@@ -671,13 +698,13 @@ export default function App() {
                     {user.role === 'depot' ? (
                       <View style={{ gap: 12 }}>
                         <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('add_stock')}>
-                          <Text style={styles.actionCardTitle}>📦 Mettre à jour les stocks</Text>
+                          <Text style={styles.actionCardTitle}>Mettre à jour les stocks</Text>
                           <Text style={styles.actionCardSub}>Modifiez les quantités de bouteilles B6, B12 et B28</Text>
                         </AnimatedButton>
 
                         {!user.isSubscribed && (
                           <AnimatedButton style={styles.actionCardNavy} onPress={() => setShowPaymentSection(true)}>
-                            <Text style={styles.actionCardTitleWhite}>💳 Activer le Pass Pro Dépôt</Text>
+                            <Text style={styles.actionCardTitleWhite}>💳 Passez à Monan pro pour plus d'avantages</Text>
                             <Text style={styles.actionCardSubWhite}>Accédez à toutes les fonctionnalités vendeurs</Text>
                           </AnimatedButton>
                         )}
@@ -685,12 +712,12 @@ export default function App() {
                     ) : (
                       <View style={{ gap: 12 }}>
                         <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
-                          <Text style={styles.actionCardTitle}>📍 Trouver un dépôt à proximité</Text>
-                          <Text style={styles.actionCardSub}>Consultez la disponibilité en temps réel autour de vous</Text>
+                          <Text style={styles.actionCardTitle}>Trouver un dépôt à proximité</Text>
+                          <Text style={styles.actionCardSub}>Consultez la disponibilité autour de vous</Text>
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.actionCardTitleWhite}>🚀 Commander une livraison</Text>
+                          <Text style={styles.actionCardTitleWhite}> Commander une livraison</Text>
                           <Text style={styles.actionCardSubWhite}>Recevez votre recharge directement à domicile</Text>
                         </AnimatedButton>
                       </View>
@@ -782,7 +809,7 @@ export default function App() {
                     <Text style={styles.label}>Quantité désirée</Text>
                     <QuantityStepper value={quantite} onChange={setQuantite} />
 
-                    <Text style={styles.label}>Adresse ou repère de livraison *</Text>
+                    <Text style={styles.label}>Où voulez-vous recevoir *</Text>
                     <TextInput
                       style={styles.input}
                       placeholder="Ex: Cocody Angré 8ème Tranche, près de la pharmacie"
@@ -799,7 +826,7 @@ export default function App() {
                     </View>
 
                     <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
-                      <Text style={styles.btnOrangeText}>Valider la commande</Text>
+                      <Text style={styles.btnOrangeText}>Valider</Text>
                     </AnimatedButton>
                   </View>
                 )}
@@ -823,11 +850,11 @@ export default function App() {
                     {commandes.length === 0 ? (
                       <View style={styles.emptyCard}>
                         <View style={styles.emptyIconCircle}>
-                          <Text style={styles.emptyIconText}>📦</Text>
+                          <Text style={styles.emptyIconText}>VIDE</Text>
                         </View>
                         <Text style={styles.emptyTitle}>Aucune commande enregistrée</Text>
                         <Text style={styles.emptySubtitle}>
-                          Vos recharges de gaz commandées s'afficheront ici en temps réel.
+                          Vos recharges de gaz commandées s'afficheront ici.
                         </Text>
                         <AnimatedButton
                           style={styles.btnOrangeCompact}
@@ -868,7 +895,7 @@ export default function App() {
                     <TextInput style={styles.input} keyboardType="numeric" value={stockB28} onChangeText={setStockB28} />
                     
                     <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Stock enregistré', 'Les quantités ont été mises à jour.')}>
-                      <Text style={styles.btnOrangeText}>Enregistrer le stock</Text>
+                      <Text style={styles.btnOrangeText}>Enregistrer</Text>
                     </AnimatedButton>
                   </View>
                 )}
@@ -911,7 +938,7 @@ export default function App() {
                     </AnimatedButton>
 
                     <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
-                      <Text style={styles.welcomeCardTitleDark}>Espace Dépôt / Vendeur</Text>
+                      <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
                       <Text style={styles.welcomeCardSubDark}>Gérez vos stocks et recevez des commandes</Text>
                     </AnimatedButton>
                   </View>
@@ -925,7 +952,7 @@ export default function App() {
               {(currentScreen === 'register_client' || currentScreen === 'register_depot') && (
                 <View style={styles.cardBox}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
-                    <Text style={styles.backBtnInlineText}>← Retour</Text>
+                    <Text style={styles.backBtnInlineText}>Retour</Text>
                   </AnimatedButton>
                   
                   <Text style={styles.cardBoxTitle}>
@@ -956,7 +983,7 @@ export default function App() {
               {currentScreen === 'login' && (
                 <View style={styles.cardBox}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
-                    <Text style={styles.backBtnInlineText}>← Retour</Text>
+                    <Text style={styles.backBtnInlineText}>Retour</Text>
                   </AnimatedButton>
                   
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
@@ -984,12 +1011,14 @@ export default function App() {
                 </View>
               )}
 
-              {/* ÉCRAN DE RÉINITIALISATION SÉCURISÉ (5 CHIFFRES) */}
+              {/* ÉCRAN DE RÉINITIALISATION SÉCURISÉ (3 ÉTAPES SÉPARÉES) */}
               {currentScreen === 'forgot_password' && (
                 <View style={styles.cardBox}>
                   <AnimatedButton
                     onPress={() => {
-                      if (resetStep === 2) {
+                      if (resetStep === 3) {
+                        setResetStep(2);
+                      } else if (resetStep === 2) {
                         setResetStep(1);
                       } else {
                         setCurrentScreen('login');
@@ -997,13 +1026,13 @@ export default function App() {
                     }}
                     style={styles.backBtnInline}
                   >
-                    <Text style={styles.backBtnInlineText}>← Retour</Text>
+                    <Text style={styles.backBtnInlineText}>Retour</Text>
                   </AnimatedButton>
 
-                  <Text style={styles.cardBoxTitle}>Réinitialisation sécurisée</Text>
-
-                  {resetStep === 1 ? (
+                  {/* ÉTAPE 1 : Saisie de l'e-mail */}
+                  {resetStep === 1 && (
                     <>
+                      <Text style={styles.cardBoxTitle}>Mot de passe oublié</Text>
                       <Text style={styles.label}>Saisissez l'adresse email de votre compte :</Text>
                       <TextInput
                         style={styles.input}
@@ -1019,9 +1048,13 @@ export default function App() {
                         {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Envoyer le code (5 chiffres)</Text>}
                       </AnimatedButton>
                     </>
-                  ) : (
+                  )}
+
+                  {/* ÉTAPE 2 : Saisie du code OTP (avec suggestion automatique clavier) */}
+                  {resetStep === 2 && (
                     <>
-                      <Text style={styles.label}>Code de sécurité à 5 chiffres (valable 5 min)</Text>
+                      <Text style={styles.cardBoxTitle}>Validation du code</Text>
+                      <Text style={styles.label}>Entrez le code à 5 chiffres envoyé à {forgotEmail} :</Text>
                       <TextInput
                         style={styles.input}
                         keyboardType="numeric"
@@ -1030,9 +1063,21 @@ export default function App() {
                         placeholderTextColor="#94A3B8"
                         value={resetCode}
                         onChangeText={setResetCode}
+                        autoComplete="one-time-code"
+                        textContentType="oneTimeCode"
                       />
 
-                      <Text style={styles.label}>Nouveau mot de passe</Text>
+                      <AnimatedButton style={styles.btnOrange} onPress={handleVerifyResetCode} disabled={loading}>
+                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Confirmer</Text>}
+                      </AnimatedButton>
+                    </>
+                  )}
+
+                  {/* ÉTAPE 3 : Création du nouveau mot de passe */}
+                  {resetStep === 3 && (
+                    <>
+                      <Text style={styles.cardBoxTitle}>Nouveau mot de passe</Text>
+                      <Text style={styles.label}>Saisissez votre nouveau mot de passe :</Text>
                       <TextInput
                         style={styles.input}
                         secureTextEntry
@@ -1043,7 +1088,7 @@ export default function App() {
                       />
 
                       <AnimatedButton style={styles.btnOrange} onPress={handleConfirmNewPassword} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Mettre à jour le mot de passe</Text>}
+                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Enregistrer</Text>}
                       </AnimatedButton>
                     </>
                   )}

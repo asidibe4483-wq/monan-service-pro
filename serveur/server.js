@@ -215,7 +215,44 @@ const handleForgotPassword = async (req, res) => {
 app.post("/api/auth/forgot-password", handleForgotPassword);
 app.post("/forgot-password", handleForgotPassword);
 
-// 4. VALIDATION CODE & RÉINITIALISATION
+// 3.5 VÉRIFICATION SEULE DU CODE OTP (SANS CHANGER LE MOT DE PASSE)
+const handleVerifyOtp = async (req, res) => {
+  const { email, code, otp } = req.body;
+  const inputCode = code || otp;
+
+  if (!email || !inputCode) {
+    return res.status(400).json({ error: "Email et code requis." });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  try {
+    const userResult = await pool.query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: "Utilisateur non trouvé." });
+    }
+
+    const user = userResult.rows[0];
+
+    if (!user.reset_otp || user.reset_otp.trim() !== inputCode.toString().trim()) {
+      return res.status(400).json({ error: "Code de vérification incorrect." });
+    }
+
+    if (new Date() > new Date(user.otp_expires_at)) {
+      return res.status(400).json({ error: "Le code de vérification a expiré." });
+    }
+
+    return res.json({ success: true, message: "Code vérifié avec succès !" });
+  } catch (error) {
+    console.error("❌ Erreur /verify-otp :", error);
+    return res.status(500).json({ error: "Erreur serveur lors de la vérification du code." });
+  }
+};
+
+app.post("/api/auth/verify-otp", handleVerifyOtp);
+app.post("/verify-otp", handleVerifyOtp);
+
+// 4. VALIDATION CODE & RÉINITIALISATION DE MOT DE PASSE
 const handleResetPassword = async (req, res) => {
   const { email, code, otp, newPassword } = req.body;
   const inputCode = code || otp;
