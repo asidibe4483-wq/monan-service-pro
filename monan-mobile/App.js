@@ -116,13 +116,13 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
   );
 };
 
-// COMPOSANT IMAGE SÉCURISÉ POUR LES BOUTEILLES (SANS EMOJI)
+// COMPOSANT IMAGE SÉCURISÉ POUR LES BOUTEILLES (AGRANDI ET SANS EMOJI)
 const BottleImageWithFallback = ({ uri, brandColor, brandName }) => {
   const [imageError, setImageError] = useState(false);
 
   if (imageError || !uri) {
     return (
-      <View style={[styles.fallbackBottleContainer, { backgroundColor: brandColor + '15', borderColor: brandColor }]}>
+      <View style={[styles.fallbackBottleContainer, { backgroundColor: brandColor + '18', borderColor: brandColor }]}>
         <View style={[styles.fallbackBottleTop, { backgroundColor: brandColor }]} />
         <View style={[styles.fallbackBottleBody, { backgroundColor: brandColor }]}>
           <Text style={styles.fallbackBottleText}>GAZ</Text>
@@ -194,7 +194,7 @@ export default function App() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('welcome');
   const [user, setUser] = useState(null);
-  const [activeRoleMode, setActiveRoleMode] = useState('depot'); // 'depot' ou 'client'
+  const [activeRoleMode, setActiveRoleMode] = useState('depot');
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
@@ -261,7 +261,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // GESTION RETOUR TACTILE ANDROID (BOUTON ET GESTES)
+  // RETOUR TACTILE ANDROID (BOUTON & GESTES DE BALAYAGE)
   useEffect(() => {
     const onBackPress = () => {
       if (!user) {
@@ -742,7 +742,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* HEADER AVEC BOUTON DE BASCULEMENT DE MODE */}
+      {/* HEADER DE L'APPLICATION */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -1031,7 +1031,7 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CATALOGUE ET COMMANDE CLIENT */}
+                {/* CATALOGUE ET COMMANDE CLIENT - AVEC BANDEAU DE MARQUE ULTRA-LISIBLE SUR MOBILE */}
                 {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>
@@ -1093,15 +1093,25 @@ export default function App() {
                                 if (dashboardTab === 'catalog') setDashboardTab('order');
                               }}
                             >
+                              {/* BANDEAU DE MARQUE HAUTE VISIBILITÉ POUR TÉLÉPHONE */}
+                              <View style={[styles.cardHeaderBadge, { backgroundColor: m.color }]}>
+                                <Text style={styles.cardHeaderBadgeText} numberOfLines={1}>
+                                  {m.name.toUpperCase()} • {selectedCylinder.id}
+                                </Text>
+                              </View>
+
                               <View style={styles.productImageWrapper}>
-                                <View style={[styles.colorBackgroundGlow, { backgroundColor: m.color + '22' }]} />
+                                <View style={[styles.colorBackgroundGlow, { backgroundColor: m.color + '1A' }]} />
                                 <BottleImageWithFallback
                                   uri={m.imageUrl}
                                   brandColor={m.color}
                                   brandName={m.name}
                                 />
                               </View>
-                              <Text style={styles.productTitle} numberOfLines={1}>{m.name}</Text>
+                              <Text style={styles.productTitle} numberOfLines={1}>
+                                {operationType === 'recharge' ? 'Recharge' : 'Achat'} {selectedCylinder.id}
+                              </Text>
+                              <Text style={styles.productSubTitle} numberOfLines={1}>{m.name}</Text>
                               <Text style={styles.productPrice}>{cardPrice.toLocaleString('fr-FR')} CFA</Text>
                             </AnimatedButton>
                           </FadeInView>
@@ -1143,7 +1153,6 @@ export default function App() {
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Bilan & Saisie Caisse</Text>
 
-                    {/* BLOC SAISIE VENTE VENDEUR AVEC SÉLECTION MARQUE & FORMAT */}
                     <View style={styles.vendorSaleBox}>
                       <Text style={styles.vendorSaleBoxTitle}>Nouvelle Vente Directe</Text>
 
@@ -1223,7 +1232,6 @@ export default function App() {
                       </AnimatedButton>
                     </View>
 
-                    {/* EXPORTATION ET RECAPITULATIF BILAN */}
                     <Text style={[styles.cardBoxTitle, { marginTop: 18 }]}>Rapport de Recette</Text>
 
                     <View style={styles.filterRow}>
@@ -1514,17 +1522,23 @@ const styles = StyleSheet.create({
   priceSectionHeader: { fontSize: 13, fontWeight: '800', color: '#0F172A', marginTop: 8, marginBottom: 6 },
 
   productGridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' },
-  productCard: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 12, padding: 10, borderWidth: 1.5, borderColor: '#F1F5F9', alignItems: 'center' },
+  productCard: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 12, paddingBottom: 10, borderWidth: 1.5, borderColor: '#E2E8F0', alignItems: 'center', overflow: 'hidden' },
   productCardActive: { borderColor: '#F97316', backgroundColor: '#FFF7ED' },
-  productImageWrapper: { width: '100%', height: 90, justifyContent: 'center', alignItems: 'center', marginVertical: 4 },
-  colorBackgroundGlow: { position: 'absolute', width: 60, height: 60, borderRadius: 30 },
-  productBottleImg: { width: 70, height: 85 },
-  productTitle: { fontSize: 11, fontWeight: '700', color: '#334155', marginTop: 2 },
-  productPrice: { fontSize: 13, fontWeight: '900', color: '#2563EB', marginTop: 2 },
+  
+  cardHeaderBadge: { width: '100%', paddingVertical: 4, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
+  cardHeaderBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+
+  productImageWrapper: { width: '100%', height: 115, justifyContent: 'center', alignItems: 'center', marginVertical: 6 },
+  colorBackgroundGlow: { position: 'absolute', width: 70, height: 70, borderRadius: 35 },
+  productBottleImg: { width: 85, height: 105 },
+  
+  productTitle: { fontSize: 11, fontWeight: '800', color: '#0F172A', marginTop: 2 },
+  productSubTitle: { fontSize: 10, fontWeight: '600', color: '#64748B', marginTop: 1 },
+  productPrice: { fontSize: 13, fontWeight: '900', color: '#2563EB', marginTop: 3 },
 
   fallbackBottleContainer: {
-    width: 60,
-    height: 75,
+    width: 70,
+    height: 90,
     borderRadius: 10,
     borderWidth: 2,
     alignItems: 'center',
@@ -1532,22 +1546,22 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   fallbackBottleTop: {
-    width: 18,
-    height: 6,
+    width: 20,
+    height: 7,
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
     position: 'absolute',
-    top: -5,
+    top: -6,
   },
   fallbackBottleBody: {
-    width: 44,
-    height: 52,
+    width: 50,
+    height: 60,
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fallbackBottleText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '900',
     color: '#FFFFFF'
   },
