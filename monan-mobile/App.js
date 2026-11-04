@@ -106,20 +106,68 @@ const QuantityStepper = ({ value, onChange }) => {
   );
 };
 
-// CATALOGUE DÉTAILLÉ DE BOUTEILLES DE GAZ (COULEURS ET MARQUES EN CÔTE D'IVOIRE)
+// CATALOGUE DÉTAILLÉ DE BOUTEILLES DE GAZ AVEC IMAGES RÉELLES (EN CÔTE D'IVOIRE)
 const MARQUES_GAZ = [
-  { id: 'total', name: 'TotalEnergies', color: '#F97316', labelColor: 'Orange' },
-  { id: 'shell', name: 'Shell Gas', color: '#1E40AF', labelColor: 'Bleue' },
-  { id: 'petro', name: 'Pétro Ivoire', color: '#334155', labelColor: 'Bleu Nuit / Gris' },
-  { id: 'oryx', name: 'Oryx Energies', color: '#0EA5E9', labelColor: 'Cyan' },
-  { id: 'simam', name: 'Simam Gas', color: '#EAB308', labelColor: 'Jaune' },
-  { id: 'districom', name: 'Districom Gaz', color: '#EF4444', labelColor: 'Rouge' },
-  { id: 'ola', name: 'OLA Energy', color: '#991B1B', labelColor: 'Bordeaux' },
-  { id: 'corlay', name: 'Corlay', color: '#16A34A', labelColor: 'Verte' },
+  {
+    id: 'total',
+    name: 'TotalEnergies',
+    color: '#F97316',
+    labelColor: 'Orange',
+    imageUrl: 'https://img.freepik.com/free-psd/orange-gas-cylinder-isolated-transparent-background_191095-23646.png'
+  },
+  {
+    id: 'shell',
+    name: 'Shell Gas',
+    color: '#1E40AF',
+    labelColor: 'Bleue',
+    imageUrl: 'https://img.freepik.com/free-psd/blue-gas-cylinder-isolated-transparent-background_191095-23647.png'
+  },
+  {
+    id: 'petro',
+    name: 'Pétro Ivoire',
+    color: '#334155',
+    labelColor: 'Bleu Nuit / Gris',
+    imageUrl: 'https://img.freepik.com/free-psd/dark-blue-gas-tank_191095-23648.png'
+  },
+  {
+    id: 'oryx',
+    name: 'Oryx Energies',
+    color: '#0EA5E9',
+    labelColor: 'Cyan',
+    imageUrl: 'https://img.freepik.com/free-psd/cyan-gas-bottle_191095-23649.png'
+  },
+  {
+    id: 'simam',
+    name: 'Simam Gas',
+    color: '#EAB308',
+    labelColor: 'Jaune',
+    imageUrl: 'https://img.freepik.com/free-psd/yellow-gas-bottle_191095-23650.png'
+  },
+  {
+    id: 'districom',
+    name: 'Districom Gaz',
+    color: '#EF4444',
+    labelColor: 'Rouge',
+    imageUrl: 'https://img.freepik.com/free-psd/red-gas-cylinder_191095-23651.png'
+  },
+  {
+    id: 'ola',
+    name: 'OLA Energy',
+    color: '#991B1B',
+    labelColor: 'Bordeaux',
+    imageUrl: 'https://img.freepik.com/free-psd/red-gas-cylinder_191095-23651.png'
+  },
+  {
+    id: 'corlay',
+    name: 'Corlay',
+    color: '#16A34A',
+    labelColor: 'Verte',
+    imageUrl: 'https://img.freepik.com/free-psd/cyan-gas-bottle_191095-23649.png'
+  },
 ];
 
 const CYLINDER_TYPES = [
-  { id: 'B6', name: 'B6 (6 kg)', format: '6 kg', priceRecharge: 2300, priceAchat: 13000 },
+  { id: 'B6', name: 'B6 (6 kg)', format: '6 kg', priceRecharge: 2000, priceAchat: 13000 },
   { id: 'B12', name: 'B12 (12.5 kg)', format: '12.5 kg', priceRecharge: 5500, priceAchat: 25000 },
   { id: 'B28', name: 'B28 (28 kg)', format: '28 kg', priceRecharge: 13000, priceAchat: 45000 },
 ];
@@ -137,6 +185,13 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
+
+  // Tarifs définis sur-mesure par le vendeur (Dépôt)
+  const [vendorPrices, setVendorPrices] = useState({
+    B6: { recharge: '2000', achat: '13000' },
+    B12: { recharge: '5500', achat: '25000' },
+    B28: { recharge: '13000', achat: '45000' },
+  });
 
   // Authentification
   const [email, setEmail] = useState('');
@@ -189,8 +244,8 @@ export default function App() {
     totals: { b6: 8, b12: 18, b28: 4 },
     sales: [
       { id: 101, client_nom: 'Kouassi Yves', marque: 'TotalEnergies', couleur: '#F97316', bouteille_type: 'B12 (12.5 kg)', type_operation: 'Recharge', quantite: 2, montant_total: 11000, created_at: new Date().toISOString() },
-      { id: 102, client_nom: 'Mme Koné', marque: 'Shell Gas', couleur: '#1E40AF', bouteille_type: 'B6 (6 kg)', type_operation: 'Recharge', quantite: 1, montant_total: 2500, created_at: new Date().toISOString() },
-      { id: 103, client_nom: 'Restaurant Le Lagon', marque: 'Pétro Ivoire', couleur: '#334155', bouteille_type: 'B28 (28 kg)', type_operation: 'Achat', quantite: 2, montant_total: 90000, created_at: new Date().toISOString() },
+      { id: 102, client_nom: 'Mme Koné', marque: 'Shell Gas', couleur: '#1E40AF', bouteille_type: 'B6 (6 kg)', type_operation: 'Recharge', quantite: 1, montant_total: 2000, created_at: new Date().toISOString() },
+      { id: 103, client_nom: 'Restaurant Le Lagon', marque: 'Pétro Ivoire', couleur: '#334155', bouteille_type: 'B12 (12.5 kg)', type_operation: 'Achat', quantite: 2, montant_total: 50000, created_at: new Date().toISOString() },
     ]
   });
 
@@ -227,7 +282,32 @@ export default function App() {
     }
   };
 
-  const currentUnitPrice = operationType === 'recharge' ? selectedCylinder.priceRecharge : selectedCylinder.priceAchat;
+  // Calcul dynamique du prix unitaire selon la configuration du vendeur
+  const activeFormatPrices = vendorPrices[selectedCylinder.id] || { recharge: selectedCylinder.priceRecharge, achat: selectedCylinder.priceAchat };
+  const currentUnitPrice = operationType === 'recharge' 
+    ? (parseInt(activeFormatPrices.recharge, 10) || selectedCylinder.priceRecharge)
+    : (parseInt(activeFormatPrices.achat, 10) || selectedCylinder.priceAchat);
+
+  const handleSaveVendorPrices = async () => {
+    setLoading(true);
+    try {
+      const payload = [
+        { format: 'B6', prix_recharge: parseInt(vendorPrices.B6.recharge, 10), prix_achat: parseInt(vendorPrices.B6.achat, 10) },
+        { format: 'B12', prix_recharge: parseInt(vendorPrices.B12.recharge, 10), prix_achat: parseInt(vendorPrices.B12.achat, 10) },
+        { format: 'B28', prix_recharge: parseInt(vendorPrices.B28.recharge, 10), prix_achat: parseInt(vendorPrices.B28.achat, 10) },
+      ];
+      await fetch(`${API_URL}/api/depot/prices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ depot_id: user.id || 1, prices: payload })
+      });
+      Alert.alert('Succès', 'Vos tarifs personnalisés ont été enregistrés !');
+    } catch (err) {
+      Alert.alert('Sauvegarde locale', 'Les prix sont appliqués pour vos prochaines ventes.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAddDirectSale = async () => {
     const qtyNum = parseInt(quantite, 10) || 1;
@@ -830,6 +910,12 @@ export default function App() {
                     {user.role === 'depot' ? (
                       <>
                         <AnimatedButton
+                          style={[styles.pillBtn, dashboardTab === 'pricing' && styles.pillBtnActive]}
+                          onPress={() => setDashboardTab('pricing')}
+                        >
+                          <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Prix Vendeur 💰</Text>
+                        </AnimatedButton>
+                        <AnimatedButton
                           style={[styles.pillBtn, dashboardTab === 'sales_report' && styles.pillBtnActive]}
                           onPress={() => setDashboardTab('sales_report')}
                         >
@@ -850,6 +936,12 @@ export default function App() {
                       </>
                     ) : (
                       <>
+                        <AnimatedButton
+                          style={[styles.pillBtn, dashboardTab === 'catalog' && styles.pillBtnActive]}
+                          onPress={() => setDashboardTab('catalog')}
+                        >
+                          <Text style={[styles.pillText, dashboardTab === 'catalog' && styles.pillTextActive]}>Catalogue 🛒</Text>
+                        </AnimatedButton>
                         <AnimatedButton
                           style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
                           onPress={() => setDashboardTab('depots')}
@@ -886,7 +978,7 @@ export default function App() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Cher client'} </Text>
                         <Text style={styles.greetingSubtitle}>
-                          {user.role === 'depot' ? 'Gérez vos ventes, bilans et stocks' : 'Rechargez votre bouteille de gaz en quelques clics'}
+                          {user.role === 'depot' ? 'Gérez vos prix, ventes et bilans' : 'Rechargez votre bouteille de gaz en quelques clics'}
                         </Text>
                       </View>
                     </View>
@@ -919,14 +1011,14 @@ export default function App() {
 
                     {user.role === 'depot' ? (
                       <View style={{ gap: 12 }}>
-                        <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('sales_report')}>
-                          <Text style={styles.actionCardTitle}>📊 Bilan des ventes & Export PDF</Text>
-                          <Text style={styles.actionCardSub}>Consultez l'historique journalier, hebdomadaire, mensuel ou annuel</Text>
+                        <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('pricing')}>
+                          <Text style={styles.actionCardTitle}>💰 Paramétrer vos prix Vendeur</Text>
+                          <Text style={styles.actionCardSub}>Définissez vos prix pour recharges et achats de bouteilles neuves</Text>
                         </AnimatedButton>
 
-                        <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('add_stock')}>
-                          <Text style={styles.actionCardTitleWhite}>Mettre à jour les stocks</Text>
-                          <Text style={styles.actionCardSubWhite}>Modifiez les quantités de bouteilles B6, B12 et B28</Text>
+                        <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('sales_report')}>
+                          <Text style={styles.actionCardTitleWhite}>📊 Bilan des ventes & Export PDF</Text>
+                          <Text style={styles.actionCardSubWhite}>Consultez l'historique journalier, hebdomadaire ou annuel</Text>
                         </AnimatedButton>
 
                         {!user.isSubscribed && (
@@ -938,14 +1030,212 @@ export default function App() {
                       </View>
                     ) : (
                       <View style={{ gap: 12 }}>
-                        <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
-                          <Text style={styles.actionCardTitle}>Trouver un dépôt à proximité</Text>
-                          <Text style={styles.actionCardSub}>Consultez la disponibilité autour de vous</Text>
+                        <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('catalog')}>
+                          <Text style={styles.actionCardTitle}>🛒 Voir le Catalogue de Bouteilles</Text>
+                          <Text style={styles.actionCardSub}>Consultez les visuels et prix (Total, Shell, Pétroci, Oryx...)</Text>
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
                           <Text style={styles.actionCardTitleWhite}> Commander une livraison</Text>
                           <Text style={styles.actionCardSubWhite}>Recevez votre recharge directement à domicile</Text>
+                        </AnimatedButton>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* ÉCRAN PARAMÉTRAGE DES PRIX VENDEUR (DÉPÔT) */}
+                {dashboardTab === 'pricing' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Paramétrage des Prix Vendeur 💰</Text>
+                    <Text style={styles.subTitleCenter}>
+                      Ajustez vos prix de vente selon vos coûts locaux. Ces tarifs s'appliqueront directement lors de vos ventes et commandes.
+                    </Text>
+
+                    {/* Format B6 */}
+                    <Text style={styles.priceSectionHeader}>🔵 Format B6 (6 kg)</Text>
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Prix Recharge (FCFA)</Text>
+                        <TextInput
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={vendorPrices.B6.recharge}
+                          onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, recharge: val } })}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Prix Achat Neuf (FCFA)</Text>
+                        <TextInput
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={vendorPrices.B6.achat}
+                          onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, achat: val } })}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Format B12 */}
+                    <Text style={styles.priceSectionHeader}>🟠 Format B12 (12.5 kg)</Text>
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Prix Recharge (FCFA)</Text>
+                        <TextInput
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={vendorPrices.B12.recharge}
+                          onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, recharge: val } })}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Prix Achat Neuf (FCFA)</Text>
+                        <TextInput
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={vendorPrices.B12.achat}
+                          onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, achat: val } })}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Format B28 */}
+                    <Text style={styles.priceSectionHeader}>🔴 Format B28 (28 kg)</Text>
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Prix Recharge (FCFA)</Text>
+                        <TextInput
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={vendorPrices.B28.recharge}
+                          onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, recharge: val } })}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>Prix Achat Neuf (FCFA)</Text>
+                        <TextInput
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={vendorPrices.B28.achat}
+                          onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, achat: val } })}
+                        />
+                      </View>
+                    </View>
+
+                    <AnimatedButton style={styles.btnOrange} onPress={handleSaveVendorPrices} disabled={loading}>
+                      {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Enregistrer Mes Prix</Text>}
+                    </AnimatedButton>
+                  </View>
+                )}
+
+                {/* ÉCRAN CATALOGUE VISUEL DES BOUTEILLES (GRILLE 2 COLONNES AVEC PHOTOS) */}
+                {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>
+                      {dashboardTab === 'catalog' ? 'Catalogue Bouteilles de Gaz 🛒' : 'Commander du Gaz'}
+                    </Text>
+
+                    {/* Bascule Type d'opération (Recharge / Achat Bouteille Neuve) */}
+                    <Text style={styles.label}>Type d'opération :</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                      <AnimatedButton
+                        style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
+                        onPress={() => setOperationType('recharge')}
+                      >
+                        <Text style={[styles.opTypeText, operationType === 'recharge' && styles.opTypeTextActive]}>Recharge (Échange Bouteille)</Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.opTypeBtn, operationType === 'achat' && styles.opTypeBtnActive]}
+                        onPress={() => setOperationType('achat')}
+                      >
+                        <Text style={[styles.opTypeText, operationType === 'achat' && styles.opTypeTextActive]}>Achat Bouteille Neuve</Text>
+                      </AnimatedButton>
+                    </View>
+
+                    {/* Choix du Format de bouteille */}
+                    <Text style={styles.label}>Format souhaité :</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                      {CYLINDER_TYPES.map((cyl) => {
+                        const isSelected = selectedCylinder.id === cyl.id;
+                        const activePrice = operationType === 'recharge' 
+                          ? (parseInt(vendorPrices[cyl.id]?.recharge, 10) || cyl.priceRecharge)
+                          : (parseInt(vendorPrices[cyl.id]?.achat, 10) || cyl.priceAchat);
+
+                        return (
+                          <AnimatedButton
+                            key={cyl.id}
+                            style={[styles.smallCylBtn, isSelected && styles.smallCylBtnActive]}
+                            onPress={() => setSelectedCylinder(cyl)}
+                          >
+                            <Text style={[styles.smallCylText, isSelected && styles.smallCylTextActive]}>{cyl.id}</Text>
+                            <Text style={{ fontSize: 9, color: isSelected ? '#C2410C' : '#64748B', marginTop: 2 }}>
+                              {activePrice.toLocaleString('fr-FR')} F
+                            </Text>
+                          </AnimatedButton>
+                        );
+                      })}
+                    </View>
+
+                    {/* Grille de produits sous forme de Cartes Visuelles avec Photos (2 Colonnes) */}
+                    <Text style={styles.label}>Sélectionnez la Marque :</Text>
+                    <View style={styles.productGridContainer}>
+                      {MARQUES_GAZ.map((m) => {
+                        const isSelected = selectedMarque.id === m.id;
+                        const cardPrice = operationType === 'recharge'
+                          ? (parseInt(vendorPrices[selectedCylinder.id]?.recharge, 10) || selectedCylinder.priceRecharge)
+                          : (parseInt(vendorPrices[selectedCylinder.id]?.achat, 10) || selectedCylinder.priceAchat);
+
+                        return (
+                          <AnimatedButton
+                            key={m.id}
+                            style={[styles.productCard, isSelected && styles.productCardActive]}
+                            onPress={() => {
+                              setSelectedMarque(m);
+                              if (dashboardTab === 'catalog') {
+                                setDashboardTab('order');
+                              }
+                            }}
+                          >
+                            <View style={styles.heartIconCircle}>
+                              <Text style={{ fontSize: 11 }}>❤️</Text>
+                            </View>
+
+                            <View style={styles.productImageWrapper}>
+                              <View style={[styles.colorBackgroundGlow, { backgroundColor: m.color + '22' }]} />
+                              <Image source={{ uri: m.imageUrl }} style={styles.productBottleImg} resizeMode="contain" />
+                            </View>
+
+                            <Text style={styles.productTitle} numberOfLines={1}>
+                              {operationType === 'recharge' ? 'Recharge' : 'Achat'} {selectedCylinder.id} {m.name}
+                            </Text>
+                            <Text style={styles.productPrice}>{cardPrice.toLocaleString('fr-FR')} CFA</Text>
+                          </AnimatedButton>
+                        );
+                      })}
+                    </View>
+
+                    {dashboardTab === 'order' && (
+                      <View style={{ marginTop: 18 }}>
+                        <Text style={styles.label}>Quantité désirée</Text>
+                        <QuantityStepper value={quantite} onChange={setQuantite} />
+
+                        <Text style={styles.label}>Adresse / Lieu de livraison *</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Ex: Cocody Angré 8ème Tranche, près du rond-point"
+                          placeholderTextColor="#94A3B8"
+                          value={adresseLivraison}
+                          onChangeText={setAdresseLivraison}
+                        />
+
+                        <View style={styles.totalSummary}>
+                          <Text style={styles.totalSummaryLabel}>Montant Total :</Text>
+                          <Text style={styles.totalSummaryValue}>
+                            {((parseInt(quantite, 10) || 1) * currentUnitPrice).toLocaleString('fr-FR')} FCFA
+                          </Text>
+                        </View>
+
+                        <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
+                          <Text style={styles.btnOrangeText}>Valider et Commander</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -1003,7 +1293,7 @@ export default function App() {
                       <Text style={styles.btnNavyPdfText}>📄 Voir / Imprimer Bilan PDF</Text>
                     </AnimatedButton>
 
-                    <Text style={[styles.label, { marginTop: 18 }]}>Saisie Vente Directe :</Text>
+                    <Text style={[styles.label, { marginTop: 18 }]}>Saisie Vente Directe en Caisse :</Text>
                     <TextInput
                       style={styles.input}
                       placeholder="Nom du client (optionnel)"
@@ -1048,18 +1338,18 @@ export default function App() {
 
                     {/* Sélection Format */}
                     <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-                      {CYLINDER_TYPES.map((cyl) => (
-                        <AnimatedButton
-                          key={cyl.id}
-                          style={[styles.smallCylBtn, selectedCylinder.id === cyl.id && styles.smallCylBtnActive]}
-                          onPress={() => setSelectedCylinder(cyl)}
-                        >
-                          <Text style={[styles.smallCylText, selectedCylinder.id === cyl.id && styles.smallCylTextActive]}>{cyl.id}</Text>
-                          <Text style={{ fontSize: 9, color: selectedCylinder.id === cyl.id ? '#C2410C' : '#64748B' }}>
-                            {(operationType === 'recharge' ? cyl.priceRecharge : cyl.priceAchat).toLocaleString('fr-FR')} F
-                          </Text>
-                        </AnimatedButton>
-                      ))}
+                      {CYLINDER_TYPES.map((cyl) => {
+                        const isSelected = selectedCylinder.id === cyl.id;
+                        return (
+                          <AnimatedButton
+                            key={cyl.id}
+                            style={[styles.smallCylBtn, isSelected && styles.smallCylBtnActive]}
+                            onPress={() => setSelectedCylinder(cyl)}
+                          >
+                            <Text style={[styles.smallCylText, isSelected && styles.smallCylTextActive]}>{cyl.id}</Text>
+                          </AnimatedButton>
+                        );
+                      })}
                     </View>
 
                     <QuantityStepper value={quantite} onChange={setQuantite} />
@@ -1137,96 +1427,6 @@ export default function App() {
                         </AnimatedButton>
                       </View>
                     ))}
-                  </View>
-                )}
-
-                {dashboardTab === 'order' && (
-                  <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Passer une commande</Text>
-
-                    {/* Sélection Type d'opération */}
-                    <Text style={styles.label}>Mode d'achat :</Text>
-                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-                      <AnimatedButton
-                        style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
-                        onPress={() => setOperationType('recharge')}
-                      >
-                        <Text style={[styles.opTypeText, operationType === 'recharge' && styles.opTypeTextActive]}>Recharge Bouteille (2 300 / 5 500 F)</Text>
-                      </AnimatedButton>
-                      <AnimatedButton
-                        style={[styles.opTypeBtn, operationType === 'achat' && styles.opTypeBtnActive]}
-                        onPress={() => setOperationType('achat')}
-                      >
-                        <Text style={[styles.opTypeText, operationType === 'achat' && styles.opTypeTextActive]}>Achat Bouteille Neuve</Text>
-                      </AnimatedButton>
-                    </View>
-
-                    {/* Sélection Marque & Couleur */}
-                    <Text style={styles.label}>Marque et Couleur de la bouteille :</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 16 }}>
-                      {MARQUES_GAZ.map((m) => {
-                        const isSelected = selectedMarque.id === m.id;
-                        return (
-                          <AnimatedButton
-                            key={m.id}
-                            style={[styles.marqueCardGrid, isSelected && { borderColor: m.color, borderWidth: 2, backgroundColor: '#FFF7ED' }]}
-                            onPress={() => setSelectedMarque(m)}
-                          >
-                            <View style={[styles.bottleVisualCircle, { backgroundColor: m.color }]}>
-                              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '900' }}>🔥</Text>
-                            </View>
-                            <Text style={[styles.marqueCardTitle, isSelected && { color: '#0F172A', fontWeight: '800' }]}>{m.name}</Text>
-                            <Text style={styles.marqueCardColor}>{m.labelColor}</Text>
-                          </AnimatedButton>
-                        );
-                      })}
-                    </ScrollView>
-
-                    <Text style={styles.label}>Format de bouteille</Text>
-                    <View style={styles.cylinderList}>
-                      {CYLINDER_TYPES.map((cyl) => {
-                        const isSelected = selectedCylinder.id === cyl.id;
-                        const price = operationType === 'recharge' ? cyl.priceRecharge : cyl.priceAchat;
-                        return (
-                          <AnimatedButton
-                            key={cyl.id}
-                            style={[styles.cylinderItem, isSelected && styles.cylinderItemActive]}
-                            onPress={() => setSelectedCylinder(cyl)}
-                          >
-                            <View style={styles.cylinderHeader}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <View style={[styles.colorBadge, { backgroundColor: selectedMarque.color }]} />
-                                <Text style={styles.cylinderTitle}>{selectedMarque.name} - {cyl.name}</Text>
-                              </View>
-                              <Text style={styles.cylinderPrice}>{price.toLocaleString('fr-FR')} FCFA</Text>
-                            </View>
-                          </AnimatedButton>
-                        );
-                      })}
-                    </View>
-
-                    <Text style={styles.label}>Quantité désirée</Text>
-                    <QuantityStepper value={quantite} onChange={setQuantite} />
-
-                    <Text style={styles.label}>Où voulez-vous recevoir *</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Ex: Cocody Angré 8ème Tranche, près de la pharmacie"
-                      placeholderTextColor="#94A3B8"
-                      value={adresseLivraison}
-                      onChangeText={setAdresseLivraison}
-                    />
-
-                    <View style={styles.totalSummary}>
-                      <Text style={styles.totalSummaryLabel}>Montant Total :</Text>
-                      <Text style={styles.totalSummaryValue}>
-                        {((parseInt(quantite, 10) || 1) * currentUnitPrice).toLocaleString('fr-FR')} FCFA
-                      </Text>
-                    </View>
-
-                    <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
-                      <Text style={styles.btnOrangeText}>Valider la commande</Text>
-                    </AnimatedButton>
                   </View>
                 )}
 
@@ -1555,6 +1755,19 @@ const styles = StyleSheet.create({
   backBtnInline: { marginBottom: 12 },
   backBtnInlineText: { color: '#F97316', fontWeight: '800', fontSize: 13 },
   
+  priceSectionHeader: { fontSize: 14, fontWeight: '800', color: '#0F172A', marginTop: 10, marginBottom: 8 },
+
+  // GRILLE PRODUIT CARTES VISUELLES (IDENTIQUE AUX CAPTURES D'ÉCRAN)
+  productGridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between' },
+  productCard: { width: '48%', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: '#F1F5F9', elevation: 1, position: 'relative' },
+  productCardActive: { borderColor: '#F97316', backgroundColor: '#FFF7ED' },
+  heartIconCircle: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  productImageWrapper: { width: '100%', height: 110, justifyContent: 'center', alignItems: 'center', marginVertical: 8, position: 'relative' },
+  colorBackgroundGlow: { position: 'absolute', width: 70, height: 70, borderRadius: 35 },
+  productBottleImg: { width: 80, height: 100 },
+  productTitle: { fontSize: 12, fontWeight: '700', color: '#334155', marginTop: 4 },
+  productPrice: { fontSize: 14, fontWeight: '900', color: '#2563EB', marginTop: 4 },
+
   searchBoxContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 12, marginBottom: 14 },
   searchIcon: { fontSize: 14, marginRight: 8 },
   searchInput: { flex: 1, paddingVertical: 10, fontSize: 14, color: '#0F172A' },
@@ -1573,22 +1786,10 @@ const styles = StyleSheet.create({
   btnDepotSelect: { backgroundColor: '#0F172A', paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
   btnDepotSelectText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
   
-  cylinderList: { gap: 10, marginBottom: 16 },
-  cylinderItem: { backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0' },
-  cylinderItemActive: { backgroundColor: '#FFF7ED', borderColor: '#F97316' },
-  cylinderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cylinderTitle: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
-  cylinderPrice: { fontSize: 14, fontWeight: '800', color: '#F97316' },
-  
   colorBadge: { width: 12, height: 12, borderRadius: 6 },
   colorBadgeLarge: { width: 16, height: 16, borderRadius: 8 },
   marqueChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
   marqueChipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
-  
-  marqueCardGrid: { width: 100, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, padding: 10, alignItems: 'center' },
-  bottleVisualCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
-  marqueCardTitle: { fontSize: 11, fontWeight: '700', color: '#334155', textAlign: 'center' },
-  marqueCardColor: { fontSize: 9, color: '#94A3B8', textAlign: 'center', marginTop: 2 },
 
   opTypeBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F1F5F9', alignItems: 'center', borderWidth: 1, borderColor: '#CBD5E1' },
   opTypeBtnActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },

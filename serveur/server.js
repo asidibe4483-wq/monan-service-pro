@@ -6,17 +6,14 @@ const bcrypt = require("bcrypt");
 
 const app = express();
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Connexion PostgreSQL avec support SSL pour Render
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
-// Initialisation et migration automatique de la BDD
 async function initDb() {
   try {
     await pool.query(`
@@ -34,16 +31,6 @@ async function initDb() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_otp VARCHAR(10);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMP;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS nom VARCHAR(255);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS telephone VARCHAR(50);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS adresse TEXT;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'client';
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_subscribed BOOLEAN DEFAULT FALSE;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-
-      -- Table Ventes enrichie avec Marque, Couleur et Type d'Opération
       CREATE TABLE IF NOT EXISTS ventes (
         id SERIAL PRIMARY KEY,
         depot_id INTEGER,
@@ -58,25 +45,31 @@ async function initDb() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      ALTER TABLE ventes ADD COLUMN IF NOT EXISTS marque VARCHAR(100);
-      ALTER TABLE ventes ADD COLUMN IF NOT EXISTS couleur VARCHAR(50);
-      ALTER TABLE ventes ADD COLUMN IF NOT EXISTS type_operation VARCHAR(50) DEFAULT 'Recharge';
+      -- Table de paramétrage personnalisé des prix par Dépôt / Vendeur
+      CREATE TABLE IF NOT EXISTS depot_prices (
+        id SERIAL PRIMARY KEY,
+        depot_id INTEGER NOT NULL,
+        format VARCHAR(20) NOT NULL,
+        prix_recharge INTEGER NOT NULL,
+        prix_achat INTEGER NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(depot_id, format)
+      );
     `);
-    console.log("✅ Tables 'users' et 'ventes' (marques & couleurs) synchronisées avec succès.");
+    console.log("✅ Tables BDD synchronisées avec gestion des prix personnalisés vendeurs.");
   } catch (err) {
-    console.error("❌ Erreur BDD lors de l'initialisation :", err.message);
+    console.error("❌ Erreur BDD :", err.message);
   }
 }
 initDb();
 
-// Envoi d'e-mail via l'API HTTP Brevo (Port 443)
+// Service Email OTP via Brevo
 async function sendOtpEmail(toEmail, otpCode) {
   const apiKey = process.env.BREVO_API_KEY;
   const senderEmail = process.env.SENDER_EMAIL || "ali.sidibe@uvci.edu";
 
   if (!apiKey) {
-    console.log("⚠️ BREVO_API_KEY manquante dans les variables d'environnement.");
-    console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${toEmail} : ${otpCode}`);
+    console.log(`🔑 [DEV] Code OTP pour ${toEmail} : ${otpCode}`);
     return false;
   }
 
@@ -93,239 +86,105 @@ async function sendOtpEmail(toEmail, otpCode) {
         to: [{ email: toEmail }],
         subject: "Code de réinitialisation Monan Service",
         htmlContent: `
-          <div style="font-family: Arial, sans-serif; padding: 20px; color: #0F172A;">
-            <h2 style="color: #2563EB;">Monan Service</h2>
-            <p>Votre code de sécurité à 5 chiffres pour réinitialiser votre mot de passe est :</p>
-            <div style="background-color: #F1F5F9; padding: 15px; border-radius: 8px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 5px; color: #F97316; margin: 20px 0;">
-              ${otpCode}
-            </div>
-            <p style="font-size: 12px; color: #64748B;">Ce code est valable pendant 5 minutes.</p>
+          <div style="font-family: Arial; padding: 20px;">
+            <h2>Monan Service</h2>
+            <p>Votre code de validation à 5 chiffres est :</p>
+            <h1 style="color: #F97316; letter-spacing: 5px;">${otpCode}</h1>
           </div>
         `,
       }),
     });
-
-    if (response.ok) {
-      console.log(`✉️ Email OTP envoyé avec succès à ${toEmail} via Brevo HTTP API`);
-      return true;
-    } else {
-      const errorData = await response.json();
-      console.error("❌ Erreur API Brevo :", errorData);
-      console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${toEmail} : ${otpCode}`);
-      return false;
-    }
+    return response.ok;
   } catch (err) {
-    console.error("❌ Erreur réseau Brevo API :", err.message);
-    console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${toEmail} : ${otpCode}`);
+    console.error("❌ Erreur Brevo :", err.message);
     return false;
   }
 }
 
-// Route Healthcheck
-app.get("/", (req, res) => {
-  res.send("API Monan Service Operational 🚀");
-});
+app.get("/", (req, res) => res.send("API Monan Service Opérationnelle 🚀"));
 
-// 1. INSCRIPTION CLIENT & DÉPÔT
-const handleRegister = async (req, res, defaultRole) => {
-  const { nom, telephone, adresse, email, password, role } = req.body;
-
-  if (!email || !password || !nom) {
-    return res.status(400).json({ error: "Veuillez remplir les champs obligatoires." });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-  const userRole = role || defaultRole;
-
+// Authentification
+app.post("/api/auth/register-client", async (req, res) => {
+  const { nom, telephone, adresse, email, password } = req.body;
   try {
-    const existing = await pool.query("SELECT id FROM users WHERE email = $1", [cleanEmail]);
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: "Un compte existe déjà avec cette adresse email." });
-    }
-
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      `INSERT INTO users (nom, telephone, adresse, email, password, role) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING id, nom, telephone, adresse, email, role, is_subscribed, created_at`,
-      [nom.trim(), telephone ? telephone.trim() : "", adresse ? adresse.trim() : "", cleanEmail, hashedPassword, userRole]
+      "INSERT INTO users (nom, telephone, adresse, email, password, role) VALUES ($1,$2,$3,$4,$5,'client') RETURNING *",
+      [nom, telephone, adresse, email.trim().toLowerCase(), hashedPassword]
     );
-
-    return res.status(201).json({
-      message: "Compte créé avec succès !",
-      user: result.rows[0],
-    });
+    res.status(201).json({ user: result.rows[0] });
   } catch (err) {
-    console.error("❌ Erreur inscription :", err.message);
-    return res.status(500).json({ error: "Erreur lors de la création du compte." });
-  }
-};
-
-app.post("/api/auth/register-client", (req, res) => handleRegister(req, res, "client"));
-app.post("/api/auth/register-depot", (req, res) => handleRegister(req, res, "depot"));
-
-// 2. CONNEXION
-app.post("/api/auth/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "Veuillez saisir votre email et votre mot de passe." });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-
-  try {
-    const userResult = await pool.query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
-    if (userResult.rows.length === 0) {
-      return res.status(401).json({ error: "Adresse email ou mot de passe incorrect." });
-    }
-
-    const user = userResult.rows[0];
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: "Adresse email ou mot de passe incorrect." });
-    }
-
-    delete user.password;
-    return res.json({
-      message: "Connexion réussie !",
-      user: user,
-    });
-  } catch (err) {
-    console.error("❌ Erreur connexion :", err.message);
-    return res.status(500).json({ error: "Erreur lors de la connexion." });
+    res.status(400).json({ error: "Email déjà utilisé ou données invalides." });
   }
 });
 
-// 3. DEMANDE DE CODE OTP
-const handleForgotPassword = async (req, res) => {
-  const { email } = req.body;
-
-  if (!email) {
-    return res.status(400).json({ error: "Veuillez fournir une adresse email." });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-
+app.post("/api/auth/register-depot", async (req, res) => {
+  const { nom, telephone, adresse, email, password } = req.body;
   try {
-    const userResult = await pool.query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "Cette adresse email n'est liée à aucun compte." });
-    }
-
-    const otp = Math.floor(10000 + Math.random() * 90000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-    await pool.query(
-      "UPDATE users SET reset_otp = $1, otp_expires_at = $2 WHERE email = $3",
-      [otp, expiresAt, cleanEmail]
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      "INSERT INTO users (nom, telephone, adresse, email, password, role) VALUES ($1,$2,$3,$4,$5,'depot') RETURNING *",
+      [nom, telephone, adresse, email.trim().toLowerCase(), hashedPassword]
     );
-
-    await sendOtpEmail(cleanEmail, otp);
-
-    return res.json({ success: true, message: "Un code de validation à 5 chiffres vous a été envoyé par email." });
-  } catch (error) {
-    console.error("❌ Erreur serveur /forgot-password :", error);
-    return res.status(500).json({ error: "Une erreur interne est survenue sur le serveur." });
+    res.status(201).json({ user: result.rows[0] });
+  } catch (err) {
+    res.status(400).json({ error: "Email déjà utilisé." });
   }
-};
+});
 
-app.post("/api/auth/forgot-password", handleForgotPassword);
-app.post("/forgot-password", handleForgotPassword);
+app.post("/api/auth/login", async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const result = await pool.query("SELECT * FROM users WHERE email = $1", [email.trim().toLowerCase()]);
+    if (result.rows.length === 0) return res.status(401).json({ error: "Identifiants incorrects." });
 
-// 3.5 VÉRIFICATION SEULE DU CODE OTP
-const handleVerifyOtp = async (req, res) => {
-  const { email, code, otp } = req.body;
-  const inputCode = code || otp;
+    const user = result.rows[0];
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) return res.status(401).json({ error: "Identifiants incorrects." });
 
-  if (!email || !inputCode) {
-    return res.status(400).json({ error: "Email et code requis." });
+    delete user.password;
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: "Erreur serveur." });
   }
+});
 
-  const cleanEmail = email.trim().toLowerCase();
+// GESTION DES TARIFS PERSONNALISÉS PAR LE VENDEUR
+app.post("/api/depot/prices", async (req, res) => {
+  const { depot_id, prices } = req.body; // prices: [{ format: 'B6', prix_recharge: 2000, prix_achat: 13000 }, ...]
+  if (!depot_id || !Array.isArray(prices)) {
+    return res.status(400).json({ error: "Données de prix invalides." });
+  }
 
   try {
-    const userResult = await pool.query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "Utilisateur non trouvé." });
+    for (const p of prices) {
+      await pool.query(
+        `INSERT INTO depot_prices (depot_id, format, prix_recharge, prix_achat, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (depot_id, format) 
+         DO UPDATE SET prix_recharge = EXCLUDED.prix_recharge, prix_achat = EXCLUDED.prix_achat, updated_at = NOW()`,
+        [depot_id, p.format, p.prix_recharge, p.prix_achat]
+      );
     }
-
-    const user = userResult.rows[0];
-
-    if (!user.reset_otp || user.reset_otp.trim() !== inputCode.toString().trim()) {
-      return res.status(400).json({ error: "Code de vérification incorrect." });
-    }
-
-    if (new Date() > new Date(user.otp_expires_at)) {
-      return res.status(400).json({ error: "Le code de vérification a expiré." });
-    }
-
-    return res.json({ success: true, message: "Code vérifié avec succès !" });
-  } catch (error) {
-    console.error("❌ Erreur /verify-otp :", error);
-    return res.status(500).json({ error: "Erreur serveur lors de la vérification du code." });
+    res.json({ success: true, message: "Tarifs mis à jour avec succès !" });
+  } catch (err) {
+    console.error("❌ Erreur enregistrement prix :", err.message);
+    res.status(500).json({ error: "Erreur lors de la sauvegarde des tarifs." });
   }
-};
+});
 
-app.post("/api/auth/verify-otp", handleVerifyOtp);
-app.post("/verify-otp", handleVerifyOtp);
-
-// 4. VALIDATION CODE & RÉINITIALISATION
-const handleResetPassword = async (req, res) => {
-  const { email, code, otp, newPassword } = req.body;
-  const inputCode = code || otp;
-
-  if (!email || !inputCode || !newPassword) {
-    return res.status(400).json({ error: "Tous les champs sont requis." });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-
+app.get("/api/depot/prices/:depot_id", async (req, res) => {
   try {
-    const userResult = await pool.query("SELECT * FROM users WHERE email = $1", [cleanEmail]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: "Utilisateur non trouvé." });
-    }
-
-    const user = userResult.rows[0];
-
-    if (!user.reset_otp || user.reset_otp.trim() !== inputCode.toString().trim()) {
-      return res.status(400).json({ error: "Code de vérification incorrect." });
-    }
-
-    if (new Date() > new Date(user.otp_expires_at)) {
-      return res.status(400).json({ error: "Le code de vérification a expiré." });
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await pool.query(
-      "UPDATE users SET password = $1, reset_otp = NULL, otp_expires_at = NULL WHERE email = $2",
-      [hashedPassword, cleanEmail]
-    );
-
-    return res.json({ success: true, message: "Mot de passe réinitialisé avec succès !" });
-  } catch (error) {
-    console.error("❌ Erreur serveur /reset-password :", error);
-    return res.status(500).json({ error: "Une erreur interne est survenue." });
+    const result = await pool.query("SELECT * FROM depot_prices WHERE depot_id = $1", [req.params.depot_id]);
+    res.json({ prices: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: "Erreur récupération tarifs." });
   }
-};
+});
 
-app.post("/api/auth/reset-password", handleResetPassword);
-app.post("/reset-password", handleResetPassword);
-
-// -------------------------------------------------------------
-// 5. GESTION DU BILAN DES VENTES (CÔTÉ VENDEUR / DÉPÔT)
-// -------------------------------------------------------------
-
-// Enregistrer une nouvelle vente
+// Ventes et Bilans
 app.post("/api/sales", async (req, res) => {
   const { depot_id, client_nom, bouteille_type, marque, couleur, type_operation, quantite, prix_unitaire } = req.body;
-
-  if (!bouteille_type || !quantite || !prix_unitaire) {
-    return res.status(400).json({ error: "Veuillez remplir toutes les informations de la vente." });
-  }
-
   const qte = parseInt(quantite, 10);
   const pu = parseInt(prix_unitaire, 10);
   const total = qte * pu;
@@ -334,41 +193,22 @@ app.post("/api/sales", async (req, res) => {
     const result = await pool.query(
       `INSERT INTO ventes (depot_id, client_nom, bouteille_type, marque, couleur, type_operation, quantite, prix_unitaire, montant_total)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [
-        depot_id || null, 
-        client_nom ? client_nom.trim() : "Client Passage", 
-        bouteille_type, 
-        marque || 'Total', 
-        couleur || '#F97316', 
-        type_operation || 'Recharge',
-        qte, 
-        pu, 
-        total
-      ]
+      [depot_id || null, client_nom || "Client Passage", bouteille_type, marque, couleur, type_operation, qte, pu, total]
     );
-
-    return res.status(201).json({ success: true, sale: result.rows[0] });
+    res.status(201).json({ success: true, sale: result.rows[0] });
   } catch (err) {
-    console.error("❌ Erreur enregistrement vente :", err.message);
-    return res.status(500).json({ error: "Erreur lors de l'enregistrement de la vente." });
+    res.status(500).json({ error: "Erreur enregistrement vente." });
   }
 });
 
-// Obtenir le bilan des ventes
 app.get("/api/sales/report", async (req, res) => {
-  const { depot_id, period, date_offset } = req.query;
+  const { period, date_offset } = req.query;
   const offset = parseInt(date_offset, 10) || 0;
 
-  let timeClause = "created_at >= CURRENT_DATE - INTERVAL '$1 days' AND created_at < CURRENT_DATE - INTERVAL '$2 days'";
-  
-  if (period === 'day') {
-    if (offset === 0) {
-      timeClause = "created_at >= CURRENT_DATE";
-    } else {
-      const startDays = Math.abs(offset);
-      const endDays = startDays - 1;
-      timeClause = `created_at >= CURRENT_DATE - INTERVAL '${startDays} days' AND created_at < CURRENT_DATE - INTERVAL '${endDays} days'`;
-    }
+  let timeClause = "created_at >= CURRENT_DATE";
+  if (period === 'day' && offset !== 0) {
+    const start = Math.abs(offset);
+    timeClause = `created_at >= CURRENT_DATE - INTERVAL '${start} days' AND created_at < CURRENT_DATE - INTERVAL '${start - 1} days'`;
   } else if (period === 'week') {
     timeClause = "created_at >= NOW() - INTERVAL '7 days'";
   } else if (period === 'month') {
@@ -378,31 +218,24 @@ app.get("/api/sales/report", async (req, res) => {
   }
 
   try {
-    let query = `SELECT * FROM ventes WHERE ${timeClause} ORDER BY created_at DESC`;
-    const result = await pool.query(query);
-
+    const result = await pool.query(`SELECT * FROM ventes WHERE ${timeClause} ORDER BY created_at DESC`);
     const sales = result.rows;
     const totalRecette = sales.reduce((acc, s) => acc + (parseInt(s.montant_total) || 0), 0);
-    const totalB6 = sales.filter(s => s.bouteille_type.includes('B6')).reduce((acc, s) => acc + s.quantite, 0);
-    const totalB12 = sales.filter(s => s.bouteille_type.includes('B12')).reduce((acc, s) => acc + s.quantite, 0);
-    const totalB28 = sales.filter(s => s.bouteille_type.includes('B28')).reduce((acc, s) => acc + s.quantite, 0);
-
-    return res.json({
+    res.json({
       success: true,
-      period: period || 'day',
       totalRecette,
       count: sales.length,
-      totals: { b6: totalB6, b12: totalB12, b28: totalB28 },
+      totals: {
+        b6: sales.filter(s => s.bouteille_type.includes('B6')).reduce((a, s) => a + s.quantite, 0),
+        b12: sales.filter(s => s.bouteille_type.includes('B12')).reduce((a, s) => a + s.quantite, 0),
+        b28: sales.filter(s => s.bouteille_type.includes('B28')).reduce((a, s) => a + s.quantite, 0),
+      },
       sales
     });
   } catch (err) {
-    console.error("❌ Erreur rapport ventes :", err.message);
-    return res.status(500).json({ error: "Erreur lors de la récupération du bilan." });
+    res.status(500).json({ error: "Erreur bilan." });
   }
 });
 
-// Démarrage du serveur
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Serveur Monan backend démarré sur le port ${PORT}`);
-});
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Serveur Monan backend sur port ${PORT}`));
