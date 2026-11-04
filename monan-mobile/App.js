@@ -116,7 +116,7 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
   );
 };
 
-// COMPOSANT IMAGE SÉCURISÉ POUR LES BOUTEILLES (AGRANDI ET SANS EMOJI)
+// COMPOSANT IMAGE SÉCURISÉ POUR LES BOUTEILLES (SANS EMOJI)
 const BottleImageWithFallback = ({ uri, brandColor, brandName }) => {
   const [imageError, setImageError] = useState(false);
 
@@ -166,15 +166,15 @@ const QuantityStepper = ({ value, onChange }) => {
 };
 
 const MARQUES_GAZ = [
-  { id: 'total', name: 'TotalEnergies', color: '#F97316', imageUrl: 'https://img.freepik.com/free-psd/orange-gas-cylinder-isolated-transparent-background_191095-23646.png' },
-  { id: 'shell', name: 'Shell Gas', color: '#1E40AF', imageUrl: 'https://img.freepik.com/free-psd/blue-gas-cylinder-isolated-transparent-background_191095-23647.png' },
-  { id: 'petro', name: 'Pétro Ivoire', color: '#1E1B4B', imageUrl: 'https://img.freepik.com/free-psd/dark-blue-gas-tank_191095-23648.png' },
-  { id: 'oryx', name: 'Oryx Energies', color: '#0EA5E9', imageUrl: 'https://img.freepik.com/free-psd/cyan-gas-bottle_191095-23649.png' },
-  { id: 'petroci', name: 'Pétroci', color: '#16A34A', imageUrl: 'https://img.freepik.com/free-psd/silver-gas-cylinder_191095-23652.png' },
-  { id: 'simam', name: 'Simam Gas', color: '#EAB308', imageUrl: 'https://img.freepik.com/free-psd/yellow-gas-bottle_191095-23650.png' },
-  { id: 'districom', name: 'Districom Gaz', color: '#EF4444', imageUrl: 'https://img.freepik.com/free-psd/red-gas-cylinder_191095-23651.png' },
-  { id: 'ola', name: 'OLA Energy', color: '#991B1B', imageUrl: 'https://img.freepik.com/free-psd/red-gas-cylinder_191095-23651.png' },
-  { id: 'corlay', name: 'Corlay', color: '#15803D', imageUrl: 'https://img.freepik.com/free-psd/cyan-gas-bottle_191095-23649.png' },
+  { id: 'total', name: 'TotalEnergies', color: '#F97316', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
+  { id: 'shell', name: 'Shell Gas', color: '#1E40AF', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
+  { id: 'petro', name: 'Pétro Ivoire', color: '#1E1B4B', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
+  { id: 'oryx', name: 'Oryx Energies', color: '#0EA5E9', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
+  { id: 'petroci', name: 'Pétroci', color: '#16A34A', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
+  { id: 'simam', name: 'Simam Gas', color: '#EAB308', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
+  { id: 'districom', name: 'Districom Gaz', color: '#EF4444', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
+  { id: 'ola', name: 'OLA Energy', color: '#991B1B', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
+  { id: 'corlay', name: 'Corlay', color: '#15803D', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
 ];
 
 const CYLINDER_TYPES = [
@@ -261,7 +261,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // RETOUR TACTILE ANDROID (BOUTON & GESTES DE BALAYAGE)
+  // RETOUR TACTILE ANDROID ET GESTES DE NAVIGATION
   useEffect(() => {
     const onBackPress = () => {
       if (!user) {
@@ -742,7 +742,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* HEADER DE L'APPLICATION */}
+      {/* HEADER PRINCIPAL */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -984,7 +984,7 @@ export default function App() {
                   </View>
                 )}
 
-                {/* ONGLET TARIFS VENDEUR */}
+                {/* TARIFS VENDEUR */}
                 {dashboardTab === 'pricing' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Prix Vendeur</Text>
@@ -1031,7 +1031,7 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CATALOGUE ET COMMANDE CLIENT - AVEC BANDEAU DE MARQUE ULTRA-LISIBLE SUR MOBILE */}
+                {/* CATALOGUE DE BOUTEILLES & COMMANDE CLIENT (ADAPTÉ WEB & MOBILE) */}
                 {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>
@@ -1085,7 +1085,7 @@ export default function App() {
                           : (parseInt(vendorPrices[selectedCylinder.id]?.achat, 10) || selectedCylinder.priceAchat);
 
                         return (
-                          <FadeInView key={m.id} delay={idx * 50} style={{ width: '48%' }}>
+                          <FadeInView key={m.id} delay={idx * 30} style={{ flexGrow: 0 }}>
                             <AnimatedButton
                               style={[styles.productCard, isSelected && styles.productCardActive]}
                               onPress={() => {
@@ -1093,7 +1093,6 @@ export default function App() {
                                 if (dashboardTab === 'catalog') setDashboardTab('order');
                               }}
                             >
-                              {/* BANDEAU DE MARQUE HAUTE VISIBILITÉ POUR TÉLÉPHONE */}
                               <View style={[styles.cardHeaderBadge, { backgroundColor: m.color }]}>
                                 <Text style={styles.cardHeaderBadgeText} numberOfLines={1}>
                                   {m.name.toUpperCase()} • {selectedCylinder.id}
@@ -1324,7 +1323,7 @@ export default function App() {
               </FadeInView>
             )
           ) : (
-            /* ÉCRAN D'ACCUEIL INITIAL (BIENVENUE) */
+            /* ACCUEIL D'AUTHENTIFICATION */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
@@ -1521,24 +1520,38 @@ const styles = StyleSheet.create({
   
   priceSectionHeader: { fontSize: 13, fontWeight: '800', color: '#0F172A', marginTop: 8, marginBottom: 6 },
 
-  productGridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' },
-  productCard: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 12, paddingBottom: 10, borderWidth: 1.5, borderColor: '#E2E8F0', alignItems: 'center', overflow: 'hidden' },
+  productGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: Platform.OS === 'web' ? 'flex-start' : 'space-between',
+  },
+  productCard: {
+    width: Platform.OS === 'web' ? 180 : '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingBottom: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
   productCardActive: { borderColor: '#F97316', backgroundColor: '#FFF7ED' },
   
   cardHeaderBadge: { width: '100%', paddingVertical: 4, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
   cardHeaderBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
 
-  productImageWrapper: { width: '100%', height: 115, justifyContent: 'center', alignItems: 'center', marginVertical: 6 },
-  colorBackgroundGlow: { position: 'absolute', width: 70, height: 70, borderRadius: 35 },
-  productBottleImg: { width: 85, height: 105 },
+  productImageWrapper: { width: '100%', height: 110, justifyContent: 'center', alignItems: 'center', marginVertical: 4 },
+  colorBackgroundGlow: { position: 'absolute', width: 65, height: 65, borderRadius: 32.5 },
+  productBottleImg: { width: 75, height: 95 },
   
   productTitle: { fontSize: 11, fontWeight: '800', color: '#0F172A', marginTop: 2 },
   productSubTitle: { fontSize: 10, fontWeight: '600', color: '#64748B', marginTop: 1 },
   productPrice: { fontSize: 13, fontWeight: '900', color: '#2563EB', marginTop: 3 },
 
   fallbackBottleContainer: {
-    width: 70,
-    height: 90,
+    width: 65,
+    height: 85,
     borderRadius: 10,
     borderWidth: 2,
     alignItems: 'center',
@@ -1546,22 +1559,22 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   fallbackBottleTop: {
-    width: 20,
-    height: 7,
+    width: 18,
+    height: 6,
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
     position: 'absolute',
-    top: -6,
+    top: -5,
   },
   fallbackBottleBody: {
-    width: 50,
-    height: 60,
+    width: 46,
+    height: 55,
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fallbackBottleText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
     color: '#FFFFFF'
   },
