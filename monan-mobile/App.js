@@ -14,7 +14,8 @@ import {
   Image,
   Animated,
   Pressable,
-  Easing
+  Easing,
+  BackHandler
 } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -112,6 +113,31 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
         {children}
       </Animated.View>
     </Pressable>
+  );
+};
+
+// COMPOSANT IMAGE SÉCURISÉ AVEC REPLI STYLISÉ SI L'IMAGE DISTANTE NE S'AFFICHE PAS
+const BottleImageWithFallback = ({ uri, brandColor, brandName }) => {
+  const [imageError, setImageError] = useState(false);
+
+  if (imageError || !uri) {
+    return (
+      <View style={[styles.fallbackBottleContainer, { backgroundColor: brandColor + '22', borderColor: brandColor }]}>
+        <View style={[styles.fallbackBottleTop, { backgroundColor: brandColor }]} />
+        <View style={[styles.fallbackBottleBody, { backgroundColor: brandColor }]}>
+          <Text style={styles.fallbackBottleText}>🔥</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.productBottleImg}
+      resizeMode="contain"
+      onError={() => setImageError(true)}
+    />
   );
 };
 
@@ -226,10 +252,60 @@ export default function App() {
 
   const [newSaleClient, setNewSaleClient] = useState('');
 
+  const daysLeft = user ? getDaysLeftInTrial(user.createdAt) : 30;
+  const isTrialExpired = user && activeRoleMode === 'depot' && !user.isSubscribed && daysLeft <= 0;
+
   useEffect(() => {
     const timer = setTimeout(() => setIsAppReady(true), 800);
     return () => clearTimeout(timer);
   }, []);
+
+  // GESTION DU BOUTON ET RETOUR TACTILE (ANDROID & GESTES)
+  useEffect(() => {
+    const onBackPress = () => {
+      // 1. Utilisateur non connecté
+      if (!user) {
+        if (currentScreen === 'forgot_password') {
+          if (resetStep > 1) {
+            setResetStep((prevStep) => prevStep - 1);
+            return true;
+          }
+          setCurrentScreen('login');
+          return true;
+        }
+
+        if (currentScreen === 'login' || currentScreen === 'register_client' || currentScreen === 'register_depot') {
+          setCurrentScreen('welcome');
+          return true;
+        }
+
+        return false; // Laisse quitter l'app seulement sur l'écran d'accueil 'welcome'
+      }
+
+      // 2. Utilisateur connecté
+      if (showPaymentSection && !isTrialExpired) {
+        setShowPaymentSection(false);
+        return true;
+      }
+
+      if (dashboardTab !== 'home') {
+        setDashboardTab('home');
+        return true;
+      }
+
+      return false; // Laisse quitter/minimiser l'app sur l'onglet Accueil du tableau de bord
+    };
+
+    const backSubscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+    return () => {
+      if (backSubscription && typeof backSubscription.remove === 'function') {
+        backSubscription.remove();
+      } else {
+        BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+      }
+    };
+  }, [user, currentScreen, resetStep, showPaymentSection, isTrialExpired, dashboardTab]);
 
   useEffect(() => {
     if (user && activeRoleMode === 'depot' && dashboardTab === 'sales_report') {
@@ -244,9 +320,12 @@ export default function App() {
         `${API_URL}/api/sales/report?period=${salesPeriod}&date_offset=${dayOffset}`
       );
       if (response.ok) {
-        const data = await response.json();
-        if (data.sales && data.sales.length > 0) {
-          setSalesReport(data);
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json();
+          if (data.sales && data.sales.length > 0) {
+            setSalesReport(data);
+          }
         }
       }
     } catch (err) {
@@ -403,7 +482,7 @@ export default function App() {
     }
   };
 
-  const getDaysLeftInTrial = (createdAtDate) => {
+  function getDaysLeftInTrial(createdAtDate) {
     if (!createdAtDate) return 30;
     const created = new Date(createdAtDate);
     const now = new Date();
@@ -411,7 +490,7 @@ export default function App() {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     const remaining = 30 - diffDays;
     return remaining > 0 ? remaining : 0;
-  };
+  }
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -432,7 +511,7 @@ export default function App() {
       if (contentType && contentType.includes('application/json')) {
         data = await response.json();
       } else {
-        throw new Error(`Erreur serveur (${response.status}).`);
+        throw new Error(`Erreur serveur (${response.status}). Indisponibilité temporaire.`);
       }
 
       if (!response.ok) {
@@ -518,15 +597,24 @@ export default function App() {
     try {
       const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim().toLowerCase() }),
       });
-      const data = await response.json();
+
+      const contentType = response.headers.get('content-type');
+      let data;
+
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        throw new Error(`Erreur serveur (Code ${response.status}). Vérifiez la route backend.`);
+      }
+
       if (!response.ok) throw new Error(data.error || "Email introuvable.");
       setResetStep(2);
-      Alert.alert('Code envoyé', data.message);
+      Alert.alert('Code envoyé', data.message || 'Consultez votre boîte de réception.');
     } catch (error) {
-      Alert.alert('Erreur', error.message);
+      Alert.alert('Erreur Réinitialisation', error.message);
     } finally {
       setLoading(false);
     }
@@ -538,13 +626,22 @@ export default function App() {
     try {
       const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim().toLowerCase(), code: resetCode.trim() }),
       });
-      if (!response.ok) throw new Error("Code incorrect.");
+
+      const contentType = response.headers.get('content-type');
+      let data;
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        throw new Error(`Erreur serveur (Code ${response.status}).`);
+      }
+
+      if (!response.ok) throw new Error(data.error || "Code incorrect.");
       setResetStep(3);
     } catch (error) {
-      Alert.alert('Erreur', error.message);
+      Alert.alert('Erreur Validation', error.message);
     } finally {
       setLoading(false);
     }
@@ -556,11 +653,19 @@ export default function App() {
     try {
       const response = await fetch(`${API_URL}/api/auth/reset-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim().toLowerCase(), code: resetCode.trim(), newPassword: newPassword.trim() }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+
+      const contentType = response.headers.get('content-type');
+      let data;
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        throw new Error(`Erreur serveur (Code ${response.status}).`);
+      }
+
+      if (!response.ok) throw new Error(data.error || "Mise à jour échouée.");
       Alert.alert('Succès', 'Mot de passe mis à jour.', [{ text: 'Connexion', onPress: () => setCurrentScreen('login') }]);
     } catch (error) {
       Alert.alert('Erreur', error.message);
@@ -634,9 +739,6 @@ export default function App() {
       </View>
     );
   }
-
-  const daysLeft = user ? getDaysLeftInTrial(user.createdAt) : 30;
-  const isTrialExpired = user && activeRoleMode === 'depot' && !user.isSubscribed && daysLeft <= 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -741,7 +843,7 @@ export default function App() {
                   </View>
                 )}
 
-                {/* BARRE D'ONGLETS SANS SURCHARGE */}
+                {/* BARRE D'ONGLETS */}
                 <View style={styles.pillsContainerOuter}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScrollContent}>
                     <AnimatedButton
@@ -811,7 +913,7 @@ export default function App() {
                   </ScrollView>
                 </View>
 
-                {/* TABLEAU DE BORD ACCUEIL - BOUTONS SIMPLES ET PROS */}
+                {/* TABLEAU DE BORD ACCUEIL */}
                 {dashboardTab === 'home' && (
                   <View style={styles.fullSection}>
                     <View style={styles.userGreetingCard}>
@@ -852,7 +954,6 @@ export default function App() {
                       )}
                     </View>
 
-                    {/* ACTIONS SANS COMMENTAIRES NI TEXTES DE REMPLISSAGE */}
                     {activeRoleMode === 'depot' ? (
                       <View style={{ gap: 10 }}>
                         <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('pricing')}>
@@ -864,7 +965,7 @@ export default function App() {
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('add_stock')}>
-                          <Text style={styles.actionCardTitleWhite}> Gestion des Stocks</Text>
+                          <Text style={styles.actionCardTitleWhite}>Gestion des Stocks</Text>
                         </AnimatedButton>
                       </View>
                     ) : (
@@ -874,11 +975,11 @@ export default function App() {
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.actionCardTitleWhite}> Commander une Livraison</Text>
+                          <Text style={styles.actionCardTitleWhite}>Commander une Livraison</Text>
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('depots')}>
-                          <Text style={styles.actionCardTitleWhite}> Dépôts à Proximité</Text>
+                          <Text style={styles.actionCardTitleWhite}>Dépôts à Proximité</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -914,7 +1015,7 @@ export default function App() {
                       </View>
                     </View>
 
-                    <Text style={styles.priceSectionHeader}> Format B28 (28 kg)</Text>
+                    <Text style={styles.priceSectionHeader}>Format B28 (28 kg)</Text>
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.label}>Recharge (F)</Text>
@@ -996,7 +1097,11 @@ export default function App() {
                             >
                               <View style={styles.productImageWrapper}>
                                 <View style={[styles.colorBackgroundGlow, { backgroundColor: m.color + '22' }]} />
-                                <Image source={{ uri: m.imageUrl }} style={styles.productBottleImg} resizeMode="contain" />
+                                <BottleImageWithFallback
+                                  uri={m.imageUrl}
+                                  brandColor={m.color}
+                                  brandName={m.name}
+                                />
                               </View>
                               <Text style={styles.productTitle} numberOfLines={1}>{m.name}</Text>
                               <Text style={styles.productPrice}>{cardPrice.toLocaleString('fr-FR')} CFA</Text>
@@ -1145,7 +1250,7 @@ export default function App() {
               </FadeInView>
             )
           ) : (
-            /* ÉCRAN D'ACCUEIL INITIAL (BIENVENUE) - CARTES CLAIRES ET ÉPURÉES */
+            /* ÉCRAN D'ACCUEIL INITIAL (BIENVENUE) */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
@@ -1350,6 +1455,35 @@ const styles = StyleSheet.create({
   productBottleImg: { width: 70, height: 85 },
   productTitle: { fontSize: 11, fontWeight: '700', color: '#334155', marginTop: 2 },
   productPrice: { fontSize: 13, fontWeight: '900', color: '#2563EB', marginTop: 2 },
+
+  // STYLES POUR L'AFFICHAGE REPLI DES BOUTEILLES DE GAZ
+  fallbackBottleContainer: {
+    width: 60,
+    height: 75,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  fallbackBottleTop: {
+    width: 18,
+    height: 6,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+    position: 'absolute',
+    top: -5,
+  },
+  fallbackBottleBody: {
+    width: 44,
+    height: 52,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fallbackBottleText: {
+    fontSize: 16,
+  },
 
   depotCard: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 12, marginBottom: 10 },
   depotHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
