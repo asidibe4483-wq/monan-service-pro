@@ -2,7 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
-const nodemailer = require("nodemailer");
 const bcrypt = require("bcrypt");
 
 const app = express();
@@ -17,10 +16,9 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
-// Initialisation et migration automatique de la base de données
+// Initialisation et migration automatique de la BDD
 async function initDb() {
   try {
-    // 1. Création de la table si elle n'existe pas du tout
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -36,7 +34,6 @@ async function initDb() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- 2. Ajout dynamique des colonnes si la table existait déjà sans ces champs
       ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_otp VARCHAR(10);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMP;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS nom VARCHAR(255);
@@ -46,33 +43,71 @@ async function initDb() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_subscribed BOOLEAN DEFAULT FALSE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     `);
-    console.log("✅ Table 'users' synchronisée avec toutes les colonnes OTP et profil.");
+    console.log("✅ Table 'users' synchronisée avec toutes les colonnes.");
   } catch (err) {
     console.error("❌ Erreur BDD lors de l'initialisation :", err.message);
   }
 }
 initDb();
 
-// Transporteur Nodemailer (SMTP Gmail avec Timeout de 10s)
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: (process.env.SMTP_PORT || "465") === "587",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  connectionTimeout: 10000,
-});
+// Envoi d'e-mail via l'API HTTP Brevo (Port 443 - HTTPS inbloquable)
+async function sendOtpEmail(toEmail, otpCode) {
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.SENDER_EMAIL || "ali.sidibe@uvci.edu";
+
+  if (!apiKey) {
+    console.log("⚠️ BREVO_API_KEY manquante dans les variables d'environnement.");
+    console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${toEmail} : ${otpCode}`);
+    return false;
+  }
+
+  try {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "api-key": apiKey,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: "Monan Service", email: senderEmail },
+        to: [{ email: toEmail }],
+        subject: "Code de réinitialisation Monan Service",
+        htmlContent: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; color: #0F172A;">
+            <h2 style="color: #2563EB;">Monan Service</h2>
+            <p>Votre code de sécurité à 5 chiffres pour réinitialiser votre mot de passe est :</p>
+            <div style="background-color: #F1F5F9; padding: 15px; border-radius: 8px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 5px; color: #F97316; margin: 20px 0;">
+              ${otpCode}
+            </div>
+            <p style="font-size: 12px; color: #64748B;">Ce code est valable pendant 5 minutes.</p>
+          </div>
+        `,
+      }),
+    });
+
+    if (response.ok) {
+      console.log(`✉️ Email OTP envoyé avec succès à ${toEmail} via Brevo HTTP API`);
+      return true;
+    } else {
+      const errorData = await response.json();
+      console.error("❌ Erreur API Brevo :", errorData);
+      console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${toEmail} : ${otpCode}`);
+      return false;
+    }
+  } catch (err) {
+    console.error("❌ Erreur réseau Brevo API :", err.message);
+    console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${toEmail} : ${otpCode}`);
+    return false;
+  }
+}
 
 // Route Healthcheck
 app.get("/", (req, res) => {
   res.send("API Monan Service Operational 🚀");
 });
 
-// -------------------------------------------------------------
 // 1. INSCRIPTION CLIENT & DÉPÔT
-// -------------------------------------------------------------
 const handleRegister = async (req, res, defaultRole) => {
   const { nom, telephone, adresse, email, password, role } = req.body;
 
@@ -110,9 +145,7 @@ const handleRegister = async (req, res, defaultRole) => {
 app.post("/api/auth/register-client", (req, res) => handleRegister(req, res, "client"));
 app.post("/api/auth/register-depot", (req, res) => handleRegister(req, res, "depot"));
 
-// -------------------------------------------------------------
-// 2. CONNEXION (LOGIN)
-// -------------------------------------------------------------
+// 2. CONNEXION
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -146,9 +179,7 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
 // 3. DEMANDE DE CODE OTP (MOT DE PASSE OUBLIÉ)
-// -------------------------------------------------------------
 const handleForgotPassword = async (req, res) => {
   const { email } = req.body;
 
@@ -164,31 +195,15 @@ const handleForgotPassword = async (req, res) => {
       return res.status(404).json({ error: "Cette adresse email n'est liée à aucun compte." });
     }
 
-    // Code aléatoire à 5 chiffres
     const otp = Math.floor(10000 + Math.random() * 90000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes de validité
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
     await pool.query(
       "UPDATE users SET reset_otp = $1, otp_expires_at = $2 WHERE email = $3",
       [otp, expiresAt, cleanEmail]
     );
 
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      try {
-        await transporter.sendMail({
-          from: `"Monan Service" <${process.env.SMTP_USER}>`,
-          to: cleanEmail,
-          subject: "Code de réinitialisation Monan Service",
-          text: `Votre code de sécurité à 5 chiffres est : ${otp} (valable 5 minutes).`,
-        });
-        console.log(`✉️ Email OTP envoyé avec succès à ${cleanEmail}`);
-      } catch (mailErr) {
-        console.error("❌ Erreur d'envoi SMTP Gmail :", mailErr.message);
-        console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${cleanEmail} : ${otp}`);
-      }
-    } else {
-      console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${cleanEmail} : ${otp}`);
-    }
+    await sendOtpEmail(cleanEmail, otp);
 
     return res.json({ success: true, message: "Un code de validation à 5 chiffres vous a été envoyé par email." });
   } catch (error) {
@@ -197,13 +212,10 @@ const handleForgotPassword = async (req, res) => {
   }
 };
 
-// Aliases pour garantir la compatibilité des routes
 app.post("/api/auth/forgot-password", handleForgotPassword);
 app.post("/forgot-password", handleForgotPassword);
 
-// -------------------------------------------------------------
-// 4. VALIDATION DU CODE & RÉINITIALISATION DU MOT DE PASSE
-// -------------------------------------------------------------
+// 4. VALIDATION CODE & RÉINITIALISATION
 const handleResetPassword = async (req, res) => {
   const { email, code, otp, newPassword } = req.body;
   const inputCode = code || otp;
@@ -243,11 +255,10 @@ const handleResetPassword = async (req, res) => {
   }
 };
 
-// Aliases pour garantir la compatibilité des routes
 app.post("/api/auth/reset-password", handleResetPassword);
 app.post("/reset-password", handleResetPassword);
 
-// Démarrage du serveur sur host 0.0.0.0
+// Démarrage du serveur
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Serveur Monan backend démarré sur le port ${PORT}`);
