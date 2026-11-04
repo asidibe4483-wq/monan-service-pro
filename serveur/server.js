@@ -42,15 +42,34 @@ async function initDb() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'client';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_subscribed BOOLEAN DEFAULT FALSE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+      -- Table Ventes enrichie avec Marque, Couleur et Type d'Opération
+      CREATE TABLE IF NOT EXISTS ventes (
+        id SERIAL PRIMARY KEY,
+        depot_id INTEGER,
+        client_nom VARCHAR(255),
+        bouteille_type VARCHAR(50),
+        marque VARCHAR(100),
+        couleur VARCHAR(50),
+        type_operation VARCHAR(50) DEFAULT 'Recharge',
+        quantite INTEGER NOT NULL,
+        prix_unitaire INTEGER NOT NULL,
+        montant_total INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      ALTER TABLE ventes ADD COLUMN IF NOT EXISTS marque VARCHAR(100);
+      ALTER TABLE ventes ADD COLUMN IF NOT EXISTS couleur VARCHAR(50);
+      ALTER TABLE ventes ADD COLUMN IF NOT EXISTS type_operation VARCHAR(50) DEFAULT 'Recharge';
     `);
-    console.log("✅ Table 'users' synchronisée avec toutes les colonnes.");
+    console.log("✅ Tables 'users' et 'ventes' (marques & couleurs) synchronisées avec succès.");
   } catch (err) {
     console.error("❌ Erreur BDD lors de l'initialisation :", err.message);
   }
 }
 initDb();
 
-// Envoi d'e-mail via l'API HTTP Brevo (Port 443 - HTTPS inbloquable)
+// Envoi d'e-mail via l'API HTTP Brevo (Port 443)
 async function sendOtpEmail(toEmail, otpCode) {
   const apiKey = process.env.BREVO_API_KEY;
   const senderEmail = process.env.SENDER_EMAIL || "ali.sidibe@uvci.edu";
@@ -179,7 +198,7 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// 3. DEMANDE DE CODE OTP (MOT DE PASSE OUBLIÉ)
+// 3. DEMANDE DE CODE OTP
 const handleForgotPassword = async (req, res) => {
   const { email } = req.body;
 
@@ -215,7 +234,7 @@ const handleForgotPassword = async (req, res) => {
 app.post("/api/auth/forgot-password", handleForgotPassword);
 app.post("/forgot-password", handleForgotPassword);
 
-// 3.5 VÉRIFICATION SEULE DU CODE OTP (SANS CHANGER LE MOT DE PASSE)
+// 3.5 VÉRIFICATION SEULE DU CODE OTP
 const handleVerifyOtp = async (req, res) => {
   const { email, code, otp } = req.body;
   const inputCode = code || otp;
@@ -252,7 +271,7 @@ const handleVerifyOtp = async (req, res) => {
 app.post("/api/auth/verify-otp", handleVerifyOtp);
 app.post("/verify-otp", handleVerifyOtp);
 
-// 4. VALIDATION CODE & RÉINITIALISATION DE MOT DE PASSE
+// 4. VALIDATION CODE & RÉINITIALISATION
 const handleResetPassword = async (req, res) => {
   const { email, code, otp, newPassword } = req.body;
   const inputCode = code || otp;
@@ -294,6 +313,93 @@ const handleResetPassword = async (req, res) => {
 
 app.post("/api/auth/reset-password", handleResetPassword);
 app.post("/reset-password", handleResetPassword);
+
+// -------------------------------------------------------------
+// 5. GESTION DU BILAN DES VENTES (CÔTÉ VENDEUR / DÉPÔT)
+// -------------------------------------------------------------
+
+// Enregistrer une nouvelle vente
+app.post("/api/sales", async (req, res) => {
+  const { depot_id, client_nom, bouteille_type, marque, couleur, type_operation, quantite, prix_unitaire } = req.body;
+
+  if (!bouteille_type || !quantite || !prix_unitaire) {
+    return res.status(400).json({ error: "Veuillez remplir toutes les informations de la vente." });
+  }
+
+  const qte = parseInt(quantite, 10);
+  const pu = parseInt(prix_unitaire, 10);
+  const total = qte * pu;
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO ventes (depot_id, client_nom, bouteille_type, marque, couleur, type_operation, quantite, prix_unitaire, montant_total)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [
+        depot_id || null, 
+        client_nom ? client_nom.trim() : "Client Passage", 
+        bouteille_type, 
+        marque || 'Total', 
+        couleur || '#F97316', 
+        type_operation || 'Recharge',
+        qte, 
+        pu, 
+        total
+      ]
+    );
+
+    return res.status(201).json({ success: true, sale: result.rows[0] });
+  } catch (err) {
+    console.error("❌ Erreur enregistrement vente :", err.message);
+    return res.status(500).json({ error: "Erreur lors de l'enregistrement de la vente." });
+  }
+});
+
+// Obtenir le bilan des ventes
+app.get("/api/sales/report", async (req, res) => {
+  const { depot_id, period, date_offset } = req.query;
+  const offset = parseInt(date_offset, 10) || 0;
+
+  let timeClause = "created_at >= CURRENT_DATE - INTERVAL '$1 days' AND created_at < CURRENT_DATE - INTERVAL '$2 days'";
+  
+  if (period === 'day') {
+    if (offset === 0) {
+      timeClause = "created_at >= CURRENT_DATE";
+    } else {
+      const startDays = Math.abs(offset);
+      const endDays = startDays - 1;
+      timeClause = `created_at >= CURRENT_DATE - INTERVAL '${startDays} days' AND created_at < CURRENT_DATE - INTERVAL '${endDays} days'`;
+    }
+  } else if (period === 'week') {
+    timeClause = "created_at >= NOW() - INTERVAL '7 days'";
+  } else if (period === 'month') {
+    timeClause = "DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)";
+  } else if (period === 'year') {
+    timeClause = "DATE_TRUNC('year', created_at) = DATE_TRUNC('year', CURRENT_DATE)";
+  }
+
+  try {
+    let query = `SELECT * FROM ventes WHERE ${timeClause} ORDER BY created_at DESC`;
+    const result = await pool.query(query);
+
+    const sales = result.rows;
+    const totalRecette = sales.reduce((acc, s) => acc + (parseInt(s.montant_total) || 0), 0);
+    const totalB6 = sales.filter(s => s.bouteille_type.includes('B6')).reduce((acc, s) => acc + s.quantite, 0);
+    const totalB12 = sales.filter(s => s.bouteille_type.includes('B12')).reduce((acc, s) => acc + s.quantite, 0);
+    const totalB28 = sales.filter(s => s.bouteille_type.includes('B28')).reduce((acc, s) => acc + s.quantite, 0);
+
+    return res.json({
+      success: true,
+      period: period || 'day',
+      totalRecette,
+      count: sales.length,
+      totals: { b6: totalB6, b12: totalB12, b28: totalB28 },
+      sales
+    });
+  } catch (err) {
+    console.error("❌ Erreur rapport ventes :", err.message);
+    return res.status(500).json({ error: "Erreur lors de la récupération du bilan." });
+  }
+});
 
 // Démarrage du serveur
 const PORT = process.env.PORT || 5000;

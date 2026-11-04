@@ -106,37 +106,29 @@ const QuantityStepper = ({ value, onChange }) => {
   );
 };
 
+// CATALOGUE DÉTAILLÉ DE BOUTEILLES DE GAZ (COULEURS ET MARQUES EN CÔTE D'IVOIRE)
+const MARQUES_GAZ = [
+  { id: 'total', name: 'TotalEnergies', color: '#F97316', labelColor: 'Orange' },
+  { id: 'shell', name: 'Shell Gas', color: '#1E40AF', labelColor: 'Bleue' },
+  { id: 'petro', name: 'Pétro Ivoire', color: '#334155', labelColor: 'Bleu Nuit / Gris' },
+  { id: 'oryx', name: 'Oryx Energies', color: '#0EA5E9', labelColor: 'Cyan' },
+  { id: 'simam', name: 'Simam Gas', color: '#EAB308', labelColor: 'Jaune' },
+  { id: 'districom', name: 'Districom Gaz', color: '#EF4444', labelColor: 'Rouge' },
+  { id: 'ola', name: 'OLA Energy', color: '#991B1B', labelColor: 'Bordeaux' },
+  { id: 'corlay', name: 'Corlay', color: '#16A34A', labelColor: 'Verte' },
+];
+
 const CYLINDER_TYPES = [
-  { id: 'B6', name: 'B6 (6 kg)', price: 2500, icon: '⚡' },
-  { id: 'B12', name: 'B12 (12.5 kg)', price: 5500, icon: '🔥' },
-  { id: 'B28', name: 'B28 (28 kg)', price: 13000, icon: '🏭' },
+  { id: 'B6', name: 'B6 (6 kg)', format: '6 kg', priceRecharge: 2300, priceAchat: 13000 },
+  { id: 'B12', name: 'B12 (12.5 kg)', format: '12.5 kg', priceRecharge: 5500, priceAchat: 25000 },
+  { id: 'B28', name: 'B28 (28 kg)', format: '28 kg', priceRecharge: 13000, priceAchat: 45000 },
 ];
 
 const PAYMENT_METHODS = [
-  { 
-    id: 'wave', 
-    name: 'Wave', 
-    color: '#1DC3F3', 
-    logo: require('./assets/wave.jpeg')
-  },
-  { 
-    id: 'orange', 
-    name: 'Orange', 
-    color: '#FF6600', 
-    logo: require('./assets/Orange.jpeg')
-  },
-  { 
-    id: 'mtn', 
-    name: 'MTN MoMo', 
-    color: '#FFCC00', 
-    logo: require('./assets/MTN.jpeg')
-  },
-  { 
-    id: 'moov', 
-    name: 'Moov Money', 
-    color: '#0055A5', 
-    logo: require('./assets/Moov.jpeg')
-  },
+  { id: 'wave', name: 'Wave', color: '#1DC3F3', logo: require('./assets/wave.jpeg') },
+  { id: 'orange', name: 'Orange', color: '#FF6600', logo: require('./assets/Orange.jpeg') },
+  { id: 'mtn', name: 'MTN MoMo', color: '#FFCC00', logo: require('./assets/MTN.jpeg') },
+  { id: 'moov', name: 'Moov Money', color: '#0055A5', logo: require('./assets/Moov.jpeg') },
 ];
 
 export default function App() {
@@ -157,15 +149,17 @@ export default function App() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [resetStep, setResetStep] = useState(1); // 1: Email | 2: Code OTP | 3: Nouveau MDP
+  const [resetStep, setResetStep] = useState(1);
 
   // Abonnement Vendeur
   const [showPaymentSection, setShowPaymentSection] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState('wave');
   const [paymentPhone, setPaymentPhone] = useState('');
 
-  // Commande Client
+  // Sélection Bouteille (Marque, Couleur, Format, Type d'opération)
+  const [selectedMarque, setSelectedMarque] = useState(MARQUES_GAZ[0]);
   const [selectedCylinder, setSelectedCylinder] = useState(CYLINDER_TYPES[1]);
+  const [operationType, setOperationType] = useState('recharge'); // 'recharge' ou 'achat'
   const [quantite, setQuantite] = useState('1');
   const [adresseLivraison, setAdresseLivraison] = useState('');
   const [orderFilter, setOrderFilter] = useState('all');
@@ -186,24 +180,22 @@ export default function App() {
   const [stockB12, setStockB12] = useState('25');
   const [stockB28, setStockB28] = useState('5');
 
-  // Bilan des ventes Vendeur (Journalier, Hebdomadaire, Mensuel, Annuel)
-  const [salesPeriod, setSalesPeriod] = useState('day'); // 'day', 'week', 'month', 'year'
-  const [dayOffset, setDayOffset] = useState(0); // 0: Aujourd'hui, -1: Hier, -2: Avant-hier
+  // Bilan des ventes Vendeur
+  const [salesPeriod, setSalesPeriod] = useState('day');
+  const [dayOffset, setDayOffset] = useState(0);
   const [salesReport, setSalesReport] = useState({
     totalRecette: 185000,
     count: 12,
     totals: { b6: 8, b12: 18, b28: 4 },
     sales: [
-      { id: 101, client_nom: 'Kouassi Yves', bouteille_type: 'B12 (12.5 kg)', quantite: 2, montant_total: 11000, created_at: new Date().toISOString() },
-      { id: 102, client_nom: 'Mme Koné', bouteille_type: 'B6 (6 kg)', quantite: 1, montant_total: 2500, created_at: new Date().toISOString() },
-      { id: 103, client_nom: 'Restaurant Le Lagon', bouteille_type: 'B28 (28 kg)', quantite: 2, montant_total: 26000, created_at: new Date().toISOString() },
+      { id: 101, client_nom: 'Kouassi Yves', marque: 'TotalEnergies', couleur: '#F97316', bouteille_type: 'B12 (12.5 kg)', type_operation: 'Recharge', quantite: 2, montant_total: 11000, created_at: new Date().toISOString() },
+      { id: 102, client_nom: 'Mme Koné', marque: 'Shell Gas', couleur: '#1E40AF', bouteille_type: 'B6 (6 kg)', type_operation: 'Recharge', quantite: 1, montant_total: 2500, created_at: new Date().toISOString() },
+      { id: 103, client_nom: 'Restaurant Le Lagon', marque: 'Pétro Ivoire', couleur: '#334155', bouteille_type: 'B28 (28 kg)', type_operation: 'Achat', quantite: 2, montant_total: 90000, created_at: new Date().toISOString() },
     ]
   });
 
-  // Formulaire nouvelle vente directe dépôt
+  // Vente directe Vendeur
   const [newSaleClient, setNewSaleClient] = useState('');
-  const [newSaleCylinder, setNewSaleCylinder] = useState(CYLINDER_TYPES[1]);
-  const [newSaleQty, setNewSaleQty] = useState('1');
 
   useEffect(() => {
     const timer = setTimeout(() => setIsAppReady(true), 1000);
@@ -235,9 +227,11 @@ export default function App() {
     }
   };
 
+  const currentUnitPrice = operationType === 'recharge' ? selectedCylinder.priceRecharge : selectedCylinder.priceAchat;
+
   const handleAddDirectSale = async () => {
-    const qtyNum = parseInt(newSaleQty, 10) || 1;
-    const pu = newSaleCylinder.price;
+    const qtyNum = parseInt(quantite, 10) || 1;
+    const pu = currentUnitPrice;
     const total = qtyNum * pu;
 
     setLoading(true);
@@ -248,7 +242,10 @@ export default function App() {
         body: JSON.stringify({
           depot_id: user.id || 1,
           client_nom: newSaleClient.trim() || 'Client Passage',
-          bouteille_type: newSaleCylinder.name,
+          bouteille_type: selectedCylinder.name,
+          marque: selectedMarque.name,
+          couleur: selectedMarque.color,
+          type_operation: operationType === 'recharge' ? 'Recharge' : 'Achat Bouteille',
           quantite: qtyNum,
           prix_unitaire: pu
         })
@@ -257,17 +254,18 @@ export default function App() {
       if (response.ok) {
         Alert.alert('Vente enregistrée !', `Montant total : ${total.toLocaleString('fr-FR')} FCFA`);
         setNewSaleClient('');
-        setNewSaleQty('1');
         fetchSalesReport();
       } else {
         throw new Error('Erreur lors de l\'enregistrement');
       }
     } catch (err) {
-      // Fallback local
       const newSaleLocal = {
         id: Date.now(),
         client_nom: newSaleClient.trim() || 'Client Passage',
-        bouteille_type: newSaleCylinder.name,
+        marque: selectedMarque.name,
+        couleur: selectedMarque.color,
+        bouteille_type: selectedCylinder.name,
+        type_operation: operationType === 'recharge' ? 'Recharge' : 'Achat Bouteille',
         quantite: qtyNum,
         montant_total: total,
         created_at: new Date().toISOString()
@@ -280,13 +278,11 @@ export default function App() {
       });
       Alert.alert('Vente ajoutée au bilan !', `Montant total : ${total.toLocaleString('fr-FR')} FCFA`);
       setNewSaleClient('');
-      setNewSaleQty('1');
     } finally {
       setLoading(false);
     }
   };
 
-  // GÉNÉRATION & IMPRESSION DU PDF
   const handlePrintPDFReport = async () => {
     let periodTitle = 'BILAN DES VENTES JOURNALIER';
     if (salesPeriod === 'day') {
@@ -320,6 +316,7 @@ export default function App() {
             th { background-color: #0F172A; color: #FFFFFF; font-size: 11px; font-weight: 800; text-align: left; padding: 10px; }
             td { border-bottom: 1px solid #E2E8F0; padding: 10px; font-size: 12px; color: #334155; }
             tr:nth-child(even) { background-color: #F8FAFC; }
+            .color-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
             .total-row td { font-weight: bold; background-color: #FEF3C7; color: #92400E; }
             .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #94A3B8; border-top: 1px solid #E2E8F0; padding-top: 12px; }
           </style>
@@ -356,7 +353,8 @@ export default function App() {
               <tr>
                 <th>#</th>
                 <th>Client</th>
-                <th>Format Bouteille</th>
+                <th>Marque & Bouteille</th>
+                <th>Type</th>
                 <th>Qté</th>
                 <th>Montant Total</th>
               </tr>
@@ -366,13 +364,14 @@ export default function App() {
                 <tr>
                   <td>${idx + 1}</td>
                   <td>${s.client_nom || 'Client Passage'}</td>
-                  <td>${s.bouteille_type}</td>
+                  <td><span class="color-dot" style="background-color: ${s.couleur || '#F97316'};"></span>${s.marque || 'Total'} ${s.bouteille_type}</td>
+                  <td>${s.type_operation || 'Recharge'}</td>
                   <td>${s.quantite}</td>
                   <td><strong>${(parseInt(s.montant_total) || 0).toLocaleString('fr-FR')} FCFA</strong></td>
                 </tr>
               `).join('')}
               <tr class="total-row">
-                <td colspan="4" style="text-align: right;"><strong>TOTAL GÉNÉRAL :</strong></td>
+                <td colspan="5" style="text-align: right;"><strong>TOTAL GÉNÉRAL :</strong></td>
                 <td><strong>${salesReport.totalRecette.toLocaleString('fr-FR')} FCFA</strong></td>
               </tr>
             </tbody>
@@ -518,7 +517,6 @@ export default function App() {
     }
   };
 
-  // ÉTAPE 1 : Demande du code par e-mail
   const handleRequestResetCode = async () => {
     if (!forgotEmail) {
       Alert.alert('Champ requis', 'Veuillez saisir votre adresse email.');
@@ -548,7 +546,6 @@ export default function App() {
     }
   };
 
-  // ÉTAPE 2 : Vérification du code à 5 chiffres
   const handleVerifyResetCode = async () => {
     if (!resetCode || resetCode.trim().length !== 5) {
       Alert.alert('Code invalide', 'Veuillez saisir le code de sécurité à 5 chiffres.');
@@ -580,7 +577,6 @@ export default function App() {
     }
   };
 
-  // ÉTAPE 3 : Validation du nouveau mot de passe
   const handleConfirmNewPassword = async () => {
     if (!newPassword || newPassword.trim().length < 6) {
       Alert.alert('Mot de passe invalide', 'Le mot de passe doit contenir au moins 6 caractères.');
@@ -647,12 +643,13 @@ export default function App() {
     }
 
     const qteNum = parseInt(quantite, 10) || 1;
-    const totalCalculated = qteNum * selectedCylinder.price;
+    const pu = currentUnitPrice;
+    const totalCalculated = qteNum * pu;
 
     const newCmd = {
       id: `CMD-${Math.floor(100 + Math.random() * 900)}`,
       date: new Date().toLocaleDateString('fr-FR'),
-      type: selectedCylinder.name,
+      type: `${selectedMarque.name} ${selectedCylinder.name} (${operationType === 'recharge' ? 'Recharge' : 'Achat'})`,
       qte: qteNum,
       statut: 'En cours de livraison',
       codeStatut: 'pending',
@@ -662,7 +659,7 @@ export default function App() {
     setCommandes([newCmd, ...commandes]);
     Alert.alert(
       'Commande enregistrée !',
-      `Votre recharge de ${qteNum}x ${selectedCylinder.name} est en cours de préparation.`,
+      `Votre commande de ${qteNum}x ${selectedMarque.name} ${selectedCylinder.name} (${operationType === 'recharge' ? 'Recharge' : 'Achat'}) est en cours de préparation.`,
       [{ text: 'Suivre ma commande', onPress: () => setDashboardTab('orders_list') }]
     );
   };
@@ -960,7 +957,6 @@ export default function App() {
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Bilan des Ventes & PDF 📊</Text>
 
-                    {/* Filtres de Période Principal */}
                     <Text style={styles.label}>Sélectionnez la période :</Text>
                     <View style={styles.filterRow}>
                       <AnimatedButton style={[styles.filterBtn, salesPeriod === 'day' && styles.filterBtnActive]} onPress={() => setSalesPeriod('day')}>
@@ -977,7 +973,6 @@ export default function App() {
                       </AnimatedButton>
                     </View>
 
-                    {/* Sous-filtre pour choix du jour si Journalier */}
                     {salesPeriod === 'day' && (
                       <View style={{ flexDirection: 'row', gap: 6, marginVertical: 8 }}>
                         <AnimatedButton style={[styles.dateOffsetBtn, dayOffset === 0 && styles.dateOffsetBtnActive]} onPress={() => setDayOffset(0)}>
@@ -992,7 +987,6 @@ export default function App() {
                       </View>
                     )}
 
-                    {/* Synthèse Financière */}
                     <View style={styles.totalSummary}>
                       <View>
                         <Text style={styles.totalSummaryLabel}>Chiffre d'Affaires :</Text>
@@ -1005,12 +999,11 @@ export default function App() {
                       </Text>
                     </View>
 
-                    {/* Bouton Génération & Impression PDF */}
                     <AnimatedButton style={styles.btnNavyPdf} onPress={handlePrintPDFReport}>
                       <Text style={styles.btnNavyPdfText}>📄 Voir / Imprimer Bilan PDF</Text>
                     </AnimatedButton>
 
-                    <Text style={[styles.label, { marginTop: 18 }]}>Enregistrer une vente directe :</Text>
+                    <Text style={[styles.label, { marginTop: 18 }]}>Saisie Vente Directe :</Text>
                     <TextInput
                       style={styles.input}
                       placeholder="Nom du client (optionnel)"
@@ -1019,30 +1012,69 @@ export default function App() {
                       onChangeText={setNewSaleClient}
                     />
 
+                    {/* Sélection Marque & Couleur */}
+                    <Text style={styles.label}>Marque de bouteille :</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 12 }}>
+                      {MARQUES_GAZ.map((m) => {
+                        const isSelected = selectedMarque.id === m.id;
+                        return (
+                          <AnimatedButton
+                            key={m.id}
+                            style={[styles.marqueChip, isSelected && { borderColor: m.color, borderWidth: 2, backgroundColor: '#FFF7ED' }]}
+                            onPress={() => setSelectedMarque(m)}
+                          >
+                            <View style={[styles.colorBadge, { backgroundColor: m.color }]} />
+                            <Text style={[styles.marqueChipText, isSelected && { color: '#0F172A', fontWeight: '800' }]}>{m.name}</Text>
+                          </AnimatedButton>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {/* Sélection Type Opération */}
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                      <AnimatedButton
+                        style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
+                        onPress={() => setOperationType('recharge')}
+                      >
+                        <Text style={[styles.opTypeText, operationType === 'recharge' && styles.opTypeTextActive]}>Recharge (Échange)</Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.opTypeBtn, operationType === 'achat' && styles.opTypeBtnActive]}
+                        onPress={() => setOperationType('achat')}
+                      >
+                        <Text style={[styles.opTypeText, operationType === 'achat' && styles.opTypeTextActive]}>Achat Bouteille Neuve</Text>
+                      </AnimatedButton>
+                    </View>
+
+                    {/* Sélection Format */}
                     <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
                       {CYLINDER_TYPES.map((cyl) => (
                         <AnimatedButton
                           key={cyl.id}
-                          style={[styles.smallCylBtn, newSaleCylinder.id === cyl.id && styles.smallCylBtnActive]}
-                          onPress={() => setNewSaleCylinder(cyl)}
+                          style={[styles.smallCylBtn, selectedCylinder.id === cyl.id && styles.smallCylBtnActive]}
+                          onPress={() => setSelectedCylinder(cyl)}
                         >
-                          <Text style={[styles.smallCylText, newSaleCylinder.id === cyl.id && styles.smallCylTextActive]}>{cyl.id}</Text>
+                          <Text style={[styles.smallCylText, selectedCylinder.id === cyl.id && styles.smallCylTextActive]}>{cyl.id}</Text>
+                          <Text style={{ fontSize: 9, color: selectedCylinder.id === cyl.id ? '#C2410C' : '#64748B' }}>
+                            {(operationType === 'recharge' ? cyl.priceRecharge : cyl.priceAchat).toLocaleString('fr-FR')} F
+                          </Text>
                         </AnimatedButton>
                       ))}
                     </View>
 
-                    <QuantityStepper value={newSaleQty} onChange={setNewSaleQty} />
+                    <QuantityStepper value={quantite} onChange={setQuantite} />
 
                     <AnimatedButton style={styles.btnOrange} onPress={handleAddDirectSale} disabled={loading}>
-                      {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Ajouter la vente au bilan</Text>}
+                      {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Enregistrer Vente ({ (currentUnitPrice * (parseInt(quantite, 10) || 1)).toLocaleString('fr-FR') } FCFA)</Text>}
                     </AnimatedButton>
 
                     <Text style={[styles.label, { marginTop: 20 }]}>Historique détaillé :</Text>
                     {salesReport.sales.map((sale) => (
                       <View key={sale.id} style={styles.saleRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.saleClient}>{sale.client_nom || 'Client Passage'}</Text>
-                          <Text style={styles.saleType}>{sale.quantite}x {sale.bouteille_type}</Text>
+                        <View style={[styles.colorBadgeLarge, { backgroundColor: sale.couleur || '#F97316' }]} />
+                        <View style={{ flex: 1, marginLeft: 8 }}>
+                          <Text style={styles.saleClient}>{sale.client_nom || 'Client Passage'} • <Text style={{ color: '#F97316' }}>{sale.marque || 'Total'}</Text></Text>
+                          <Text style={styles.saleType}>{sale.quantite}x {sale.bouteille_type} ({sale.type_operation || 'Recharge'})</Text>
                         </View>
                         <Text style={styles.saleTotal}>{(parseInt(sale.montant_total) || 0).toLocaleString('fr-FR')} FCFA</Text>
                       </View>
@@ -1112,10 +1144,49 @@ export default function App() {
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Passer une commande</Text>
 
-                    <Text style={styles.label}>Type de bouteille</Text>
+                    {/* Sélection Type d'opération */}
+                    <Text style={styles.label}>Mode d'achat :</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                      <AnimatedButton
+                        style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
+                        onPress={() => setOperationType('recharge')}
+                      >
+                        <Text style={[styles.opTypeText, operationType === 'recharge' && styles.opTypeTextActive]}>Recharge Bouteille (2 300 / 5 500 F)</Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.opTypeBtn, operationType === 'achat' && styles.opTypeBtnActive]}
+                        onPress={() => setOperationType('achat')}
+                      >
+                        <Text style={[styles.opTypeText, operationType === 'achat' && styles.opTypeTextActive]}>Achat Bouteille Neuve</Text>
+                      </AnimatedButton>
+                    </View>
+
+                    {/* Sélection Marque & Couleur */}
+                    <Text style={styles.label}>Marque et Couleur de la bouteille :</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 16 }}>
+                      {MARQUES_GAZ.map((m) => {
+                        const isSelected = selectedMarque.id === m.id;
+                        return (
+                          <AnimatedButton
+                            key={m.id}
+                            style={[styles.marqueCardGrid, isSelected && { borderColor: m.color, borderWidth: 2, backgroundColor: '#FFF7ED' }]}
+                            onPress={() => setSelectedMarque(m)}
+                          >
+                            <View style={[styles.bottleVisualCircle, { backgroundColor: m.color }]}>
+                              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '900' }}>🔥</Text>
+                            </View>
+                            <Text style={[styles.marqueCardTitle, isSelected && { color: '#0F172A', fontWeight: '800' }]}>{m.name}</Text>
+                            <Text style={styles.marqueCardColor}>{m.labelColor}</Text>
+                          </AnimatedButton>
+                        );
+                      })}
+                    </ScrollView>
+
+                    <Text style={styles.label}>Format de bouteille</Text>
                     <View style={styles.cylinderList}>
                       {CYLINDER_TYPES.map((cyl) => {
                         const isSelected = selectedCylinder.id === cyl.id;
+                        const price = operationType === 'recharge' ? cyl.priceRecharge : cyl.priceAchat;
                         return (
                           <AnimatedButton
                             key={cyl.id}
@@ -1123,8 +1194,11 @@ export default function App() {
                             onPress={() => setSelectedCylinder(cyl)}
                           >
                             <View style={styles.cylinderHeader}>
-                              <Text style={styles.cylinderTitle}>{cyl.icon} {cyl.name}</Text>
-                              <Text style={styles.cylinderPrice}>{cyl.price.toLocaleString('fr-FR')} FCFA</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <View style={[styles.colorBadge, { backgroundColor: selectedMarque.color }]} />
+                                <Text style={styles.cylinderTitle}>{selectedMarque.name} - {cyl.name}</Text>
+                              </View>
+                              <Text style={styles.cylinderPrice}>{price.toLocaleString('fr-FR')} FCFA</Text>
                             </View>
                           </AnimatedButton>
                         );
@@ -1146,12 +1220,12 @@ export default function App() {
                     <View style={styles.totalSummary}>
                       <Text style={styles.totalSummaryLabel}>Montant Total :</Text>
                       <Text style={styles.totalSummaryValue}>
-                        {((parseInt(quantite, 10) || 1) * selectedCylinder.price).toLocaleString('fr-FR')} FCFA
+                        {((parseInt(quantite, 10) || 1) * currentUnitPrice).toLocaleString('fr-FR')} FCFA
                       </Text>
                     </View>
 
                     <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
-                      <Text style={styles.btnOrangeText}>Valider</Text>
+                      <Text style={styles.btnOrangeText}>Valider la commande</Text>
                     </AnimatedButton>
                   </View>
                 )}
@@ -1354,7 +1428,6 @@ export default function App() {
                     <Text style={styles.backBtnInlineText}>Retour</Text>
                   </AnimatedButton>
 
-                  {/* ÉTAPE 1 : Saisie de l'e-mail */}
                   {resetStep === 1 && (
                     <>
                       <Text style={styles.cardBoxTitle}>Mot de passe oublié</Text>
@@ -1375,7 +1448,6 @@ export default function App() {
                     </>
                   )}
 
-                  {/* ÉTAPE 2 : Saisie du code OTP (avec suggestion automatique clavier) */}
                   {resetStep === 2 && (
                     <>
                       <Text style={styles.cardBoxTitle}>Validation du code</Text>
@@ -1398,7 +1470,6 @@ export default function App() {
                     </>
                   )}
 
-                  {/* ÉTAPE 3 : Création du nouveau mot de passe */}
                   {resetStep === 3 && (
                     <>
                       <Text style={styles.cardBoxTitle}>Nouveau mot de passe</Text>
@@ -1506,9 +1577,24 @@ const styles = StyleSheet.create({
   cylinderItem: { backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0' },
   cylinderItemActive: { backgroundColor: '#FFF7ED', borderColor: '#F97316' },
   cylinderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cylinderTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
-  cylinderPrice: { fontSize: 15, fontWeight: '800', color: '#F97316' },
+  cylinderTitle: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
+  cylinderPrice: { fontSize: 14, fontWeight: '800', color: '#F97316' },
   
+  colorBadge: { width: 12, height: 12, borderRadius: 6 },
+  colorBadgeLarge: { width: 16, height: 16, borderRadius: 8 },
+  marqueChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  marqueChipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  
+  marqueCardGrid: { width: 100, backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, padding: 10, alignItems: 'center' },
+  bottleVisualCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  marqueCardTitle: { fontSize: 11, fontWeight: '700', color: '#334155', textAlign: 'center' },
+  marqueCardColor: { fontSize: 9, color: '#94A3B8', textAlign: 'center', marginTop: 2 },
+
+  opTypeBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F1F5F9', alignItems: 'center', borderWidth: 1, borderColor: '#CBD5E1' },
+  opTypeBtnActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
+  opTypeText: { fontSize: 11, fontWeight: '700', color: '#475569' },
+  opTypeTextActive: { color: '#FFFFFF' },
+
   stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, padding: 4, width: 140, justifyContent: 'space-between', marginBottom: 16 },
   stepperBtn: { width: 36, height: 36, backgroundColor: '#0F172A', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   stepperBtnDisabled: { backgroundColor: '#CBD5E1' },
@@ -1537,7 +1623,7 @@ const styles = StyleSheet.create({
   smallCylText: { fontSize: 11, fontWeight: '700', color: '#475569' },
   smallCylTextActive: { color: '#C2410C', fontWeight: '800' },
   
-  saleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  saleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   saleClient: { fontSize: 13, fontWeight: '800', color: '#0F172A' },
   saleType: { fontSize: 11, color: '#64748B', marginTop: 2 },
   saleTotal: { fontSize: 13, fontWeight: '800', color: '#16A34A' },
