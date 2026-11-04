@@ -660,7 +660,7 @@ export default function App() {
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
             <AnimatedButton style={styles.roleToggleBtn} onPress={handleToggleRoleMode}>
               <Text style={styles.roleToggleBtnText}>
-                {activeRoleMode === 'depot' ? '🔄 Vue Client' : '🔄 Vue Vendeur'}
+                {activeRoleMode === 'depot' ? 'Vue Client' : 'Vue Vendeur'}
               </Text>
             </AnimatedButton>
 
@@ -790,7 +790,7 @@ export default function App() {
                           style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
                           onPress={() => setDashboardTab('depots')}
                         >
-                          <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts 📍</Text>
+                          <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts</Text>
                         </AnimatedButton>
                         <AnimatedButton
                           style={[styles.pillBtn, dashboardTab === 'order' && styles.pillBtnActive]}
@@ -856,15 +856,15 @@ export default function App() {
                     {activeRoleMode === 'depot' ? (
                       <View style={{ gap: 10 }}>
                         <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('pricing')}>
-                          <Text style={styles.actionCardTitle}>💰 Configurer mes Prix Vendeur</Text>
+                          <Text style={styles.actionCardTitle}>Configurer mes Prix Vendeur</Text>
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('sales_report')}>
-                          <Text style={styles.actionCardTitleWhite}>📊 Bilan des Ventes & PDF</Text>
+                          <Text style={styles.actionCardTitleWhite}>Bilan des Ventes en PDF</Text>
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('add_stock')}>
-                          <Text style={styles.actionCardTitleWhite}>📦 Gestion des Stocks</Text>
+                          <Text style={styles.actionCardTitleWhite}> Gestion des Stocks</Text>
                         </AnimatedButton>
                       </View>
                     ) : (
@@ -874,11 +874,11 @@ export default function App() {
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.actionCardTitleWhite}>🚚 Commander une Livraison</Text>
+                          <Text style={styles.actionCardTitleWhite}> Commander une Livraison</Text>
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('depots')}>
-                          <Text style={styles.actionCardTitleWhite}>📍 Dépôts à Proximité</Text>
+                          <Text style={styles.actionCardTitleWhite}> Dépôts à Proximité</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -888,9 +888,9 @@ export default function App() {
                 {/* ONGLET TARIFS VENDEUR */}
                 {dashboardTab === 'pricing' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Prix Vendeur 💰</Text>
+                    <Text style={styles.cardBoxTitle}>Prix Vendeur</Text>
 
-                    <Text style={styles.priceSectionHeader}>🔵 Format B6 (6 kg)</Text>
+                    <Text style={styles.priceSectionHeader}>Format B6 (6 kg)</Text>
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.label}>Recharge (F)</Text>
@@ -902,7 +902,7 @@ export default function App() {
                       </View>
                     </View>
 
-                    <Text style={styles.priceSectionHeader}>🟠 Format B12 (12.5 kg)</Text>
+                    <Text style={styles.priceSectionHeader}>Format B12 (12.5 kg)</Text>
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.label}>Recharge (F)</Text>
@@ -914,7 +914,7 @@ export default function App() {
                       </View>
                     </View>
 
-                    <Text style={styles.priceSectionHeader}>🔴 Format B28 (28 kg)</Text>
+                    <Text style={styles.priceSectionHeader}> Format B28 (28 kg)</Text>
                     <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.label}>Recharge (F)</Text>
@@ -1038,7 +1038,7 @@ export default function App() {
                 {/* BILAN DES VENTES */}
                 {dashboardTab === 'sales_report' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Bilan & PDF 📊</Text>
+                    <Text style={styles.cardBoxTitle}>Bilan en PDF</Text>
 
                     <View style={styles.filterRow}>
                       <AnimatedButton style={[styles.filterBtn, salesPeriod === 'day' && styles.filterBtnActive]} onPress={() => setSalesPeriod('day')}>
@@ -1137,9 +1137,9 @@ export default function App() {
                 {dashboardTab === 'sales_list' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Inventaire Dépôt</Text>
-                    <Text style={styles.inventoryLabel}>• B6 : {stockB6} dispo</Text>
-                    <Text style={styles.inventoryLabel}>• B12 : {stockB12} dispo</Text>
-                    <Text style={styles.inventoryLabel}>• B28 : {stockB28} dispo</Text>
+                    <Text style={styles.inventoryLabel}>• B6 : {stockB6} disponibles</Text>
+                    <Text style={styles.inventoryLabel}>• B12 : {stockB12} disponibles</Text>
+                    <Text style={styles.inventoryLabel}>• B28 : {stockB28} disponibles</Text>
                   </View>
                 )}
               </FadeInView>
