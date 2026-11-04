@@ -116,16 +116,16 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
   );
 };
 
-// COMPOSANT IMAGE SÉCURISÉ AVEC REPLI STYLISÉ SI L'IMAGE DISTANTE NE S'AFFICHE PAS
+// COMPOSANT IMAGE SÉCURISÉ POUR LES BOUTEILLES (SANS EMOJI)
 const BottleImageWithFallback = ({ uri, brandColor, brandName }) => {
   const [imageError, setImageError] = useState(false);
 
   if (imageError || !uri) {
     return (
-      <View style={[styles.fallbackBottleContainer, { backgroundColor: brandColor + '22', borderColor: brandColor }]}>
+      <View style={[styles.fallbackBottleContainer, { backgroundColor: brandColor + '15', borderColor: brandColor }]}>
         <View style={[styles.fallbackBottleTop, { backgroundColor: brandColor }]} />
         <View style={[styles.fallbackBottleBody, { backgroundColor: brandColor }]}>
-          <Text style={styles.fallbackBottleText}>🔥</Text>
+          <Text style={styles.fallbackBottleText}>GAZ</Text>
         </View>
       </View>
     );
@@ -168,12 +168,13 @@ const QuantityStepper = ({ value, onChange }) => {
 const MARQUES_GAZ = [
   { id: 'total', name: 'TotalEnergies', color: '#F97316', imageUrl: 'https://img.freepik.com/free-psd/orange-gas-cylinder-isolated-transparent-background_191095-23646.png' },
   { id: 'shell', name: 'Shell Gas', color: '#1E40AF', imageUrl: 'https://img.freepik.com/free-psd/blue-gas-cylinder-isolated-transparent-background_191095-23647.png' },
-  { id: 'petro', name: 'Pétro Ivoire', color: '#334155', imageUrl: 'https://img.freepik.com/free-psd/dark-blue-gas-tank_191095-23648.png' },
+  { id: 'petro', name: 'Pétro Ivoire', color: '#1E1B4B', imageUrl: 'https://img.freepik.com/free-psd/dark-blue-gas-tank_191095-23648.png' },
   { id: 'oryx', name: 'Oryx Energies', color: '#0EA5E9', imageUrl: 'https://img.freepik.com/free-psd/cyan-gas-bottle_191095-23649.png' },
+  { id: 'petroci', name: 'Pétroci', color: '#16A34A', imageUrl: 'https://img.freepik.com/free-psd/silver-gas-cylinder_191095-23652.png' },
   { id: 'simam', name: 'Simam Gas', color: '#EAB308', imageUrl: 'https://img.freepik.com/free-psd/yellow-gas-bottle_191095-23650.png' },
   { id: 'districom', name: 'Districom Gaz', color: '#EF4444', imageUrl: 'https://img.freepik.com/free-psd/red-gas-cylinder_191095-23651.png' },
   { id: 'ola', name: 'OLA Energy', color: '#991B1B', imageUrl: 'https://img.freepik.com/free-psd/red-gas-cylinder_191095-23651.png' },
-  { id: 'corlay', name: 'Corlay', color: '#16A34A', imageUrl: 'https://img.freepik.com/free-psd/cyan-gas-bottle_191095-23649.png' },
+  { id: 'corlay', name: 'Corlay', color: '#15803D', imageUrl: 'https://img.freepik.com/free-psd/cyan-gas-bottle_191095-23649.png' },
 ];
 
 const CYLINDER_TYPES = [
@@ -260,14 +261,13 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // GESTION DU BOUTON ET RETOUR TACTILE (ANDROID & GESTES)
+  // GESTION RETOUR TACTILE ANDROID (BOUTON ET GESTES)
   useEffect(() => {
     const onBackPress = () => {
-      // 1. Utilisateur non connecté
       if (!user) {
         if (currentScreen === 'forgot_password') {
           if (resetStep > 1) {
-            setResetStep((prevStep) => prevStep - 1);
+            setResetStep((prev) => prev - 1);
             return true;
           }
           setCurrentScreen('login');
@@ -279,10 +279,9 @@ export default function App() {
           return true;
         }
 
-        return false; // Laisse quitter l'app seulement sur l'écran d'accueil 'welcome'
+        return false;
       }
 
-      // 2. Utilisateur connecté
       if (showPaymentSection && !isTrialExpired) {
         setShowPaymentSection(false);
         return true;
@@ -293,14 +292,13 @@ export default function App() {
         return true;
       }
 
-      return false; // Laisse quitter/minimiser l'app sur l'onglet Accueil du tableau de bord
+      return false;
     };
 
-    const backSubscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-
+    const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => {
-      if (backSubscription && typeof backSubscription.remove === 'function') {
-        backSubscription.remove();
+      if (backSub && typeof backSub.remove === 'function') {
+        backSub.remove();
       } else {
         BackHandler.removeEventListener('hardwareBackPress', onBackPress);
       }
@@ -832,7 +830,7 @@ export default function App() {
                   <View style={styles.trialBannerRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.trialBannerTitle}>
-                        {user.isSubscribed ? '✅ Abonnement Vendeur Actif' : `Essai gratuit : ${daysLeft} jours restants`}
+                        {user.isSubscribed ? 'Abonnement Vendeur Actif' : `Essai gratuit : ${daysLeft} jours restants`}
                       </Text>
                     </View>
                     {!user.isSubscribed && (
@@ -859,13 +857,13 @@ export default function App() {
                           style={[styles.pillBtn, dashboardTab === 'pricing' && styles.pillBtnActive]}
                           onPress={() => setDashboardTab('pricing')}
                         >
-                          <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Prix Vendeur 💰</Text>
+                          <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Prix Vendeur</Text>
                         </AnimatedButton>
                         <AnimatedButton
                           style={[styles.pillBtn, dashboardTab === 'sales_report' && styles.pillBtnActive]}
                           onPress={() => setDashboardTab('sales_report')}
                         >
-                          <Text style={[styles.pillText, dashboardTab === 'sales_report' && styles.pillTextActive]}>Bilan & PDF 📊</Text>
+                          <Text style={[styles.pillText, dashboardTab === 'sales_report' && styles.pillTextActive]}>Bilan & PDF</Text>
                         </AnimatedButton>
                         <AnimatedButton
                           style={[styles.pillBtn, dashboardTab === 'add_stock' && styles.pillBtnActive]}
@@ -886,7 +884,7 @@ export default function App() {
                           style={[styles.pillBtn, dashboardTab === 'catalog' && styles.pillBtnActive]}
                           onPress={() => setDashboardTab('catalog')}
                         >
-                          <Text style={[styles.pillText, dashboardTab === 'catalog' && styles.pillTextActive]}>Catalogue 🛒</Text>
+                          <Text style={[styles.pillText, dashboardTab === 'catalog' && styles.pillTextActive]}>Catalogue</Text>
                         </AnimatedButton>
                         <AnimatedButton
                           style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
@@ -913,7 +911,7 @@ export default function App() {
                   </ScrollView>
                 </View>
 
-                {/* TABLEAU DE BORD ACCUEIL */}
+                {/* ACCUEIL TABLEAU DE BORD */}
                 {dashboardTab === 'home' && (
                   <View style={styles.fullSection}>
                     <View style={styles.userGreetingCard}>
@@ -961,7 +959,7 @@ export default function App() {
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('sales_report')}>
-                          <Text style={styles.actionCardTitleWhite}>Bilan des Ventes en PDF</Text>
+                          <Text style={styles.actionCardTitleWhite}>Saisie Caisse & Bilan PDF</Text>
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('add_stock')}>
@@ -971,7 +969,7 @@ export default function App() {
                     ) : (
                       <View style={{ gap: 10 }}>
                         <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('catalog')}>
-                          <Text style={styles.actionCardTitle}>🛒 Catalogue des Bouteilles</Text>
+                          <Text style={styles.actionCardTitle}>Catalogue des Bouteilles</Text>
                         </AnimatedButton>
 
                         <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
@@ -1033,11 +1031,11 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CATALOGUE ET COMMANDE */}
+                {/* CATALOGUE ET COMMANDE CLIENT */}
                 {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>
-                      {dashboardTab === 'catalog' ? 'Catalogue 🛒' : 'Nouvelle Commande'}
+                      {dashboardTab === 'catalog' ? 'Catalogue Bouteilles' : 'Nouvelle Commande'}
                     </Text>
 
                     <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
@@ -1140,10 +1138,93 @@ export default function App() {
                   </View>
                 )}
 
-                {/* BILAN DES VENTES */}
+                {/* ONGLET VENDEUR : SAISIE CAISSE COMPLÈTE & BILAN PDF */}
                 {dashboardTab === 'sales_report' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Bilan en PDF</Text>
+                    <Text style={styles.cardBoxTitle}>Bilan & Saisie Caisse</Text>
+
+                    {/* BLOC SAISIE VENTE VENDEUR AVEC SÉLECTION MARQUE & FORMAT */}
+                    <View style={styles.vendorSaleBox}>
+                      <Text style={styles.vendorSaleBoxTitle}>Nouvelle Vente Directe</Text>
+
+                      <Text style={styles.label}>Marque de Gaz *</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          {MARQUES_GAZ.map((m) => {
+                            const isSelected = selectedMarque.id === m.id;
+                            return (
+                              <AnimatedButton
+                                key={m.id}
+                                style={[styles.brandChip, isSelected && { backgroundColor: m.color, borderColor: m.color }]}
+                                onPress={() => setSelectedMarque(m)}
+                              >
+                                <Text style={[styles.brandChipText, isSelected && { color: '#FFFFFF', fontWeight: '800' }]}>
+                                  {m.name}
+                                </Text>
+                              </AnimatedButton>
+                            );
+                          })}
+                        </View>
+                      </ScrollView>
+
+                      <Text style={styles.label}>Type d'opération *</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                        <AnimatedButton
+                          style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
+                          onPress={() => setOperationType('recharge')}
+                        >
+                          <Text style={[styles.opTypeText, operationType === 'recharge' && styles.opTypeTextActive]}>Recharge</Text>
+                        </AnimatedButton>
+                        <AnimatedButton
+                          style={[styles.opTypeBtn, operationType === 'achat' && styles.opTypeBtnActive]}
+                          onPress={() => setOperationType('achat')}
+                        >
+                          <Text style={[styles.opTypeText, operationType === 'achat' && styles.opTypeTextActive]}>Achat Neuf</Text>
+                        </AnimatedButton>
+                      </View>
+
+                      <Text style={styles.label}>Format *</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                        {CYLINDER_TYPES.map((cyl) => {
+                          const isSelected = selectedCylinder.id === cyl.id;
+                          return (
+                            <AnimatedButton
+                              key={cyl.id}
+                              style={[styles.smallCylBtn, isSelected && styles.smallCylBtnActive]}
+                              onPress={() => setSelectedCylinder(cyl)}
+                            >
+                              <Text style={[styles.smallCylText, isSelected && styles.smallCylTextActive]}>{cyl.id}</Text>
+                            </AnimatedButton>
+                          );
+                        })}
+                      </View>
+
+                      <Text style={styles.label}>Client (optionnel)</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Ex: Client Passage, M. Kouassi"
+                        placeholderTextColor="#94A3B8"
+                        value={newSaleClient}
+                        onChangeText={setNewSaleClient}
+                      />
+
+                      <Text style={styles.label}>Quantité</Text>
+                      <QuantityStepper value={quantite} onChange={setQuantite} />
+
+                      <View style={styles.totalSummary}>
+                        <Text style={styles.totalSummaryLabel}>Montant Vente :</Text>
+                        <Text style={styles.totalSummaryValue}>
+                          {((parseInt(quantite, 10) || 1) * currentUnitPrice).toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+
+                      <AnimatedButton style={styles.btnOrange} onPress={handleAddDirectSale} disabled={loading}>
+                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Enregistrer la vente</Text>}
+                      </AnimatedButton>
+                    </View>
+
+                    {/* EXPORTATION ET RECAPITULATIF BILAN */}
+                    <Text style={[styles.cardBoxTitle, { marginTop: 18 }]}>Rapport de Recette</Text>
 
                     <View style={styles.filterRow}>
                       <AnimatedButton style={[styles.filterBtn, salesPeriod === 'day' && styles.filterBtnActive]} onPress={() => setSalesPeriod('day')}>
@@ -1161,36 +1242,21 @@ export default function App() {
                     </View>
 
                     <View style={styles.totalSummary}>
-                      <Text style={styles.totalSummaryLabel}>Recette Totale :</Text>
+                      <Text style={styles.totalSummaryLabel}>Recette Cumulée :</Text>
                       <Text style={styles.totalSummaryValue}>
                         {salesReport.totalRecette.toLocaleString('fr-FR')} FCFA
                       </Text>
                     </View>
 
                     <AnimatedButton style={styles.btnNavyPdf} onPress={handlePrintPDFReport}>
-                      <Text style={styles.btnNavyPdfText}>📄 Exporter le Bilan PDF</Text>
-                    </AnimatedButton>
-
-                    <Text style={[styles.label, { marginTop: 16 }]}>Saisie Vente Caisse :</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Nom du client (optionnel)"
-                      placeholderTextColor="#94A3B8"
-                      value={newSaleClient}
-                      onChangeText={setNewSaleClient}
-                    />
-
-                    <QuantityStepper value={quantite} onChange={setQuantite} />
-
-                    <AnimatedButton style={styles.btnOrange} onPress={handleAddDirectSale} disabled={loading}>
-                      {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Enregistrer la vente</Text>}
+                      <Text style={styles.btnNavyPdfText}>Exporter le Bilan PDF</Text>
                     </AnimatedButton>
                   </View>
                 )}
 
                 {dashboardTab === 'depots' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Dépôts Proches 📍</Text>
+                    <Text style={styles.cardBoxTitle}>Dépôts Proches</Text>
                     <TextInput style={styles.input} placeholder="Rechercher par quartier..." placeholderTextColor="#94A3B8" value={searchDepot} onChangeText={setSearchDepot} />
 
                     {filteredDepots.map((depot) => (
@@ -1258,7 +1324,7 @@ export default function App() {
                     <View style={styles.heroSection}>
                       <PulsingBadge>
                         <View style={styles.heroBadge}>
-                          <Text style={styles.heroBadgeText}>⚡ RAPIDE & SÉCURISÉ</Text>
+                          <Text style={styles.heroBadgeText}>RAPIDE & SÉCURISÉ</Text>
                         </View>
                       </PulsingBadge>
                       <Text style={styles.heroTitle}>Distribution & Livraison de Gaz</Text>
@@ -1456,7 +1522,6 @@ const styles = StyleSheet.create({
   productTitle: { fontSize: 11, fontWeight: '700', color: '#334155', marginTop: 2 },
   productPrice: { fontSize: 13, fontWeight: '900', color: '#2563EB', marginTop: 2 },
 
-  // STYLES POUR L'AFFICHAGE REPLI DES BOUTEILLES DE GAZ
   fallbackBottleContainer: {
     width: 60,
     height: 75,
@@ -1482,8 +1547,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fallbackBottleText: {
-    fontSize: 16,
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FFFFFF'
   },
+
+  vendorSaleBox: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, padding: 14, marginBottom: 14 },
+  vendorSaleBoxTitle: { fontSize: 14, fontWeight: '800', color: '#0F172A', marginBottom: 10 },
+  brandChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1' },
+  brandChipText: { fontSize: 11, fontWeight: '700', color: '#475569' },
 
   depotCard: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 12, marginBottom: 10 },
   depotHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
