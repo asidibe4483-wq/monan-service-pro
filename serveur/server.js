@@ -17,9 +17,10 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
-// Initialisation de la BDD avec toutes les colonnes nécessaires
+// Initialisation et migration automatique de la base de données
 async function initDb() {
   try {
+    // 1. Création de la table si elle n'existe pas du tout
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -34,15 +35,25 @@ async function initDb() {
         is_subscribed BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      -- 2. Ajout dynamique des colonnes si la table existait déjà sans ces champs
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_otp VARCHAR(10);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires_at TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS nom VARCHAR(255);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS telephone VARCHAR(50);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS adresse TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'client';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_subscribed BOOLEAN DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     `);
-    console.log("✅ Table 'users' prête avec gestion des rôles et OTP.");
+    console.log("✅ Table 'users' synchronisée avec toutes les colonnes OTP et profil.");
   } catch (err) {
     console.error("❌ Erreur BDD lors de l'initialisation :", err.message);
   }
 }
 initDb();
 
-// Transporteur Nodemailer (SMTP Gmail avec Timeout)
+// Transporteur Nodemailer (SMTP Gmail avec Timeout de 10s)
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: parseInt(process.env.SMTP_PORT) || 465,
@@ -153,8 +164,9 @@ const handleForgotPassword = async (req, res) => {
       return res.status(404).json({ error: "Cette adresse email n'est liée à aucun compte." });
     }
 
+    // Code aléatoire à 5 chiffres
     const otp = Math.floor(10000 + Math.random() * 90000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes de validité
 
     await pool.query(
       "UPDATE users SET reset_otp = $1, otp_expires_at = $2 WHERE email = $3",
@@ -178,22 +190,21 @@ const handleForgotPassword = async (req, res) => {
       console.log(`🔑 [CONSOLE DEV] Code 5 chiffres généré pour ${cleanEmail} : ${otp}`);
     }
 
-    return res.json({ success: true, message: "Un code de validation à 5 chiffres vous a été envoyé." });
+    return res.json({ success: true, message: "Un code de validation à 5 chiffres vous a été envoyé par email." });
   } catch (error) {
     console.error("❌ Erreur serveur /forgot-password :", error);
     return res.status(500).json({ error: "Une erreur interne est survenue sur le serveur." });
   }
 };
 
-// Aliases pour supporter les deux formats de routes
+// Aliases pour garantir la compatibilité des routes
 app.post("/api/auth/forgot-password", handleForgotPassword);
 app.post("/forgot-password", handleForgotPassword);
 
 // -------------------------------------------------------------
-// 4. VALIDATION CODE OTP & RESET MOT DE PASSE
+// 4. VALIDATION DU CODE & RÉINITIALISATION DU MOT DE PASSE
 // -------------------------------------------------------------
 const handleResetPassword = async (req, res) => {
-  // Lit 'code' (envoyé par App.js) ou 'otp'
   const { email, code, otp, newPassword } = req.body;
   const inputCode = code || otp;
 
@@ -232,11 +243,11 @@ const handleResetPassword = async (req, res) => {
   }
 };
 
-// Aliases pour supporter les deux formats de routes
+// Aliases pour garantir la compatibilité des routes
 app.post("/api/auth/reset-password", handleResetPassword);
 app.post("/reset-password", handleResetPassword);
 
-// Démarrage du serveur
+// Démarrage du serveur sur host 0.0.0.0
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Serveur Monan backend démarré sur le port ${PORT}`);
