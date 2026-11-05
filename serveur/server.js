@@ -1,13 +1,53 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+
+const { verifierJeton, verifierRole } = require("./middlewareAuth");
 
 const app = express();
+const SECRET_KEY = process.env.JWT_SECRET || 'monan_service_secret_key_securisee';
 
-app.use(cors());
-app.use(express.json());
+// A. EN-TÊTES DE SÉCURITÉ ET CORS RESTREINT
+app.use(helmet({ hidePoweredBy: true }));
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'http://localhost:8081',
+      'http://localhost:19006',
+      'https://monan-backend.onrender.com'
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Accès rejeté par la politique CORS.'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+};
+app.use(cors(corsOptions));
+app.use(express.json({ limit: "10kb" })); // Protection Anti-DoS par Payload
+
+// B. LIMITATION DE DEBIT (RATE LIMITING)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { erreur: "Trop de requêtes émanant de cette adresse IP. Réessayez dans 15 minutes." }
+});
+app.use(globalLimiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { erreur: "Trop de tentatives. Bloqué temporairement pendant 15 minutes." }
+});
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -45,7 +85,6 @@ async function initDb() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- Table de paramétrage personnalisé des prix par Dépôt / Vendeur
       CREATE TABLE IF NOT EXISTS depot_prices (
         id SERIAL PRIMARY KEY,
         depot_id INTEGER NOT NULL,
@@ -56,86 +95,61 @@ async function initDb() {
         UNIQUE(depot_id, format)
       );
     `);
-    console.log("✅ Tables BDD synchronisées avec gestion des prix personnalisés vendeurs.");
+    console.log("✅ Tables BDD synchronisées.");
   } catch (err) {
     console.error("❌ Erreur BDD :", err.message);
   }
 }
 initDb();
 
-// Service Email OTP via Brevo
-async function sendOtpEmail(toEmail, otpCode) {
-  const apiKey = process.env.BREVO_API_KEY;
-  const senderEmail = process.env.SENDER_EMAIL || "ali.sidibe@uvci.edu";
+app.get("/", (req, res) => res.send("API Monan Service Opérationnelle et Sécurisée 🚀"));
 
-  if (!apiKey) {
-    console.log(`🔑 [DEV] Code OTP pour ${toEmail} : ${otpCode}`);
-    return false;
-  }
+// --- AUTHENTIFICATION (PUBLIQUE AVEC ANTI BRUTE-FORCE) ---
 
-  try {
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "accept": "application/json",
-        "api-key": apiKey,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        sender: { name: "Monan Service", email: senderEmail },
-        to: [{ email: toEmail }],
-        subject: "Code de réinitialisation Monan Service",
-        htmlContent: `
-          <div style="font-family: Arial; padding: 20px;">
-            <h2>Monan Service</h2>
-            <p>Votre code de validation à 5 chiffres est :</p>
-            <h1 style="color: #F97316; letter-spacing: 5px;">${otpCode}</h1>
-          </div>
-        `,
-      }),
-    });
-    return response.ok;
-  } catch (err) {
-    console.error("❌ Erreur Brevo :", err.message);
-    return false;
-  }
-}
-
-app.get("/", (req, res) => res.send("API Monan Service Opérationnelle 🚀"));
-
-// Authentification
-app.post("/api/auth/register-client", async (req, res) => {
+app.post("/api/auth/register-client", authLimiter, async (req, res) => {
   const { nom, telephone, adresse, email, password } = req.body;
+  if (!nom || !email || !password) return res.status(400).json({ error: "Champs obligatoires manquants." });
+
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      "INSERT INTO users (nom, telephone, adresse, email, password, role) VALUES ($1,$2,$3,$4,$5,'client') RETURNING *",
-      [nom, telephone, adresse, email.trim().toLowerCase(), hashedPassword]
+      "INSERT INTO users (nom, telephone, adresse, email, password, role) VALUES ($1,$2,$3,$4,$5,'client') RETURNING id, nom, email, role, telephone, adresse, is_subscribed, created_at",
+      [nom.trim(), telephone, adresse, email.trim().toLowerCase(), hashedPassword]
     );
-    res.status(201).json({ user: result.rows[0] });
+    const user = result.rows[0];
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET_KEY, { expiresIn: '7d' });
+
+    res.status(201).json({ user, token });
   } catch (err) {
     res.status(400).json({ error: "Email déjà utilisé ou données invalides." });
   }
 });
 
-app.post("/api/auth/register-depot", async (req, res) => {
+app.post("/api/auth/register-depot", authLimiter, async (req, res) => {
   const { nom, telephone, adresse, email, password } = req.body;
+  if (!nom || !email || !password) return res.status(400).json({ error: "Champs obligatoires manquants." });
+
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      "INSERT INTO users (nom, telephone, adresse, email, password, role) VALUES ($1,$2,$3,$4,$5,'depot') RETURNING *",
-      [nom, telephone, adresse, email.trim().toLowerCase(), hashedPassword]
+      "INSERT INTO users (nom, telephone, adresse, email, password, role) VALUES ($1,$2,$3,$4,$5,'depot') RETURNING id, nom, email, role, telephone, adresse, is_subscribed, created_at",
+      [nom.trim(), telephone, adresse, email.trim().toLowerCase(), hashedPassword]
     );
-    res.status(201).json({ user: result.rows[0] });
+    const user = result.rows[0];
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET_KEY, { expiresIn: '7d' });
+
+    res.status(201).json({ user, token });
   } catch (err) {
     res.status(400).json({ error: "Email déjà utilisé." });
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", authLimiter, async (req, res) => {
   const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: "Email et mot de passe requis." });
+
   try {
-    const result = await pool.query("SELECT * FROM users WHERE email = $1", [email.trim().toLowerCase()]);
+    const result = await pool.query("SELECT * FROM users WHERE LOWER(email) = $1", [email.trim().toLowerCase()]);
     if (result.rows.length === 0) return res.status(401).json({ error: "Identifiants incorrects." });
 
     const user = result.rows[0];
@@ -143,16 +157,21 @@ app.post("/api/auth/login", async (req, res) => {
     if (!valid) return res.status(401).json({ error: "Identifiants incorrects." });
 
     delete user.password;
-    res.json({ user });
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET_KEY, { expiresIn: '7d' });
+
+    res.json({ user, token });
   } catch (err) {
     res.status(500).json({ error: "Erreur serveur." });
   }
 });
 
-// GESTION DES TARIFS PERSONNALISÉS PAR LE VENDEUR
-app.post("/api/depot/prices", async (req, res) => {
-  const { depot_id, prices } = req.body; // prices: [{ format: 'B6', prix_recharge: 2000, prix_achat: 13000 }, ...]
-  if (!depot_id || !Array.isArray(prices)) {
+// --- ROUTES PROTEGÉES (JETON + ROLE VENDEUR/DEPOT REQUIS) ---
+
+app.post("/api/depot/prices", verifierJeton, verifierRole('depot', 'vendeur'), async (req, res) => {
+  const depot_id = req.utilisateur.id;
+  const { prices } = req.body;
+
+  if (!Array.isArray(prices)) {
     return res.status(400).json({ error: "Données de prix invalides." });
   }
 
@@ -168,12 +187,11 @@ app.post("/api/depot/prices", async (req, res) => {
     }
     res.json({ success: true, message: "Tarifs mis à jour avec succès !" });
   } catch (err) {
-    console.error("❌ Erreur enregistrement prix :", err.message);
     res.status(500).json({ error: "Erreur lors de la sauvegarde des tarifs." });
   }
 });
 
-app.get("/api/depot/prices/:depot_id", async (req, res) => {
+app.get("/api/depot/prices/:depot_id", verifierJeton, async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM depot_prices WHERE depot_id = $1", [req.params.depot_id]);
     res.json({ prices: result.rows });
@@ -182,18 +200,19 @@ app.get("/api/depot/prices/:depot_id", async (req, res) => {
   }
 });
 
-// Ventes et Bilans
-app.post("/api/sales", async (req, res) => {
-  const { depot_id, client_nom, bouteille_type, marque, couleur, type_operation, quantite, prix_unitaire } = req.body;
-  const qte = parseInt(quantite, 10);
-  const pu = parseInt(prix_unitaire, 10);
+app.post("/api/sales", verifierJeton, verifierRole('depot', 'vendeur'), async (req, res) => {
+  const depot_id = req.utilisateur.id;
+  const { client_nom, bouteille_type, marque, couleur, type_operation, quantite, prix_unitaire } = req.body;
+  
+  const qte = parseInt(quantite, 10) || 1;
+  const pu = parseInt(prix_unitaire, 10) || 0;
   const total = qte * pu;
 
   try {
     const result = await pool.query(
       `INSERT INTO ventes (depot_id, client_nom, bouteille_type, marque, couleur, type_operation, quantite, prix_unitaire, montant_total)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [depot_id || null, client_nom || "Client Passage", bouteille_type, marque, couleur, type_operation, qte, pu, total]
+      [depot_id, client_nom || "Client Passage", bouteille_type, marque, couleur, type_operation, qte, pu, total]
     );
     res.status(201).json({ success: true, sale: result.rows[0] });
   } catch (err) {
@@ -201,7 +220,8 @@ app.post("/api/sales", async (req, res) => {
   }
 });
 
-app.get("/api/sales/report", async (req, res) => {
+app.get("/api/sales/report", verifierJeton, verifierRole('depot', 'vendeur'), async (req, res) => {
+  const depot_id = req.utilisateur.id;
   const { period, date_offset } = req.query;
   const offset = parseInt(date_offset, 10) || 0;
 
@@ -218,7 +238,10 @@ app.get("/api/sales/report", async (req, res) => {
   }
 
   try {
-    const result = await pool.query(`SELECT * FROM ventes WHERE ${timeClause} ORDER BY created_at DESC`);
+    const result = await pool.query(
+      `SELECT * FROM ventes WHERE depot_id = $1 AND ${timeClause} ORDER BY created_at DESC`,
+      [depot_id]
+    );
     const sales = result.rows;
     const totalRecette = sales.reduce((acc, s) => acc + (parseInt(s.montant_total) || 0), 0);
     res.json({
@@ -226,9 +249,9 @@ app.get("/api/sales/report", async (req, res) => {
       totalRecette,
       count: sales.length,
       totals: {
-        b6: sales.filter(s => s.bouteille_type.includes('B6')).reduce((a, s) => a + s.quantite, 0),
-        b12: sales.filter(s => s.bouteille_type.includes('B12')).reduce((a, s) => a + s.quantite, 0),
-        b28: sales.filter(s => s.bouteille_type.includes('B28')).reduce((a, s) => a + s.quantite, 0),
+        b6: sales.filter(s => (s.bouteille_type || '').includes('B6')).reduce((a, s) => a + s.quantite, 0),
+        b12: sales.filter(s => (s.bouteille_type || '').includes('B12')).reduce((a, s) => a + s.quantite, 0),
+        b28: sales.filter(s => (s.bouteille_type || '').includes('B28')).reduce((a, s) => a + s.quantite, 0),
       },
       sales
     });
@@ -237,5 +260,10 @@ app.get("/api/sales/report", async (req, res) => {
   }
 });
 
+// Middleware Global d'erreur
+app.use((err, req, res, next) => {
+  res.status(err.status || 500).json({ error: "Requête invalide ou rejetée par la sécurité." });
+});
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Serveur Monan backend sur port ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Serveur Monan sécurisé opérationnel sur le port ${PORT}`));

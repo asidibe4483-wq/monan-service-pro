@@ -116,31 +116,6 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
   );
 };
 
-// COMPOSANT IMAGE SÉCURISÉ POUR LES BOUTEILLES (SANS EMOJI)
-const BottleImageWithFallback = ({ uri, brandColor, brandName }) => {
-  const [imageError, setImageError] = useState(false);
-
-  if (imageError || !uri) {
-    return (
-      <View style={[styles.fallbackBottleContainer, { backgroundColor: brandColor + '18', borderColor: brandColor }]}>
-        <View style={[styles.fallbackBottleTop, { backgroundColor: brandColor }]} />
-        <View style={[styles.fallbackBottleBody, { backgroundColor: brandColor }]}>
-          <Text style={styles.fallbackBottleText}>GAZ</Text>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <Image
-      source={{ uri }}
-      style={styles.productBottleImg}
-      resizeMode="contain"
-      onError={() => setImageError(true)}
-    />
-  );
-};
-
 const QuantityStepper = ({ value, onChange }) => {
   const qty = parseInt(value, 10) || 1;
   return (
@@ -166,15 +141,15 @@ const QuantityStepper = ({ value, onChange }) => {
 };
 
 const MARQUES_GAZ = [
-  { id: 'total', name: 'TotalEnergies', color: '#F97316', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
-  { id: 'shell', name: 'Shell Gas', color: '#1E40AF', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
-  { id: 'petro', name: 'Pétro Ivoire', color: '#1E1B4B', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
-  { id: 'oryx', name: 'Oryx Energies', color: '#0EA5E9', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
-  { id: 'petroci', name: 'Pétroci', color: '#16A34A', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
-  { id: 'simam', name: 'Simam Gas', color: '#EAB308', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
-  { id: 'districom', name: 'Districom Gaz', color: '#EF4444', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
-  { id: 'ola', name: 'OLA Energy', color: '#991B1B', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
-  { id: 'corlay', name: 'Corlay', color: '#15803D', imageUrl: 'https://cdn-icons-png.flaticon.com/512/1541/1541425.png' },
+  { id: 'total', name: 'TotalEnergies', color: '#F97316' },
+  { id: 'shell', name: 'Shell Gas', color: '#1E40AF' },
+  { id: 'petro', name: 'Pétro Ivoire', color: '#1E1B4B' },
+  { id: 'oryx', name: 'Oryx Energies', color: '#0EA5E9' },
+  { id: 'petroci', name: 'Pétroci', color: '#16A34A' },
+  { id: 'simam', name: 'Simam Gas', color: '#EAB308' },
+  { id: 'districom', name: 'Districom Gaz', color: '#EF4444' },
+  { id: 'ola', name: 'OLA Energy', color: '#991B1B' },
+  { id: 'corlay', name: 'Corlay', color: '#15803D' },
 ];
 
 const CYLINDER_TYPES = [
@@ -194,7 +169,7 @@ export default function App() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('welcome');
   const [user, setUser] = useState(null);
-  const [activeRoleMode, setActiveRoleMode] = useState('depot');
+  const [activeRoleMode, setActiveRoleMode] = useState('client');
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
@@ -228,9 +203,9 @@ export default function App() {
 
   const [searchDepot, setSearchDepot] = useState('');
   const [depotsList] = useState([
-    { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distance: '0.8 km', quartier: 'Cocody Angré', statut: 'Ouvert', b6: 14, b12: 28, b28: 5 },
-    { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distance: '2.3 km', quartier: 'Cocody Centre', statut: 'Ouvert', b6: 8, b12: 12, b28: 0 },
-    { id: 'DEP-03', nom: 'Dépôt Yopougon Maroc', distance: '5.1 km', quartier: 'Yopougon', statut: 'Ouvert', b6: 22, b12: 35, b28: 10 },
+    { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distance: '0.8 km', quartier: 'Cocody Angré' },
+    { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distance: '2.3 km', quartier: 'Cocody Centre' },
+    { id: 'DEP-03', nom: 'Dépôt Yopougon Maroc', distance: '5.1 km', quartier: 'Yopougon' },
   ]);
 
   const [commandes, setCommandes] = useState([]);
@@ -261,7 +236,6 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // RETOUR TACTILE ANDROID ET GESTES DE NAVIGATION
   useEffect(() => {
     const onBackPress = () => {
       if (!user) {
@@ -306,22 +280,29 @@ export default function App() {
   }, [user, currentScreen, resetStep, showPaymentSection, isTrialExpired, dashboardTab]);
 
   useEffect(() => {
-    if (user && activeRoleMode === 'depot' && dashboardTab === 'sales_report') {
+    if (user && user.role === 'depot' && activeRoleMode === 'depot' && dashboardTab === 'sales_report') {
       fetchSalesReport();
     }
   }, [salesPeriod, dayOffset, dashboardTab, activeRoleMode]);
 
   const fetchSalesReport = async () => {
+    if (!user || !user.token) return;
     setLoading(true);
     try {
       const response = await fetch(
-        `${API_URL}/api/sales/report?period=${salesPeriod}&date_offset=${dayOffset}`
+        `${API_URL}/api/sales/report?period=${salesPeriod}&date_offset=${dayOffset}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${user.token}`,
+            'Accept': 'application/json'
+          }
+        }
       );
       if (response.ok) {
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const data = await response.json();
-          if (data.sales && data.sales.length > 0) {
+          if (data.sales) {
             setSalesReport(data);
           }
         }
@@ -339,12 +320,18 @@ export default function App() {
     : (parseInt(activeFormatPrices.achat, 10) || selectedCylinder.priceAchat);
 
   const handleToggleRoleMode = () => {
-    const newMode = activeRoleMode === 'depot' ? 'client' : 'depot';
-    setActiveRoleMode(newMode);
-    setDashboardTab('home');
+    if (user && user.role === 'depot') {
+      const newMode = activeRoleMode === 'depot' ? 'client' : 'depot';
+      setActiveRoleMode(newMode);
+      setDashboardTab('home');
+    }
   };
 
   const handleSaveVendorPrices = async () => {
+    if (!user || !user.token) {
+      Alert.alert('Erreur', 'Session non valide. Veuillez vous reconnecter.');
+      return;
+    }
     setLoading(true);
     try {
       const payload = [
@@ -352,20 +339,26 @@ export default function App() {
         { format: 'B12', prix_recharge: parseInt(vendorPrices.B12.recharge, 10), prix_achat: parseInt(vendorPrices.B12.achat, 10) },
         { format: 'B28', prix_recharge: parseInt(vendorPrices.B28.recharge, 10), prix_achat: parseInt(vendorPrices.B28.achat, 10) },
       ];
-      await fetch(`${API_URL}/api/depot/prices`, {
+      const response = await fetch(`${API_URL}/api/depot/prices`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ depot_id: user.id || 1, prices: payload })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`
+        },
+        body: JSON.stringify({ prices: payload })
       });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erreur lors de la sauvegarde.');
       Alert.alert('Succès', 'Vos tarifs ont été enregistrés !');
     } catch (err) {
-      Alert.alert('Sauvegarde locale', 'Tarifs appliqués avec succès.');
+      Alert.alert('Sauvegarde', err.message || 'Tarifs appliqués avec succès.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleAddDirectSale = async () => {
+    if (!user || !user.token) return;
     const qtyNum = parseInt(quantite, 10) || 1;
     const pu = currentUnitPrice;
     const total = qtyNum * pu;
@@ -374,9 +367,11 @@ export default function App() {
     try {
       const response = await fetch(`${API_URL}/api/sales`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`
+        },
         body: JSON.stringify({
-          depot_id: user.id || 1,
           client_nom: newSaleClient.trim() || 'Client Passage',
           bouteille_type: selectedCylinder.name,
           marque: selectedMarque.name,
@@ -387,12 +382,13 @@ export default function App() {
         })
       });
 
+      const data = await response.json();
       if (response.ok) {
         Alert.alert('Vente enregistrée !', `Total : ${total.toLocaleString('fr-FR')} FCFA`);
         setNewSaleClient('');
         fetchSalesReport();
       } else {
-        throw new Error('Erreur d\'enregistrement');
+        throw new Error(data.error || 'Erreur d\'enregistrement');
       }
     } catch (err) {
       const newSaleLocal = {
@@ -408,11 +404,11 @@ export default function App() {
       };
       setSalesReport({
         ...salesReport,
-        totalRecette: salesReport.totalRecette + total,
-        count: salesReport.count + 1,
-        sales: [newSaleLocal, ...salesReport.sales]
+        totalRecette: (salesReport.totalRecette || 0) + total,
+        count: (salesReport.count || 0) + 1,
+        sales: [newSaleLocal, ...(salesReport.sales || [])]
       });
-      Alert.alert('Vente ajoutée !', `Total : ${total.toLocaleString('fr-FR')} FCFA`);
+      Alert.alert('Vente ajoutée localement !', `Total : ${total.toLocaleString('fr-FR')} FCFA`);
       setNewSaleClient('');
     } finally {
       setLoading(false);
@@ -458,7 +454,7 @@ export default function App() {
               <tr><th>Client</th><th>Article</th><th>Qté</th><th>Total</th></tr>
             </thead>
             <tbody>
-              ${salesReport.sales.map(s => `
+              ${(salesReport.sales || []).map(s => `
                 <tr>
                   <td>${s.client_nom || 'Client'}</td>
                   <td>${s.marque || 'Gaz'} ${s.bouteille_type}</td>
@@ -517,16 +513,18 @@ export default function App() {
       }
 
       const rawUser = data.user || data;
+      const token = data.token;
       const fetchedRole = String(rawUser.role || data.role || '').toLowerCase().trim();
       const isDepotUser = fetchedRole === 'depot' || fetchedRole === 'vendeur' || email.toLowerCase().includes('depot');
 
       const userData = {
         ...rawUser,
+        token,
         email: rawUser.email || email.trim().toLowerCase(),
         nom: rawUser.nom || data.nom || email.split('@')[0],
         role: isDepotUser ? 'depot' : 'client',
-        createdAt: rawUser.createdAt || new Date().toISOString(),
-        isSubscribed: rawUser.isSubscribed || false
+        createdAt: rawUser.createdAt || rawUser.created_at || new Date().toISOString(),
+        isSubscribed: rawUser.isSubscribed || rawUser.is_subscribed || false
       };
 
       setUser(userData);
@@ -550,7 +548,6 @@ export default function App() {
     const endpoint = type === 'depot' ? '/api/auth/register-depot' : '/api/auth/register-client';
 
     try {
-      const registrationDate = new Date().toISOString();
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -576,7 +573,20 @@ export default function App() {
         throw new Error(data.error || 'Échec de l\'inscription.');
       }
 
-      const newUser = data.user || { nom, email, telephone, adresse, role: type, createdAt: registrationDate, isSubscribed: false };
+      const rawUser = data.user || data;
+      const token = data.token;
+
+      const newUser = {
+        ...rawUser,
+        token,
+        nom: rawUser.nom || nom.trim(),
+        email: rawUser.email || email.trim().toLowerCase(),
+        telephone: rawUser.telephone || telephone.trim(),
+        adresse: rawUser.adresse || adresse.trim(),
+        role: type,
+        createdAt: rawUser.created_at || rawUser.createdAt || new Date().toISOString(),
+        isSubscribed: rawUser.is_subscribed || rawUser.isSubscribed || false
+      };
 
       setUser(newUser);
       setActiveRoleMode(type);
@@ -742,7 +752,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* HEADER PRINCIPAL */}
+      {/* HEADER DE L'APPLICATION */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -758,11 +768,13 @@ export default function App() {
 
         {user && (
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            <AnimatedButton style={styles.roleToggleBtn} onPress={handleToggleRoleMode}>
-              <Text style={styles.roleToggleBtnText}>
-                {activeRoleMode === 'depot' ? 'Vue Client' : 'Vue Vendeur'}
-              </Text>
-            </AnimatedButton>
+            {user.role === 'depot' && (
+              <AnimatedButton style={styles.roleToggleBtn} onPress={handleToggleRoleMode}>
+                <Text style={styles.roleToggleBtnText}>
+                  {activeRoleMode === 'depot' ? 'Vue Client' : 'Vue Vendeur'}
+                </Text>
+              </AnimatedButton>
+            )}
 
             <AnimatedButton style={styles.logoutBtn} onPress={handleLogout}>
               <Text style={styles.logoutBtnText}>Quitter</Text>
@@ -931,11 +943,11 @@ export default function App() {
                         <>
                           <View style={styles.kpiCard}>
                             <Text style={styles.kpiCardTag}>RECETTE DU JOUR</Text>
-                            <Text style={styles.kpiCardNum}>{salesReport.totalRecette.toLocaleString('fr-FR')} F</Text>
+                            <Text style={styles.kpiCardNum}>{(salesReport.totalRecette || 0).toLocaleString('fr-FR')} F</Text>
                           </View>
                           <View style={styles.kpiCard}>
                             <Text style={styles.kpiCardTag}>TRANSACTIONS</Text>
-                            <Text style={styles.kpiCardNum}>{salesReport.count}</Text>
+                            <Text style={styles.kpiCardNum}>{salesReport.count || 0}</Text>
                           </View>
                         </>
                       ) : (
@@ -985,7 +997,7 @@ export default function App() {
                 )}
 
                 {/* TARIFS VENDEUR */}
-                {dashboardTab === 'pricing' && (
+                {dashboardTab === 'pricing' && activeRoleMode === 'depot' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Prix Vendeur</Text>
 
@@ -1031,7 +1043,7 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CATALOGUE DE BOUTEILLES & COMMANDE CLIENT (ADAPTÉ WEB & MOBILE) */}
+                {/* CATALOGUE PAR MARQUES ET PRIX (SANS IMAGES) */}
                 {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>
@@ -1087,7 +1099,10 @@ export default function App() {
                         return (
                           <FadeInView key={m.id} delay={idx * 30} style={{ flexGrow: 0 }}>
                             <AnimatedButton
-                              style={[styles.productCard, isSelected && styles.productCardActive]}
+                              style={[
+                                styles.productCardNoImg, 
+                                isSelected && { borderColor: m.color, borderWidth: 2, backgroundColor: m.color + '0D' }
+                              ]}
                               onPress={() => {
                                 setSelectedMarque(m);
                                 if (dashboardTab === 'catalog') setDashboardTab('order');
@@ -1095,23 +1110,24 @@ export default function App() {
                             >
                               <View style={[styles.cardHeaderBadge, { backgroundColor: m.color }]}>
                                 <Text style={styles.cardHeaderBadgeText} numberOfLines={1}>
-                                  {m.name.toUpperCase()} • {selectedCylinder.id}
+                                  {m.name.toUpperCase()}
                                 </Text>
                               </View>
 
-                              <View style={styles.productImageWrapper}>
-                                <View style={[styles.colorBackgroundGlow, { backgroundColor: m.color + '1A' }]} />
-                                <BottleImageWithFallback
-                                  uri={m.imageUrl}
-                                  brandColor={m.color}
-                                  brandName={m.name}
-                                />
+                              <View style={styles.cardCenterBlock}>
+                                <View style={[styles.formatBadgeCircle, { backgroundColor: m.color }]}>
+                                  <Text style={styles.formatBadgeText}>{selectedCylinder.id}</Text>
+                                </View>
+                                <Text style={styles.cardOperationText}>
+                                  {operationType === 'recharge' ? 'Recharge' : 'Achat Neuf'}
+                                </Text>
                               </View>
-                              <Text style={styles.productTitle} numberOfLines={1}>
-                                {operationType === 'recharge' ? 'Recharge' : 'Achat'} {selectedCylinder.id}
-                              </Text>
-                              <Text style={styles.productSubTitle} numberOfLines={1}>{m.name}</Text>
-                              <Text style={styles.productPrice}>{cardPrice.toLocaleString('fr-FR')} CFA</Text>
+
+                              <View style={styles.cardFooterPrice}>
+                                <Text style={[styles.productPriceText, { color: m.color }]}>
+                                  {cardPrice.toLocaleString('fr-FR')} F
+                                </Text>
+                              </View>
                             </AnimatedButton>
                           </FadeInView>
                         );
@@ -1147,8 +1163,8 @@ export default function App() {
                   </View>
                 )}
 
-                {/* ONGLET VENDEUR : SAISIE CAISSE COMPLÈTE & BILAN PDF */}
-                {dashboardTab === 'sales_report' && (
+                {/* BILAN & SAISIE CAISSE VENDEUR */}
+                {dashboardTab === 'sales_report' && activeRoleMode === 'depot' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Bilan & Saisie Caisse</Text>
 
@@ -1251,7 +1267,7 @@ export default function App() {
                     <View style={styles.totalSummary}>
                       <Text style={styles.totalSummaryLabel}>Recette Cumulée :</Text>
                       <Text style={styles.totalSummaryValue}>
-                        {salesReport.totalRecette.toLocaleString('fr-FR')} FCFA
+                        {(salesReport.totalRecette || 0).toLocaleString('fr-FR')} FCFA
                       </Text>
                     </View>
 
@@ -1297,7 +1313,7 @@ export default function App() {
                   </View>
                 )}
 
-                {dashboardTab === 'add_stock' && (
+                {dashboardTab === 'add_stock' && activeRoleMode === 'depot' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Stock Dépôt</Text>
                     <Text style={styles.label}>Bouteilles B6</Text>
@@ -1312,7 +1328,7 @@ export default function App() {
                   </View>
                 )}
 
-                {dashboardTab === 'sales_list' && (
+                {dashboardTab === 'sales_list' && activeRoleMode === 'depot' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Inventaire Dépôt</Text>
                     <Text style={styles.inventoryLabel}>• B6 : {stockB6} disponibles</Text>
@@ -1323,7 +1339,7 @@ export default function App() {
               </FadeInView>
             )
           ) : (
-            /* ACCUEIL D'AUTHENTIFICATION */
+            /* ÉCRANS D'AUTHENTIFICATION */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
@@ -1526,58 +1542,24 @@ const styles = StyleSheet.create({
     gap: 10,
     justifyContent: Platform.OS === 'web' ? 'flex-start' : 'space-between',
   },
-  productCard: {
-    width: Platform.OS === 'web' ? 180 : '48%',
+
+  productCardNoImg: {
+    width: Platform.OS === 'web' ? 170 : 155,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    paddingBottom: 10,
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
-    alignItems: 'center',
     overflow: 'hidden',
+    marginBottom: 10,
   },
-  productCardActive: { borderColor: '#F97316', backgroundColor: '#FFF7ED' },
-  
-  cardHeaderBadge: { width: '100%', paddingVertical: 4, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
-  cardHeaderBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
-
-  productImageWrapper: { width: '100%', height: 110, justifyContent: 'center', alignItems: 'center', marginVertical: 4 },
-  colorBackgroundGlow: { position: 'absolute', width: 65, height: 65, borderRadius: 32.5 },
-  productBottleImg: { width: 75, height: 95 },
-  
-  productTitle: { fontSize: 11, fontWeight: '800', color: '#0F172A', marginTop: 2 },
-  productSubTitle: { fontSize: 10, fontWeight: '600', color: '#64748B', marginTop: 1 },
-  productPrice: { fontSize: 13, fontWeight: '900', color: '#2563EB', marginTop: 3 },
-
-  fallbackBottleContainer: {
-    width: 65,
-    height: 85,
-    borderRadius: 10,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  fallbackBottleTop: {
-    width: 18,
-    height: 6,
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
-    position: 'absolute',
-    top: -5,
-  },
-  fallbackBottleBody: {
-    width: 46,
-    height: 55,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fallbackBottleText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#FFFFFF'
-  },
+  cardHeaderBadge: { width: '100%', paddingVertical: 6, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
+  cardHeaderBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  cardCenterBlock: { paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+  formatBadgeCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  formatBadgeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  cardOperationText: { fontSize: 11, fontWeight: '700', color: '#475569' },
+  cardFooterPrice: { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingVertical: 8, alignItems: 'center' },
+  productPriceText: { fontSize: 14, fontWeight: '900' },
 
   vendorSaleBox: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, padding: 14, marginBottom: 14 },
   vendorSaleBoxTitle: { fontSize: 14, fontWeight: '800', color: '#0F172A', marginBottom: 10 },

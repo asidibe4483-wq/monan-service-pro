@@ -2,9 +2,8 @@ const bdd = require('../base_de_donnees');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const SECRET_KEY = process.env.JWT_SECRET || 'monan_service_secret_key_securisee';
+const getSecretKey = () => process.env.JWT_SECRET || 'monan_service_secret_key_securisee';
 
-// Inscription : Vendeur (avec création de dépôt) ou Client ménager
 const inscription = async (req, res) => {
     const { nom_depot, nom, email, mot_de_passe, telephone, type_compte = 'vendeur' } = req.body;
 
@@ -13,8 +12,7 @@ const inscription = async (req, res) => {
     }
 
     try {
-        // Vérifier si l'email existe déjà
-        const verifEmail = await bdd.query('SELECT * FROM utilisateurs WHERE email = $1', [email]);
+        const verifEmail = await bdd.query('SELECT id FROM utilisateurs WHERE LOWER(email) = $1', [email.trim().toLowerCase()]);
         if (verifEmail.rows.length > 0) {
             return res.status(400).json({ erreur: 'Cet email est déjà utilisé par un autre compte.' });
         }
@@ -24,7 +22,6 @@ const inscription = async (req, res) => {
         let depotId = null;
         let nouveauDepot = null;
 
-        // Si c'est un vendeur, on crée obligatoirement son dépôt de gaz
         if (type_compte === 'vendeur') {
             if (!nom_depot) {
                 await bdd.query('ROLLBACK');
@@ -32,26 +29,23 @@ const inscription = async (req, res) => {
             }
             const resDepot = await bdd.query(
                 'INSERT INTO depots (nom, localisation, stock_plein, stock_vide, telephone) VALUES ($1, $2, 0, 0, $3) RETURNING *',
-                [nom_depot, 'Non spécifiée', telephone || null]
+                [nom_depot.trim(), 'Non spécifiée', telephone || null]
             );
             nouveauDepot = resDepot.rows[0];
             depotId = nouveauDepot.id;
         }
 
-        // Hachage sécurisé du mot de passe
         const motDePasseHache = await bcrypt.hash(mot_de_passe, 10);
 
-        // Création de l'utilisateur
         const resUser = await bdd.query(
             `INSERT INTO utilisateurs (nom, email, mot_de_passe, depot_id, type_compte) 
              VALUES ($1, $2, $3, $4, $5) RETURNING id, nom, email, depot_id, type_compte`,
-            [nom, email, motDePasseHache, depotId, type_compte]
+            [nom.trim(), email.trim().toLowerCase(), motDePasseHache, depotId, type_compte]
         );
         const nouvelUtilisateur = resUser.rows[0];
 
         await bdd.query('COMMIT');
 
-        // Génération du jeton JWT
         const token = jwt.sign(
             { 
                 id: nouvelUtilisateur.id, 
@@ -60,8 +54,8 @@ const inscription = async (req, res) => {
                 depot_id: nouvelUtilisateur.depot_id, 
                 type_compte: nouvelUtilisateur.type_compte 
             },
-            SECRET_KEY,
-            { expiresIn: '30d' }
+            getSecretKey(),
+            { expiresIn: '7d' }
         );
 
         res.status(201).json({
@@ -77,7 +71,6 @@ const inscription = async (req, res) => {
     }
 };
 
-// Connexion utilisateur (Vendeur ou Client)
 const connexion = async (req, res) => {
     const { email, mot_de_passe } = req.body;
 
@@ -86,7 +79,7 @@ const connexion = async (req, res) => {
     }
 
     try {
-        const resultat = await bdd.query('SELECT * FROM utilisateurs WHERE email = $1', [email]);
+        const resultat = await bdd.query('SELECT * FROM utilisateurs WHERE LOWER(email) = $1', [email.trim().toLowerCase()]);
         if (resultat.rows.length === 0) {
             return res.status(401).json({ erreur: 'Email ou mot de passe incorrect.' });
         }
@@ -98,6 +91,8 @@ const connexion = async (req, res) => {
             return res.status(401).json({ erreur: 'Email ou mot de passe incorrect.' });
         }
 
+        delete utilisateur.mot_de_passe;
+
         const token = jwt.sign(
             { 
                 id: utilisateur.id, 
@@ -106,19 +101,13 @@ const connexion = async (req, res) => {
                 depot_id: utilisateur.depot_id, 
                 type_compte: utilisateur.type_compte || 'vendeur' 
             },
-            SECRET_KEY,
-            { expiresIn: '30d' }
+            getSecretKey(),
+            { expiresIn: '7d' }
         );
 
         res.json({
             token,
-            utilisateur: {
-                id: utilisateur.id,
-                nom: utilisateur.nom,
-                email: utilisateur.email,
-                depot_id: utilisateur.depot_id,
-                type_compte: utilisateur.type_compte || 'vendeur'
-            }
+            utilisateur
         });
     } catch (erreur) {
         console.error('Erreur connexion:', erreur.message);
@@ -126,10 +115,9 @@ const connexion = async (req, res) => {
     }
 };
 
-// Initialisation d'un compte Démo (Vendeur de test)
 const initialiserGerant = async (req, res) => {
     try {
-        const existe = await bdd.query('SELECT * FROM utilisateurs WHERE email = $1', ['demo@monan.com']);
+        const existe = await bdd.query('SELECT id FROM utilisateurs WHERE LOWER(email) = $1', ['demo@monan.com']);
         if (existe.rows.length > 0) {
             return res.json({ message: 'Le compte démo existe déjà.' });
         }

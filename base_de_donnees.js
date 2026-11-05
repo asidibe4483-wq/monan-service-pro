@@ -1,24 +1,29 @@
 const { Pool } = require('pg');
+require('dotenv').config();
 
-let pool;
+// Configuration avec support SSL obligatoire dès qu'une URL distante est utilisée
+const configConnexion = process.env.DATABASE_URL
+    ? {
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }, // Active SSL en local comme en production
+      }
+    : {
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        host: process.env.DB_HOST,
+        port: process.env.DB_PORT,
+        database: process.env.DB_NAME,
+      };
 
-// 1. Si nous sommes en ligne sur Render (DATABASE_URL existe)
-if (process.env.DATABASE_URL) {
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-  });
-} else {
-  // 2. En local sur votre ordinateur
-  pool = new Pool({
-    user: 'postgres',
-    host: 'localhost',
-    database: 'monan_db',
-    password: '4483', // ⚠️ Remplacez ici par votre mot de passe pgAdmin / PostgreSQL
-    port: 5432,
-  });
-}
+const pool = new Pool(configConnexion);
 
-module.exports = {
-  query: (text, params) => pool.query(text, params),
-};
+pool.connect((err, client, release) => {
+    if (err) {
+        console.error('❌ Erreur de connexion à la base de données :', err.stack);
+    } else {
+        console.log('✅ Connecté avec succès à PostgreSQL !');
+    }
+    if (client) release();
+});
+
+module.exports = pool;
