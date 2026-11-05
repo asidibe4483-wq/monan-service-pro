@@ -1043,13 +1043,14 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CATALOGUE PAR MARQUES ET PRIX (SANS IMAGES) */}
+                {/* CATALOGUE ET COMMANDE CLIENT (AFFICHAGE NOMS DE MARQUE SEULEMENT) */}
                 {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>
                       {dashboardTab === 'catalog' ? 'Catalogue Bouteilles' : 'Nouvelle Commande'}
                     </Text>
 
+                    <Text style={styles.label}>Type d'opération *</Text>
                     <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
                       <AnimatedButton
                         style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
@@ -1065,7 +1066,7 @@ export default function App() {
                       </AnimatedButton>
                     </View>
 
-                    <Text style={styles.label}>Format :</Text>
+                    <Text style={styles.label}>Format *</Text>
                     <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
                       {CYLINDER_TYPES.map((cyl) => {
                         const isSelected = selectedCylinder.id === cyl.id;
@@ -1088,54 +1089,31 @@ export default function App() {
                       })}
                     </View>
 
-                    <Text style={styles.label}>Marque :</Text>
-                    <View style={styles.productGridContainer}>
-                      {MARQUES_GAZ.map((m, idx) => {
-                        const isSelected = selectedMarque.id === m.id;
-                        const cardPrice = operationType === 'recharge'
-                          ? (parseInt(vendorPrices[selectedCylinder.id]?.recharge, 10) || selectedCylinder.priceRecharge)
-                          : (parseInt(vendorPrices[selectedCylinder.id]?.achat, 10) || selectedCylinder.priceAchat);
-
-                        return (
-                          <FadeInView key={m.id} delay={idx * 30} style={{ flexGrow: 0 }}>
+                    <Text style={styles.label}>Marque de Gaz *</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        {MARQUES_GAZ.map((m) => {
+                          const isSelected = selectedMarque.id === m.id;
+                          return (
                             <AnimatedButton
-                              style={[
-                                styles.productCardNoImg, 
-                                isSelected && { borderColor: m.color, borderWidth: 2, backgroundColor: m.color + '0D' }
-                              ]}
+                              key={m.id}
+                              style={[styles.brandChip, isSelected && { backgroundColor: m.color, borderColor: m.color }]}
                               onPress={() => {
                                 setSelectedMarque(m);
                                 if (dashboardTab === 'catalog') setDashboardTab('order');
                               }}
                             >
-                              <View style={[styles.cardHeaderBadge, { backgroundColor: m.color }]}>
-                                <Text style={styles.cardHeaderBadgeText} numberOfLines={1}>
-                                  {m.name.toUpperCase()}
-                                </Text>
-                              </View>
-
-                              <View style={styles.cardCenterBlock}>
-                                <View style={[styles.formatBadgeCircle, { backgroundColor: m.color }]}>
-                                  <Text style={styles.formatBadgeText}>{selectedCylinder.id}</Text>
-                                </View>
-                                <Text style={styles.cardOperationText}>
-                                  {operationType === 'recharge' ? 'Recharge' : 'Achat Neuf'}
-                                </Text>
-                              </View>
-
-                              <View style={styles.cardFooterPrice}>
-                                <Text style={[styles.productPriceText, { color: m.color }]}>
-                                  {cardPrice.toLocaleString('fr-FR')} F
-                                </Text>
-                              </View>
+                              <Text style={[styles.brandChipText, isSelected && { color: '#FFFFFF', fontWeight: '800' }]}>
+                                {m.name}
+                              </Text>
                             </AnimatedButton>
-                          </FadeInView>
-                        );
-                      })}
-                    </View>
+                          );
+                        })}
+                      </View>
+                    </ScrollView>
 
                     {dashboardTab === 'order' && (
-                      <View style={{ marginTop: 16 }}>
+                      <View style={{ marginTop: 8 }}>
                         <Text style={styles.label}>Quantité</Text>
                         <QuantityStepper value={quantite} onChange={setQuantite} />
 
@@ -1535,31 +1513,6 @@ const styles = StyleSheet.create({
   backBtnInlineText: { color: '#F97316', fontWeight: '800', fontSize: 12 },
   
   priceSectionHeader: { fontSize: 13, fontWeight: '800', color: '#0F172A', marginTop: 8, marginBottom: 6 },
-
-  productGridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    justifyContent: Platform.OS === 'web' ? 'flex-start' : 'space-between',
-  },
-
-  productCardNoImg: {
-    width: Platform.OS === 'web' ? 170 : 155,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  cardHeaderBadge: { width: '100%', paddingVertical: 6, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
-  cardHeaderBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
-  cardCenterBlock: { paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  formatBadgeCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
-  formatBadgeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
-  cardOperationText: { fontSize: 11, fontWeight: '700', color: '#475569' },
-  cardFooterPrice: { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingVertical: 8, alignItems: 'center' },
-  productPriceText: { fontSize: 14, fontWeight: '900' },
 
   vendorSaleBox: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, padding: 14, marginBottom: 14 },
   vendorSaleBoxTitle: { fontSize: 14, fontWeight: '800', color: '#0F172A', marginBottom: 10 },
