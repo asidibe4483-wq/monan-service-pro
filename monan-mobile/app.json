@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Monan Service",
+    "slug": "monan-mobile",
+    "version": "1.0.3",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "Y",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "versionCode": 6,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "backgroundColor": "#0F172A"
+      },
+      "package": "com.monanservice.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "655297a8-49c7-4058-87a8-6d2897a2ab29"
+      }
+    },
+    "owner": "aliservices225"
+  }
+}
