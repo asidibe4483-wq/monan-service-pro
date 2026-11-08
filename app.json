@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "fc617f69-a89a-4d08-9efb-346cee6b5eda"
+      }
+    },
+    "android": {
+      "package": "com.alinho225.monanservicepro"
+    }
+  }
+}
