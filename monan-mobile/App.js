@@ -15,12 +15,40 @@ import {
   Animated,
   Pressable,
   Easing,
-  BackHandler
+  BackHandler,
+  Dimensions
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
+const { width } = Dimensions.get('window');
 const API_URL = "https://monan-backend.onrender.com";
+
+// Écrans d'introduction (First Time Onboarding)
+const ONBOARDING_SLIDES = [
+  {
+    id: '1',
+    badge: 'BIENVENUE',
+    title: 'Bienvenue sur Monan Service',
+    subtitle: 'La plateforme de référence pour la distribution, la livraison et la gestion des dépôts de gaz en Côte d’Ivoire.',
+    icon: require('./assets/splash-icon.png')
+  },
+  {
+    id: '2',
+    badge: 'ESPACE CLIENT',
+    title: 'Commandez votre Gaz en Quelques Clics',
+    subtitle: 'Recharge B6, B12, B28 ou achat de bouteilles neuves auprès des dépôts certifiés proches de chez vous.',
+    icon: require('./assets/splash-icon.png')
+  },
+  {
+    id: '3',
+    badge: 'ESPACE VENDEUR',
+    title: 'Gérez votre Dépôt & Caisse comme un Pro',
+    subtitle: 'Suivez vos recettes journalières, gérez vos stocks en temps réel et générez vos bilans d’activité en PDF.',
+    icon: require('./assets/splash-icon.png')
+  }
+];
 
 const FadeInView = ({ children, style, delay = 0 }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -167,6 +195,9 @@ const PAYMENT_METHODS = [
 
 export default function App() {
   const [isAppReady, setIsAppReady] = useState(false);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(null);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+
   const [currentScreen, setCurrentScreen] = useState('welcome');
   const [user, setUser] = useState(null);
   const [activeRoleMode, setActiveRoleMode] = useState('client');
@@ -232,12 +263,43 @@ export default function App() {
   const isTrialExpired = user && activeRoleMode === 'depot' && !user.isSubscribed && daysLeft <= 0;
 
   useEffect(() => {
+    checkFirstLaunchStatus();
     const timer = setTimeout(() => setIsAppReady(true), 800);
     return () => clearTimeout(timer);
   }, []);
 
+  const checkFirstLaunchStatus = async () => {
+    try {
+      const value = await AsyncStorage.getItem('@has_seen_onboarding');
+      if (value !== null) {
+        setHasSeenOnboarding(true);
+      } else {
+        setHasSeenOnboarding(false);
+      }
+    } catch (e) {
+      setHasSeenOnboarding(false);
+    }
+  };
+
+  const handleFinishOnboarding = async () => {
+    try {
+      await AsyncStorage.setItem('@has_seen_onboarding', 'true');
+      setHasSeenOnboarding(true);
+    } catch (e) {
+      setHasSeenOnboarding(true);
+    }
+  };
+
   useEffect(() => {
     const onBackPress = () => {
+      if (!hasSeenOnboarding) {
+        if (onboardingStep > 0) {
+          setOnboardingStep(prev => prev - 1);
+          return true;
+        }
+        return false;
+      }
+
       if (!user) {
         if (currentScreen === 'forgot_password') {
           if (resetStep > 1) {
@@ -277,7 +339,7 @@ export default function App() {
         BackHandler.removeEventListener('hardwareBackPress', onBackPress);
       }
     };
-  }, [user, currentScreen, resetStep, showPaymentSection, isTrialExpired, dashboardTab]);
+  }, [hasSeenOnboarding, onboardingStep, user, currentScreen, resetStep, showPaymentSection, isTrialExpired, dashboardTab]);
 
   useEffect(() => {
     if (user && user.role === 'depot' && activeRoleMode === 'depot' && dashboardTab === 'sales_report') {
@@ -736,7 +798,7 @@ export default function App() {
     return true;
   });
 
-  if (!isAppReady) {
+  if (!isAppReady || hasSeenOnboarding === null) {
     return (
       <View style={styles.splashContainer}>
         <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
@@ -745,6 +807,82 @@ export default function App() {
         <Text style={styles.splashSubTitle}>DISTRIBUTION DE GAZ</Text>
         <ActivityIndicator size="small" color="#F97316" style={{ marginTop: 24 }} />
       </View>
+    );
+  }
+
+  // ÉCRAN D'INTRODUCTIONS PREMIÈRE UTILISATION (ONBOARDING)
+  if (!hasSeenOnboarding) {
+    const currentSlide = ONBOARDING_SLIDES[onboardingStep];
+    const isLastSlide = onboardingStep === ONBOARDING_SLIDES.length - 1;
+
+    return (
+      <SafeAreaView style={styles.onboardingContainer}>
+        <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
+        
+        <View style={styles.onboardingHeader}>
+          <Pressable onPress={handleFinishOnboarding} style={styles.skipBtn}>
+            <Text style={styles.skipBtnText}>Passer</Text>
+          </Pressable>
+        </View>
+
+        <FadeInView key={currentSlide.id} style={styles.onboardingSlideWrapper}>
+          <View style={styles.onboardingImageContainer}>
+            <PulsingBadge>
+              <View style={styles.onboardingBadgeBox}>
+                <Image source={currentSlide.icon} style={styles.onboardingLogo} resizeMode="contain" />
+              </View>
+            </PulsingBadge>
+          </View>
+
+          <View style={styles.onboardingTextContainer}>
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>{currentSlide.badge}</Text>
+            </View>
+            <Text style={styles.onboardingTitle}>{currentSlide.title}</Text>
+            <Text style={styles.onboardingSub}>{currentSlide.subtitle}</Text>
+          </View>
+        </FadeInView>
+
+        <View style={styles.onboardingFooter}>
+          <View style={styles.paginationDotsRow}>
+            {ONBOARDING_SLIDES.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.dot,
+                  onboardingStep === index ? styles.dotActive : styles.dotInactive
+                ]}
+              />
+            ))}
+          </View>
+
+          <View style={styles.onboardingBtnRow}>
+            {onboardingStep > 0 && (
+              <AnimatedButton
+                style={styles.onboardingBackBtn}
+                onPress={() => setOnboardingStep(prev => prev - 1)}
+              >
+                <Text style={styles.onboardingBackText}>Précédent</Text>
+              </AnimatedButton>
+            )}
+
+            <AnimatedButton
+              style={[styles.btnOrange, { flex: 1, marginLeft: onboardingStep > 0 ? 10 : 0 }]}
+              onPress={() => {
+                if (isLastSlide) {
+                  handleFinishOnboarding();
+                } else {
+                  setOnboardingStep(prev => prev + 1);
+                }
+              }}
+            >
+              <Text style={styles.btnOrangeText}>
+                {isLastSlide ? 'Commencer' : 'Suivant'}
+              </Text>
+            </AnimatedButton>
+          </View>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -1317,7 +1455,7 @@ export default function App() {
               </FadeInView>
             )
           ) : (
-            /* ÉCRANS D'AUTHENTIFICATION */
+            /* ÉCRANS D'AUTHENTIFICATION DE L'APPLICATION */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
@@ -1464,6 +1602,27 @@ const styles = StyleSheet.create({
   splashTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '900', letterSpacing: 1 },
   splashSubTitle: { color: '#94A3B8', fontSize: 10, fontWeight: '700', letterSpacing: 2, marginTop: 4 },
   
+  // STYLES ÉCRANS DE BIENVENUE (ONBOARDING)
+  onboardingContainer: { flex: 1, backgroundColor: '#0F172A', paddingHorizontal: 20, justifyContent: 'space-between' },
+  onboardingHeader: { alignItems: 'flex-end', paddingTop: 16 },
+  skipBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#1E293B' },
+  skipBtnText: { color: '#94A3B8', fontSize: 12, fontWeight: '700' },
+  onboardingSlideWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
+  onboardingImageContainer: { marginBottom: 30, alignItems: 'center' },
+  onboardingBadgeBox: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#F97316' },
+  onboardingLogo: { width: 60, height: 60 },
+  onboardingTextContainer: { alignItems: 'center', paddingHorizontal: 10 },
+  onboardingTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', textAlign: 'center', marginBottom: 10, lineHeight: 28 },
+  onboardingSub: { color: '#94A3B8', fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  onboardingFooter: { paddingBottom: 24 },
+  paginationDotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginBottom: 20 },
+  dot: { height: 8, borderRadius: 4 },
+  dotActive: { width: 24, backgroundColor: '#F97316' },
+  dotInactive: { width: 8, backgroundColor: '#334155' },
+  onboardingBtnRow: { flexDirection: 'row', alignItems: 'center' },
+  onboardingBackBtn: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  onboardingBackText: { color: '#CBD5E1', fontWeight: '800', fontSize: 13 },
+
   appBar: { backgroundColor: '#0F172A', paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 3, borderBottomColor: '#F97316' },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   brandBadge: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
