@@ -16,7 +16,6 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "Y",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
