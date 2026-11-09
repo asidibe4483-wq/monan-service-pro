@@ -15,14 +15,24 @@ import {
   Animated,
   Pressable,
   Easing,
-  BackHandler,
-  Dimensions
+  BackHandler
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 const API_URL = "https://monan-backend.onrender.com";
+
+// Fonction utilitaire : Calcul des jours d'essai restants (30 jours)
+const getDaysLeftInTrial = (createdAtDate) => {
+  if (!createdAtDate) return 30;
+  const created = new Date(createdAtDate);
+  const now = new Date();
+  const diffTime = Math.abs(now - created);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const remaining = 30 - diffDays;
+  return remaining > 0 ? remaining : 0;
+};
 
 // Écrans d'introduction (Onboarding Première Utilisation)
 const ONBOARDING_SLIDES = [
@@ -192,11 +202,10 @@ const PAYMENT_METHODS = [
   { id: 'moov', name: 'Moov Money', color: '#0055A5', logo: require('./assets/Moov.jpeg') },
 ];
 
-// LISTE INITIALE DES DÉPÔTS AVEC GÉOLOCALISATION ET DISTANCE NUMÉRIQUE (POUR TRI)
 const INITIAL_DEPOTS = [
   { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distanceKm: 0.3, distance: '0.3 km', quartier: 'Cocody Angré', telephone: '0707010203' },
   { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distanceKm: 1.2, distance: '1.2 km', quartier: 'Cocody Centre', telephone: '0708020304' },
-  { id: 'DEP-03', nom: 'Dépôt Rivera 2', distanceKm: 2.5, distance: '2.5 km', quartier: 'Cocody Riviera', telephone: '0709030405' },
+  { id: 'DEP-03', nom: 'Dépôt Riviera 2', distanceKm: 2.5, distance: '2.5 km', quartier: 'Cocody Riviera', telephone: '0709030405' },
   { id: 'DEP-04', nom: 'Dépôt Yopougon Maroc', distanceKm: 5.8, distance: '5.8 km', quartier: 'Yopougon', telephone: '0501020304' },
 ];
 
@@ -242,7 +251,6 @@ export default function App() {
   const [searchDepot, setSearchDepot] = useState('');
   const [depotsList, setDepotsList] = useState(INITIAL_DEPOTS);
 
-  // BASE DE COMMANDES PARTAGÉE EN TEMPS RÉEL (CLIENT & VENDEURS)
   const [allOrders, setAllOrders] = useState([
     {
       id: 'CMD-801',
@@ -254,7 +262,7 @@ export default function App() {
       qte: 1,
       total: '5 500 FCFA',
       adresse: 'Angré Star 10',
-      status: 'available', // available | accepted | delivered
+      status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
     },
@@ -387,7 +395,6 @@ export default function App() {
     }
   };
 
-  // INSCRIPTION VENDEUR / CLIENT AVEC AJOUT DYNAMIQUE DU DÉPÔT DANS LA LISTE GÉOLOCALISÉE
   const handleRegister = async (type) => {
     if (!nom || !telephone || !email || !password) {
       Alert.alert('Formulaire incomplet', 'Veuillez remplir les champs obligatoires.');
@@ -406,12 +413,11 @@ export default function App() {
       isSubscribed: false
     };
 
-    // Si le nouveau compte est un Dépôt Vendeur, on l'ajoute directement à la liste des dépôts
     if (type === 'depot') {
       const newDepot = {
         id: newUser.id,
         nom: `Dépôt ${nom.trim()}`,
-        distanceKm: 0.1, // Dépôt nouvellement créé considéré à proximité
+        distanceKm: 0.1,
         distance: '0.1 km (Nouveau)',
         quartier: adresse.trim() || 'Commune Vendeur',
         telephone: telephone.trim()
@@ -449,7 +455,6 @@ export default function App() {
     setLoading(false);
   };
 
-  // CLIENT : SOUMISSION DE LA COMMANDE
   const handleCreateOrder = () => {
     if (!adresseLivraison) return Alert.alert('Adresse requise', 'Précisez votre lieu de livraison.');
 
@@ -465,7 +470,7 @@ export default function App() {
       type: `${selectedMarque.name} ${selectedCylinder.name}`,
       operation: operationType === 'recharge' ? 'Recharge' : 'Achat Neuf',
       qte: qteNum,
-      status: 'available', // Disponible pour tous les vendeurs
+      status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
       total: `${totalCalculated.toLocaleString('fr-FR')} FCFA`,
@@ -473,7 +478,6 @@ export default function App() {
       depotCible: selectedDepotTarget ? selectedDepotTarget.nom : 'Dépôt le plus proche'
     };
 
-    // Ajout à la banque globale de commandes
     setAllOrders(prev => [newCmd, ...prev]);
 
     Alert.alert(
@@ -483,7 +487,6 @@ export default function App() {
     );
   };
 
-  // VENDEUR : ACCEPTER UNE COMMANDE EN TEMPS RÉEL (VERROUILLAGE UNIQUE)
   const handleAcceptOrder = (orderId) => {
     setAllOrders(prevOrders =>
       prevOrders.map(order => {
@@ -505,7 +508,6 @@ export default function App() {
     );
   };
 
-  // VENDEUR : MARQUER LA COMMANDE COMME LIVRÉE
   const handleMarkAsDelivered = (orderId) => {
     setAllOrders(prevOrders =>
       prevOrders.map(order => {
@@ -527,15 +529,13 @@ export default function App() {
     setDashboardTab('home');
   };
 
-  // FILTRAGE ET TRI DES DÉPÔTS DU PLUS PROCHE AU PLUS ÉLOIGNÉ
   const sortedAndFilteredDepots = [...depotsList]
-    .sort((a, b) => a.distanceKm - b.distanceKm) // Tri par distance croissante (10m -> 50m -> 1km)
+    .sort((a, b) => a.distanceKm - b.distanceKm)
     .filter(d =>
       d.nom.toLowerCase().includes(searchDepot.toLowerCase()) ||
       d.quartier.toLowerCase().includes(searchDepot.toLowerCase())
     );
 
-  // FILTRAGE DES COMMANDES VENDEURS
   const availableOrdersForVendors = allOrders.filter(cmd => cmd.status === 'available');
   const myAcceptedOrders = allOrders.filter(cmd => cmd.assignedVendorId === user?.id && cmd.status === 'accepted');
   const myClientOrders = allOrders.filter(cmd => cmd.clientNom === user?.nom || user?.role === 'client');
@@ -552,7 +552,6 @@ export default function App() {
     );
   }
 
-  // ÉCRAN D'ONBOARDING PREMIÈRE UTILISATION
   if (!hasSeenOnboarding) {
     const currentSlide = ONBOARDING_SLIDES[onboardingStep];
     const isLastSlide = onboardingStep === ONBOARDING_SLIDES.length - 1;
@@ -632,7 +631,6 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* BARRE SUPERIEURE */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -669,7 +667,6 @@ export default function App() {
           {user ? (
             <FadeInView key={`${dashboardTab}-${activeRoleMode}`} style={styles.mainWrapper}>
               
-              {/* NAVIGATION PAR ONGLETS */}
               <View style={styles.pillsContainerOuter}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScrollContent}>
                   <AnimatedButton
@@ -746,7 +743,6 @@ export default function App() {
                 </ScrollView>
               </View>
 
-              {/* TABLEAU DE BORD PRINCIPAL */}
               {dashboardTab === 'home' && (
                 <View style={styles.fullSection}>
                   <View style={styles.userGreetingCard}>
@@ -815,7 +811,6 @@ export default function App() {
                 </View>
               )}
 
-              {/* ONGLET VENDEUR : COMMANDES EN TEMPS RÉEL (FLUX DISPATCH) */}
               {dashboardTab === 'vendor_live_orders' && activeRoleMode === 'depot' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Commandes Clients Disponibles</Text>
@@ -852,7 +847,6 @@ export default function App() {
                 </View>
               )}
 
-              {/* ONGLET VENDEUR : MES LIVRAISONS ACCEPTÉES */}
               {dashboardTab === 'my_deliveries' && activeRoleMode === 'depot' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Mes Livraisons en Cours</Text>
@@ -886,7 +880,6 @@ export default function App() {
                 </View>
               )}
 
-              {/* ONGLET CLIENT : DÉPÔTS CLASSÉS DU PLUS PROCHE AU PLUS ÉLOIGNÉ */}
               {dashboardTab === 'depots' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Dépôts les plus proches</Text>
@@ -930,7 +923,6 @@ export default function App() {
                 </View>
               )}
 
-              {/* CATALOGUE ET COMMANDE CLIENT */}
               {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>
@@ -1036,7 +1028,6 @@ export default function App() {
                 </View>
               )}
 
-              {/* SUIVI COMMANDES CLIENT */}
               {dashboardTab === 'orders_list' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Mes Commandes & Suivi</Text>
@@ -1062,7 +1053,6 @@ export default function App() {
                 </View>
               )}
 
-              {/* AUTRES ONGLETS VENDEURS */}
               {dashboardTab === 'pricing' && activeRoleMode === 'depot' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Prix Vendeur</Text>
@@ -1098,7 +1088,6 @@ export default function App() {
 
             </FadeInView>
           ) : (
-            /* ÉCRANS D'AUTHENTIFICATION */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
@@ -1267,7 +1256,6 @@ const styles = StyleSheet.create({
   backBtnInline: { marginBottom: 10 },
   backBtnInlineText: { color: '#F97316', fontWeight: '800', fontSize: 12 },
 
-  // STYLES DÉPÔTS GÉOLOCALISÉS ET TRIÉS
   depotCardSorted: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 12, padding: 12, marginBottom: 10 },
   depotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   rankBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center' },
@@ -1280,7 +1268,6 @@ const styles = StyleSheet.create({
   selectedDepotBanner: { backgroundColor: '#1E293B', padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#F97316' },
   selectedDepotText: { color: '#FFFFFF', fontSize: 12 },
 
-  // STYLES VUE VENDEUR - COMMANDES TEMPS RÉEL
   liveOrderCard: { backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 12, marginBottom: 10 },
   liveOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   liveOrderId: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
