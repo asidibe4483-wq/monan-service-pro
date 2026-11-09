@@ -22,10 +22,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
-const { width } = Dimensions.get('window');
 const API_URL = "https://monan-backend.onrender.com";
 
-// Écrans d'introduction (First Time Onboarding)
+// Écrans d'introduction (Onboarding Première Utilisation)
 const ONBOARDING_SLIDES = [
   {
     id: '1',
@@ -38,14 +37,14 @@ const ONBOARDING_SLIDES = [
     id: '2',
     badge: 'ESPACE CLIENT',
     title: 'Commandez votre Gaz en Quelques Clics',
-    subtitle: 'Recharge B6, B12, B28 ou achat de bouteilles neuves auprès des dépôts certifiés proches de chez vous.',
+    subtitle: 'Trouvez les dépôts les plus proches de chez vous et suivez votre livraison en temps réel.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '3',
     badge: 'ESPACE VENDEUR',
-    title: 'Gérez votre Dépôt & Caisse comme un Pro',
-    subtitle: 'Suivez vos recettes journalières, gérez vos stocks en temps réel et générez vos bilans d’activité en PDF.',
+    title: 'Acceptez les Commandes en Temps Réel',
+    subtitle: 'Recevez les commandes clients à proximité, réservez-les instantanément et gérez vos stocks.',
     icon: require('./assets/splash-icon.png')
   }
 ];
@@ -193,6 +192,14 @@ const PAYMENT_METHODS = [
   { id: 'moov', name: 'Moov Money', color: '#0055A5', logo: require('./assets/Moov.jpeg') },
 ];
 
+// LISTE INITIALE DES DÉPÔTS AVEC GÉOLOCALISATION ET DISTANCE NUMÉRIQUE (POUR TRI)
+const INITIAL_DEPOTS = [
+  { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distanceKm: 0.3, distance: '0.3 km', quartier: 'Cocody Angré', telephone: '0707010203' },
+  { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distanceKm: 1.2, distance: '1.2 km', quartier: 'Cocody Centre', telephone: '0708020304' },
+  { id: 'DEP-03', nom: 'Dépôt Rivera 2', distanceKm: 2.5, distance: '2.5 km', quartier: 'Cocody Riviera', telephone: '0709030405' },
+  { id: 'DEP-04', nom: 'Dépôt Yopougon Maroc', distanceKm: 5.8, distance: '5.8 km', quartier: 'Yopougon', telephone: '0501020304' },
+];
+
 export default function App() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(null);
@@ -230,16 +237,43 @@ export default function App() {
   const [operationType, setOperationType] = useState('recharge');
   const [quantite, setQuantite] = useState('1');
   const [adresseLivraison, setAdresseLivraison] = useState('');
-  const [orderFilter, setOrderFilter] = useState('all');
+  const [selectedDepotTarget, setSelectedDepotTarget] = useState(null);
 
   const [searchDepot, setSearchDepot] = useState('');
-  const [depotsList] = useState([
-    { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distance: '0.8 km', quartier: 'Cocody Angré' },
-    { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distance: '2.3 km', quartier: 'Cocody Centre' },
-    { id: 'DEP-03', nom: 'Dépôt Yopougon Maroc', distance: '5.1 km', quartier: 'Yopougon' },
+  const [depotsList, setDepotsList] = useState(INITIAL_DEPOTS);
+
+  // BASE DE COMMANDES PARTAGÉE EN TEMPS RÉEL (CLIENT & VENDEURS)
+  const [allOrders, setAllOrders] = useState([
+    {
+      id: 'CMD-801',
+      date: new Date().toLocaleDateString('fr-FR'),
+      clientNom: 'Kouassi Yves',
+      clientPhone: '0708091011',
+      type: 'TotalEnergies B12 (12.5 kg)',
+      operation: 'Recharge',
+      qte: 1,
+      total: '5 500 FCFA',
+      adresse: 'Angré Star 10',
+      status: 'available', // available | accepted | delivered
+      assignedVendorId: null,
+      assignedVendorNom: null,
+    },
+    {
+      id: 'CMD-802',
+      date: new Date().toLocaleDateString('fr-FR'),
+      clientNom: 'Mme Traoré',
+      clientPhone: '0506070809',
+      type: 'Shell Gas B6 (6 kg)',
+      operation: 'Achat Neuf',
+      qte: 2,
+      total: '26 000 FCFA',
+      adresse: 'Riviera 3 Near Cap Sud',
+      status: 'available',
+      assignedVendorId: null,
+      assignedVendorNom: null,
+    }
   ]);
 
-  const [commandes, setCommandes] = useState([]);
   const [stockB6, setStockB6] = useState('10');
   const [stockB12, setStockB12] = useState('25');
   const [stockB28, setStockB28] = useState('5');
@@ -253,7 +287,6 @@ export default function App() {
     sales: [
       { id: 101, client_nom: 'Kouassi Yves', marque: 'TotalEnergies', couleur: '#F97316', bouteille_type: 'B12 (12.5 kg)', type_operation: 'Recharge', quantite: 2, montant_total: 11000, created_at: new Date().toISOString() },
       { id: 102, client_nom: 'Mme Koné', marque: 'Shell Gas', couleur: '#1E40AF', bouteille_type: 'B6 (6 kg)', type_operation: 'Recharge', quantite: 1, montant_total: 2000, created_at: new Date().toISOString() },
-      { id: 103, client_nom: 'Restaurant Le Lagon', marque: 'Pétro Ivoire', couleur: '#334155', bouteille_type: 'B12 (12.5 kg)', type_operation: 'Achat', quantite: 2, montant_total: 50000, created_at: new Date().toISOString() },
     ]
   });
 
@@ -341,41 +374,6 @@ export default function App() {
     };
   }, [hasSeenOnboarding, onboardingStep, user, currentScreen, resetStep, showPaymentSection, isTrialExpired, dashboardTab]);
 
-  useEffect(() => {
-    if (user && user.role === 'depot' && activeRoleMode === 'depot' && dashboardTab === 'sales_report') {
-      fetchSalesReport();
-    }
-  }, [salesPeriod, dayOffset, dashboardTab, activeRoleMode]);
-
-  const fetchSalesReport = async () => {
-    if (!user || !user.token) return;
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `${API_URL}/api/sales/report?period=${salesPeriod}&date_offset=${dayOffset}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${user.token}`,
-            'Accept': 'application/json'
-          }
-        }
-      );
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const data = await response.json();
-          if (data.sales) {
-            setSalesReport(data);
-          }
-        }
-      }
-    } catch (err) {
-      console.log('Utilisation du bilan local par défaut');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const activeFormatPrices = vendorPrices[selectedCylinder.id] || { recharge: selectedCylinder.priceRecharge, achat: selectedCylinder.priceAchat };
   const currentUnitPrice = operationType === 'recharge' 
     ? (parseInt(activeFormatPrices.recharge, 10) || selectedCylinder.priceRecharge)
@@ -389,164 +387,44 @@ export default function App() {
     }
   };
 
-  const handleSaveVendorPrices = async () => {
-    if (!user || !user.token) {
-      Alert.alert('Erreur', 'Session non valide. Veuillez vous reconnecter.');
+  // INSCRIPTION VENDEUR / CLIENT AVEC AJOUT DYNAMIQUE DU DÉPÔT DANS LA LISTE GÉOLOCALISÉE
+  const handleRegister = async (type) => {
+    if (!nom || !telephone || !email || !password) {
+      Alert.alert('Formulaire incomplet', 'Veuillez remplir les champs obligatoires.');
       return;
     }
-    setLoading(true);
-    try {
-      const payload = [
-        { format: 'B6', prix_recharge: parseInt(vendorPrices.B6.recharge, 10), prix_achat: parseInt(vendorPrices.B6.achat, 10) },
-        { format: 'B12', prix_recharge: parseInt(vendorPrices.B12.recharge, 10), prix_achat: parseInt(vendorPrices.B12.achat, 10) },
-        { format: 'B28', prix_recharge: parseInt(vendorPrices.B28.recharge, 10), prix_achat: parseInt(vendorPrices.B28.achat, 10) },
-      ];
-      const response = await fetch(`${API_URL}/api/depot/prices`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({ prices: payload })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Erreur lors de la sauvegarde.');
-      Alert.alert('Succès', 'Vos tarifs ont été enregistrés !');
-    } catch (err) {
-      Alert.alert('Sauvegarde', err.message || 'Tarifs appliqués avec succès.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddDirectSale = async () => {
-    if (!user || !user.token) return;
-    const qtyNum = parseInt(quantite, 10) || 1;
-    const pu = currentUnitPrice;
-    const total = qtyNum * pu;
 
     setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/sales`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({
-          client_nom: newSaleClient.trim() || 'Client Passage',
-          bouteille_type: selectedCylinder.name,
-          marque: selectedMarque.name,
-          couleur: selectedMarque.color,
-          type_operation: operationType === 'recharge' ? 'Recharge' : 'Achat Bouteille',
-          quantite: qtyNum,
-          prix_unitaire: pu
-        })
-      });
+    const newUser = {
+      id: `USR-${Math.floor(1000 + Math.random() * 9000)}`,
+      nom: nom.trim(),
+      email: email.trim().toLowerCase(),
+      telephone: telephone.trim(),
+      adresse: adresse.trim() || 'Abidjan',
+      role: type,
+      createdAt: new Date().toISOString(),
+      isSubscribed: false
+    };
 
-      const data = await response.json();
-      if (response.ok) {
-        Alert.alert('Vente enregistrée !', `Total : ${total.toLocaleString('fr-FR')} FCFA`);
-        setNewSaleClient('');
-        fetchSalesReport();
-      } else {
-        throw new Error(data.error || 'Erreur d\'enregistrement');
-      }
-    } catch (err) {
-      const newSaleLocal = {
-        id: Date.now(),
-        client_nom: newSaleClient.trim() || 'Client Passage',
-        marque: selectedMarque.name,
-        couleur: selectedMarque.color,
-        bouteille_type: selectedCylinder.name,
-        type_operation: operationType === 'recharge' ? 'Recharge' : 'Achat Bouteille',
-        quantite: qtyNum,
-        montant_total: total,
-        created_at: new Date().toISOString()
+    // Si le nouveau compte est un Dépôt Vendeur, on l'ajoute directement à la liste des dépôts
+    if (type === 'depot') {
+      const newDepot = {
+        id: newUser.id,
+        nom: `Dépôt ${nom.trim()}`,
+        distanceKm: 0.1, // Dépôt nouvellement créé considéré à proximité
+        distance: '0.1 km (Nouveau)',
+        quartier: adresse.trim() || 'Commune Vendeur',
+        telephone: telephone.trim()
       };
-      setSalesReport({
-        ...salesReport,
-        totalRecette: (salesReport.totalRecette || 0) + total,
-        count: (salesReport.count || 0) + 1,
-        sales: [newSaleLocal, ...(salesReport.sales || [])]
-      });
-      Alert.alert('Vente ajoutée localement !', `Total : ${total.toLocaleString('fr-FR')} FCFA`);
-      setNewSaleClient('');
-    } finally {
-      setLoading(false);
+      setDepotsList(prev => [newDepot, ...prev]);
     }
+
+    setUser(newUser);
+    setActiveRoleMode(type);
+    setAdresseLivraison(adresse.trim());
+    setDashboardTab('home');
+    setLoading(false);
   };
-
-  const handlePrintPDFReport = async () => {
-    let periodTitle = 'BILAN DES VENTES JOURNALIER';
-    if (salesPeriod === 'day') {
-      if (dayOffset === 0) periodTitle = 'BILAN DU JOUR';
-      else if (dayOffset === -1) periodTitle = 'BILAN D\'HIER';
-      else periodTitle = 'BILAN D\'AVANT-HIER';
-    } else if (salesPeriod === 'week') {
-      periodTitle = 'BILAN HEBDOMADAIRE';
-    } else if (salesPeriod === 'month') {
-      periodTitle = 'BILAN MENSUEL';
-    } else if (salesPeriod === 'year') {
-      periodTitle = 'BILAN ANNUEL';
-    }
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <style>
-            body { font-family: sans-serif; padding: 20px; color: #0F172A; }
-            .header { text-align: center; border-bottom: 3px solid #F97316; padding-bottom: 10px; margin-bottom: 15px; }
-            .brand { font-size: 22px; font-weight: 900; }
-            .subtitle { color: #F97316; font-size: 13px; font-weight: 800; margin-top: 4px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-            th { background-color: #0F172A; color: #FFFFFF; font-size: 11px; padding: 8px; text-align: left; }
-            td { border-bottom: 1px solid #E2E8F0; padding: 8px; font-size: 11px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="brand">MONAN SERVICE PRO</div>
-            <div class="subtitle">${periodTitle}</div>
-          </div>
-          <table>
-            <thead>
-              <tr><th>Client</th><th>Article</th><th>Qté</th><th>Total</th></tr>
-            </thead>
-            <tbody>
-              ${(salesReport.sales || []).map(s => `
-                <tr>
-                  <td>${s.client_nom || 'Client'}</td>
-                  <td>${s.marque || 'Gaz'} ${s.bouteille_type}</td>
-                  <td>${s.quantite}</td>
-                  <td><strong>${(parseInt(s.montant_total) || 0).toLocaleString('fr-FR')} F</strong></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </body>
-      </html>
-    `;
-
-    try {
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-    } catch (error) {
-      Alert.alert('Impression PDF', 'Génération du bilan PDF...');
-    }
-  };
-
-  function getDaysLeftInTrial(createdAtDate) {
-    if (!createdAtDate) return 30;
-    const created = new Date(createdAtDate);
-    const now = new Date();
-    const diffTime = Math.abs(now - created);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const remaining = 30 - diffDays;
-    return remaining > 0 ? remaining : 0;
-  }
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -555,206 +433,23 @@ export default function App() {
     }
 
     setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
-      });
+    const isDepotUser = email.toLowerCase().includes('depot') || email.toLowerCase().includes('vendeur');
+    const userData = {
+      id: isDepotUser ? 'DEP-CURRENT' : 'CLI-CURRENT',
+      email: email.trim().toLowerCase(),
+      nom: email.split('@')[0],
+      role: isDepotUser ? 'depot' : 'client',
+      createdAt: new Date().toISOString(),
+      isSubscribed: false
+    };
 
-      const contentType = response.headers.get('content-type');
-      let data;
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        throw new Error(`Erreur serveur (${response.status}). Indisponibilité temporaire.`);
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || data.message || 'Identifiants incorrects.');
-      }
-
-      const rawUser = data.user || data;
-      const token = data.token;
-      const fetchedRole = String(rawUser.role || data.role || '').toLowerCase().trim();
-      const isDepotUser = fetchedRole === 'depot' || fetchedRole === 'vendeur' || email.toLowerCase().includes('depot');
-
-      const userData = {
-        ...rawUser,
-        token,
-        email: rawUser.email || email.trim().toLowerCase(),
-        nom: rawUser.nom || data.nom || email.split('@')[0],
-        role: isDepotUser ? 'depot' : 'client',
-        createdAt: rawUser.createdAt || rawUser.created_at || new Date().toISOString(),
-        isSubscribed: rawUser.isSubscribed || rawUser.is_subscribed || false
-      };
-
-      setUser(userData);
-      setActiveRoleMode(userData.role);
-      setAdresseLivraison(userData.adresse || '');
-      setDashboardTab('home');
-    } catch (error) {
-      Alert.alert('Erreur', error.message);
-    } finally {
-      setLoading(false);
-    }
+    setUser(userData);
+    setActiveRoleMode(userData.role);
+    setDashboardTab('home');
+    setLoading(false);
   };
 
-  const handleRegister = async (type) => {
-    if (!nom || !telephone || !email || !password) {
-      Alert.alert('Formulaire incomplet', 'Veuillez remplir les champs obligatoires.');
-      return;
-    }
-
-    setLoading(true);
-    const endpoint = type === 'depot' ? '/api/auth/register-depot' : '/api/auth/register-client';
-
-    try {
-      const response = await fetch(`${API_URL}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({
-          nom: nom.trim(),
-          telephone: telephone.trim(),
-          adresse: adresse.trim(),
-          email: email.trim().toLowerCase(),
-          password,
-          role: type,
-        }),
-      });
-
-      const contentType = response.headers.get('content-type');
-      let data;
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        throw new Error(`Erreur serveur (${response.status}).`);
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Échec de l\'inscription.');
-      }
-
-      const rawUser = data.user || data;
-      const token = data.token;
-
-      const newUser = {
-        ...rawUser,
-        token,
-        nom: rawUser.nom || nom.trim(),
-        email: rawUser.email || email.trim().toLowerCase(),
-        telephone: rawUser.telephone || telephone.trim(),
-        adresse: rawUser.adresse || adresse.trim(),
-        role: type,
-        createdAt: rawUser.created_at || rawUser.createdAt || new Date().toISOString(),
-        isSubscribed: rawUser.is_subscribed || rawUser.isSubscribed || false
-      };
-
-      setUser(newUser);
-      setActiveRoleMode(type);
-      setAdresseLivraison(adresse.trim());
-      setDashboardTab('home');
-    } catch (error) {
-      Alert.alert('Erreur', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRequestResetCode = async () => {
-    if (!forgotEmail) return Alert.alert('Champ requis', 'Saisissez votre email.');
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ email: forgotEmail.trim().toLowerCase() }),
-      });
-
-      const contentType = response.headers.get('content-type');
-      let data;
-
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        throw new Error(`Erreur serveur (Code ${response.status}). Vérifiez la route backend.`);
-      }
-
-      if (!response.ok) throw new Error(data.error || "Email introuvable.");
-      setResetStep(2);
-      Alert.alert('Code envoyé', data.message || 'Consultez votre boîte de réception.');
-    } catch (error) {
-      Alert.alert('Erreur Réinitialisation', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyResetCode = async () => {
-    if (!resetCode || resetCode.trim().length !== 5) return Alert.alert('Invalide', 'Code à 5 chiffres requis.');
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ email: forgotEmail.trim().toLowerCase(), code: resetCode.trim() }),
-      });
-
-      const contentType = response.headers.get('content-type');
-      let data;
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        throw new Error(`Erreur serveur (Code ${response.status}).`);
-      }
-
-      if (!response.ok) throw new Error(data.error || "Code incorrect.");
-      setResetStep(3);
-    } catch (error) {
-      Alert.alert('Erreur Validation', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfirmNewPassword = async () => {
-    if (!newPassword || newPassword.trim().length < 6) return Alert.alert('Invalide', 'Mot de passe trop court.');
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ email: forgotEmail.trim().toLowerCase(), code: resetCode.trim(), newPassword: newPassword.trim() }),
-      });
-
-      const contentType = response.headers.get('content-type');
-      let data;
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        throw new Error(`Erreur serveur (Code ${response.status}).`);
-      }
-
-      if (!response.ok) throw new Error(data.error || "Mise à jour échouée.");
-      Alert.alert('Succès', 'Mot de passe mis à jour.', [{ text: 'Connexion', onPress: () => setCurrentScreen('login') }]);
-    } catch (error) {
-      Alert.alert('Erreur', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleProcessSubscription = () => {
-    if (!paymentPhone) return Alert.alert('Numéro requis', 'Entrez le numéro à débiter.');
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setUser({ ...user, isSubscribed: true });
-      setShowPaymentSection(false);
-      Alert.alert('Paiement validé', 'Abonnement Monan Pro actif.');
-    }, 1200);
-  };
-
+  // CLIENT : SOUMISSION DE LA COMMANDE
   const handleCreateOrder = () => {
     if (!adresseLivraison) return Alert.alert('Adresse requise', 'Précisez votre lieu de livraison.');
 
@@ -765,17 +460,62 @@ export default function App() {
     const newCmd = {
       id: `CMD-${Math.floor(100 + Math.random() * 900)}`,
       date: new Date().toLocaleDateString('fr-FR'),
+      clientNom: user?.nom || 'Client',
+      clientPhone: user?.telephone || 'Non renseigné',
       type: `${selectedMarque.name} ${selectedCylinder.name}`,
+      operation: operationType === 'recharge' ? 'Recharge' : 'Achat Neuf',
       qte: qteNum,
-      statut: 'En cours',
-      codeStatut: 'pending',
-      total: `${totalCalculated.toLocaleString('fr-FR')} FCFA`
+      status: 'available', // Disponible pour tous les vendeurs
+      assignedVendorId: null,
+      assignedVendorNom: null,
+      total: `${totalCalculated.toLocaleString('fr-FR')} FCFA`,
+      adresse: adresseLivraison,
+      depotCible: selectedDepotTarget ? selectedDepotTarget.nom : 'Dépôt le plus proche'
     };
 
-    setCommandes([newCmd, ...commandes]);
-    Alert.alert('Commande enregistrée !', `Total : ${totalCalculated.toLocaleString('fr-FR')} FCFA`, [
-      { text: 'Suivre', onPress: () => setDashboardTab('orders_list') }
-    ]);
+    // Ajout à la banque globale de commandes
+    setAllOrders(prev => [newCmd, ...prev]);
+
+    Alert.alert(
+      'Commande Transmise !',
+      `Votre commande de ${totalCalculated.toLocaleString('fr-FR')} FCFA est visible par les dépôts de gaz environnants en temps réel.`,
+      [{ text: 'Suivre ma commande', onPress: () => setDashboardTab('orders_list') }]
+    );
+  };
+
+  // VENDEUR : ACCEPTER UNE COMMANDE EN TEMPS RÉEL (VERROUILLAGE UNIQUE)
+  const handleAcceptOrder = (orderId) => {
+    setAllOrders(prevOrders =>
+      prevOrders.map(order => {
+        if (order.id === orderId) {
+          return {
+            ...order,
+            status: 'accepted',
+            assignedVendorId: user.id,
+            assignedVendorNom: user.nom || 'Mon Dépôt'
+          };
+        }
+        return order;
+      })
+    );
+
+    Alert.alert(
+      'Commande Prise en Charge !',
+      'Cette commande vous a été attribuée avec succès. Les autres vendeurs ne la voient plus.'
+    );
+  };
+
+  // VENDEUR : MARQUER LA COMMANDE COMME LIVRÉE
+  const handleMarkAsDelivered = (orderId) => {
+    setAllOrders(prevOrders =>
+      prevOrders.map(order => {
+        if (order.id === orderId) {
+          return { ...order, status: 'delivered' };
+        }
+        return order;
+      })
+    );
+    Alert.alert('Succès', 'Commande marquée comme livrée !');
   };
 
   const handleLogout = () => {
@@ -787,16 +527,18 @@ export default function App() {
     setDashboardTab('home');
   };
 
-  const filteredDepots = depotsList.filter(d => 
-    d.nom.toLowerCase().includes(searchDepot.toLowerCase()) || 
-    d.quartier.toLowerCase().includes(searchDepot.toLowerCase())
-  );
+  // FILTRAGE ET TRI DES DÉPÔTS DU PLUS PROCHE AU PLUS ÉLOIGNÉ
+  const sortedAndFilteredDepots = [...depotsList]
+    .sort((a, b) => a.distanceKm - b.distanceKm) // Tri par distance croissante (10m -> 50m -> 1km)
+    .filter(d =>
+      d.nom.toLowerCase().includes(searchDepot.toLowerCase()) ||
+      d.quartier.toLowerCase().includes(searchDepot.toLowerCase())
+    );
 
-  const filteredCommandes = commandes.filter(cmd => {
-    if (orderFilter === 'pending') return cmd.codeStatut === 'pending';
-    if (orderFilter === 'delivered') return cmd.codeStatut === 'delivered';
-    return true;
-  });
+  // FILTRAGE DES COMMANDES VENDEURS
+  const availableOrdersForVendors = allOrders.filter(cmd => cmd.status === 'available');
+  const myAcceptedOrders = allOrders.filter(cmd => cmd.assignedVendorId === user?.id && cmd.status === 'accepted');
+  const myClientOrders = allOrders.filter(cmd => cmd.clientNom === user?.nom || user?.role === 'client');
 
   if (!isAppReady || hasSeenOnboarding === null) {
     return (
@@ -810,7 +552,7 @@ export default function App() {
     );
   }
 
-  // ÉCRAN D'INTRODUCTIONS PREMIÈRE UTILISATION (ONBOARDING)
+  // ÉCRAN D'ONBOARDING PREMIÈRE UTILISATION
   if (!hasSeenOnboarding) {
     const currentSlide = ONBOARDING_SLIDES[onboardingStep];
     const isLastSlide = onboardingStep === ONBOARDING_SLIDES.length - 1;
@@ -890,7 +632,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* HEADER DE L'APPLICATION */}
+      {/* BARRE SUPERIEURE */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -925,537 +667,438 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
           {user ? (
-            (isTrialExpired || showPaymentSection) ? (
-              <FadeInView style={styles.mainWrapper}>
-                <View style={styles.cardBox}>
-                  {activeRoleMode === 'depot' && !isTrialExpired && (
-                    <AnimatedButton onPress={() => setShowPaymentSection(false)} style={styles.backBtnInline}>
-                      <Text style={styles.backBtnInlineText}>Retour</Text>
-                    </AnimatedButton>
+            <FadeInView key={`${dashboardTab}-${activeRoleMode}`} style={styles.mainWrapper}>
+              
+              {/* NAVIGATION PAR ONGLETS */}
+              <View style={styles.pillsContainerOuter}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScrollContent}>
+                  <AnimatedButton
+                    style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
+                    onPress={() => setDashboardTab('home')}
+                  >
+                    <Text style={[styles.pillText, dashboardTab === 'home' && styles.pillTextActive]}>Accueil</Text>
+                  </AnimatedButton>
+
+                  {activeRoleMode === 'depot' ? (
+                    <>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'vendor_live_orders' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('vendor_live_orders')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'vendor_live_orders' && styles.pillTextActive]}>
+                          Commandes Directes ({availableOrdersForVendors.length})
+                        </Text>
+                      </AnimatedButton>
+
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'my_deliveries' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('my_deliveries')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'my_deliveries' && styles.pillTextActive]}>
+                          Mes Livraisons ({myAcceptedOrders.length})
+                        </Text>
+                      </AnimatedButton>
+
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'pricing' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('pricing')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Prix Vendeur</Text>
+                      </AnimatedButton>
+                      
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'sales_report' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('sales_report')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'sales_report' && styles.pillTextActive]}>Bilan Caisse</Text>
+                      </AnimatedButton>
+                    </>
+                  ) : (
+                    <>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('depots')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts Proches</Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'catalog' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('catalog')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'catalog' && styles.pillTextActive]}>Catalogue</Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'order' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('order')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'order' && styles.pillTextActive]}>Commander</Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'orders_list' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('orders_list')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'orders_list' && styles.pillTextActive]}>
+                          Mes Suivis ({myClientOrders.length})
+                        </Text>
+                      </AnimatedButton>
+                    </>
                   )}
+                </ScrollView>
+              </View>
 
-                  <Text style={[styles.cardBoxTitle, { textAlign: 'center' }]}>Abonnement Vendeur</Text>
-
-                  <View style={styles.subCard}>
-                    <Text style={styles.subCardBadge}>ACCÈS ILLIMITÉ</Text>
-                    <Text style={styles.subCardTitle}>Monan Pro</Text>
-                    <Text style={styles.subCardPrice}>3 000 FCFA <Text style={styles.subCardMonth}>/ mois</Text></Text>
+              {/* TABLEAU DE BORD PRINCIPAL */}
+              {dashboardTab === 'home' && (
+                <View style={styles.fullSection}>
+                  <View style={styles.userGreetingCard}>
+                    <View style={styles.avatarCircle}>
+                      <Text style={styles.avatarText}>{(user.nom || 'U').charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Utilisateur'}</Text>
+                      <Text style={styles.greetingSubtitle}>
+                        {activeRoleMode === 'depot' ? 'Mode Gestionnaire & Livraisons Dépôt' : 'Mode Client Livraisons'}
+                      </Text>
+                    </View>
                   </View>
 
-                  <Text style={styles.label}>Mode de paiement</Text>
-                  <View style={styles.paymentMethodsGrid}>
-                    {PAYMENT_METHODS.map((pm) => {
-                      const isSelected = selectedPayment === pm.id;
+                  <View style={styles.kpiGrid}>
+                    {activeRoleMode === 'depot' ? (
+                      <>
+                        <View style={styles.kpiCard}>
+                          <Text style={styles.kpiCardTag}>COMMANDES DISPONIBLES</Text>
+                          <Text style={styles.kpiCardNum}>{availableOrdersForVendors.length}</Text>
+                        </View>
+                        <View style={styles.kpiCard}>
+                          <Text style={styles.kpiCardTag}>MES LIVRAISONS</Text>
+                          <Text style={styles.kpiCardNum}>{myAcceptedOrders.length}</Text>
+                        </View>
+                      </>
+                    ) : (
+                      <>
+                        <View style={styles.kpiCard}>
+                          <Text style={styles.kpiCardTag}>DÉPÔTS AUTOUR DE MOI</Text>
+                          <Text style={styles.kpiCardNum}>{sortedAndFilteredDepots.length}</Text>
+                        </View>
+                        <View style={styles.kpiCard}>
+                          <Text style={styles.kpiCardTag}>MES COMMANDES</Text>
+                          <Text style={styles.kpiCardNum}>{myClientOrders.length}</Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+
+                  {activeRoleMode === 'depot' ? (
+                    <View style={{ gap: 10 }}>
+                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('vendor_live_orders')}>
+                        <Text style={styles.actionCardTitle}>Voir les Commandes Clients en Temps Réel</Text>
+                        <Text style={{ color: '#C2410C', fontSize: 11, marginTop: 2 }}>
+                          {availableOrdersForVendors.length} commande(s) en attente à réserver
+                        </Text>
+                      </AnimatedButton>
+
+                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('pricing')}>
+                        <Text style={styles.actionCardTitleWhite}>Configurer mes Prix Vendeur</Text>
+                      </AnimatedButton>
+                    </View>
+                  ) : (
+                    <View style={{ gap: 10 }}>
+                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
+                        <Text style={styles.actionCardTitle}>Dépôts les plus proches de chez moi</Text>
+                        <Text style={{ color: '#C2410C', fontSize: 11, marginTop: 2 }}>Classés du plus proche au plus éloigné</Text>
+                      </AnimatedButton>
+
+                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
+                        <Text style={styles.actionCardTitleWhite}>Passer une Nouvelle Commande</Text>
+                      </AnimatedButton>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* ONGLET VENDEUR : COMMANDES EN TEMPS RÉEL (FLUX DISPATCH) */}
+              {dashboardTab === 'vendor_live_orders' && activeRoleMode === 'depot' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Commandes Clients Disponibles</Text>
+                  <Text style={styles.introText}>
+                    Réservez et prenez en charge les demandes des clients. Dès que vous acceptez une commande, elle est verrouillée pour votre dépôt.
+                  </Text>
+
+                  {availableOrdersForVendors.length === 0 ? (
+                    <View style={styles.emptyStateBox}>
+                      <Text style={styles.emptyStateText}>Aucune commande en attente pour le moment.</Text>
+                      <Text style={styles.emptyStateSub}>Les nouvelles demandes apparaîtront automatiquement ici.</Text>
+                    </View>
+                  ) : (
+                    availableOrdersForVendors.map((order) => (
+                      <View key={order.id} style={styles.liveOrderCard}>
+                        <View style={styles.liveOrderHeader}>
+                          <Text style={styles.liveOrderId}>{order.id} • {order.date}</Text>
+                          <Text style={styles.liveOrderBadge}>EN ATTENTE</Text>
+                        </View>
+                        <Text style={styles.liveOrderClient}>Client : {order.clientNom} ({order.clientPhone})</Text>
+                        <Text style={styles.liveOrderArticle}>{order.qte}x {order.type} ({order.operation})</Text>
+                        <Text style={styles.liveOrderAddress}>Lieu : {order.adresse}</Text>
+                        <Text style={styles.liveOrderTotal}>Total : {order.total}</Text>
+
+                        <AnimatedButton
+                          style={styles.btnAcceptOrder}
+                          onPress={() => handleAcceptOrder(order.id)}
+                        >
+                          <Text style={styles.btnAcceptOrderText}>Accepter la commande</Text>
+                        </AnimatedButton>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+
+              {/* ONGLET VENDEUR : MES LIVRAISONS ACCEPTÉES */}
+              {dashboardTab === 'my_deliveries' && activeRoleMode === 'depot' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Mes Livraisons en Cours</Text>
+                  {myAcceptedOrders.length === 0 ? (
+                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>
+                      Vous n'avez pas de commande en cours de livraison.
+                    </Text>
+                  ) : (
+                    myAcceptedOrders.map((order) => (
+                      <View key={order.id} style={[styles.liveOrderCard, { borderColor: '#4ADE80' }]}>
+                        <View style={styles.liveOrderHeader}>
+                          <Text style={styles.liveOrderId}>{order.id}</Text>
+                          <Text style={[styles.liveOrderBadge, { backgroundColor: 'rgba(74, 222, 128, 0.2)', color: '#4ADE80' }]}>
+                            RESERVÉE PAR VOUS
+                          </Text>
+                        </View>
+                        <Text style={styles.liveOrderClient}>Client : {order.clientNom}</Text>
+                        <Text style={styles.liveOrderArticle}>{order.qte}x {order.type}</Text>
+                        <Text style={styles.liveOrderAddress}>Adresse : {order.adresse}</Text>
+                        <Text style={styles.liveOrderTotal}>Total : {order.total}</Text>
+
+                        <AnimatedButton
+                          style={[styles.btnOrange, { marginTop: 8 }]}
+                          onPress={() => handleMarkAsDelivered(order.id)}
+                        >
+                          <Text style={styles.btnOrangeText}>Marquer comme Livrée</Text>
+                        </AnimatedButton>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+
+              {/* ONGLET CLIENT : DÉPÔTS CLASSÉS DU PLUS PROCHE AU PLUS ÉLOIGNÉ */}
+              {dashboardTab === 'depots' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Dépôts les plus proches</Text>
+                  <Text style={styles.introText}>Affichage automatique selon la distance (du plus proche au plus éloigné) :</Text>
+
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Filtrer par quartier ou commune..."
+                    placeholderTextColor="#64748B"
+                    value={searchDepot}
+                    onChangeText={setSearchDepot}
+                  />
+
+                  {sortedAndFilteredDepots.map((depot, index) => (
+                    <View key={depot.id} style={styles.depotCardSorted}>
+                      <View style={styles.depotHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <View style={styles.rankBadge}>
+                            <Text style={styles.rankBadgeText}>#{index + 1}</Text>
+                          </View>
+                          <View>
+                            <Text style={styles.depotTitle}>{depot.nom}</Text>
+                            <Text style={styles.depotSub}>{depot.quartier}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.depotDistanceHighlight}>{depot.distance}</Text>
+                      </View>
+
+                      <AnimatedButton
+                        style={styles.btnDepotSelect}
+                        onPress={() => {
+                          setSelectedDepotTarget(depot);
+                          setAdresseLivraison(depot.quartier);
+                          setDashboardTab('order');
+                        }}
+                      >
+                        <Text style={styles.btnDepotSelectText}>Commander dans ce dépôt</Text>
+                      </AnimatedButton>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* CATALOGUE ET COMMANDE CLIENT */}
+              {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>
+                    {dashboardTab === 'catalog' ? 'Catalogue Bouteilles' : 'Nouvelle Commande'}
+                  </Text>
+
+                  {selectedDepotTarget && (
+                    <View style={styles.selectedDepotBanner}>
+                      <Text style={styles.selectedDepotText}>
+                        Dépôt sélectionné : <Text style={{ fontWeight: '900', color: '#F97316' }}>{selectedDepotTarget.nom}</Text> ({selectedDepotTarget.distance})
+                      </Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.label}>Type d'opération *</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                    <AnimatedButton
+                      style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
+                      onPress={() => setOperationType('recharge')}
+                    >
+                      <Text style={[styles.opTypeText, operationType === 'recharge' && styles.opTypeTextActive]}>Recharge</Text>
+                    </AnimatedButton>
+                    <AnimatedButton
+                      style={[styles.opTypeBtn, operationType === 'achat' && styles.opTypeBtnActive]}
+                      onPress={() => setOperationType('achat')}
+                    >
+                      <Text style={[styles.opTypeText, operationType === 'achat' && styles.opTypeTextActive]}>Achat Neuf</Text>
+                    </AnimatedButton>
+                  </View>
+
+                  <Text style={styles.label}>Format *</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                    {CYLINDER_TYPES.map((cyl) => {
+                      const isSelected = selectedCylinder.id === cyl.id;
+                      const activePrice = operationType === 'recharge' 
+                        ? (parseInt(vendorPrices[cyl.id]?.recharge, 10) || cyl.priceRecharge)
+                        : (parseInt(vendorPrices[cyl.id]?.achat, 10) || cyl.priceAchat);
+
                       return (
                         <AnimatedButton
-                          key={pm.id}
-                          style={[styles.paymentBtn, isSelected && { borderColor: pm.color, borderWidth: 2, backgroundColor: '#1E293B' }]}
-                          onPress={() => setSelectedPayment(pm.id)}
+                          key={cyl.id}
+                          style={[styles.smallCylBtn, isSelected && styles.smallCylBtnActive]}
+                          onPress={() => setSelectedCylinder(cyl)}
                         >
-                          <Image source={pm.logo} style={styles.paymentLogoImage} resizeMode="contain" />
-                          <Text style={[styles.paymentBtnText, isSelected && { color: '#FFFFFF', fontWeight: '800' }]}>{pm.name}</Text>
+                          <Text style={[styles.smallCylText, isSelected && styles.smallCylTextActive]}>{cyl.id}</Text>
+                          <Text style={{ fontSize: 9, color: isSelected ? '#F97316' : '#94A3B8', marginTop: 2 }}>
+                            {activePrice.toLocaleString('fr-FR')} F
+                          </Text>
                         </AnimatedButton>
                       );
                     })}
                   </View>
 
-                  <Text style={styles.label}>Téléphone Mobile Money *</Text>
-                  <TextInput
-                    style={styles.input}
-                    keyboardType="phone-pad"
-                    placeholder="07 00 00 00 00"
-                    placeholderTextColor="#64748B"
-                    value={paymentPhone}
-                    onChangeText={setPaymentPhone}
-                  />
-
-                  <AnimatedButton style={styles.btnOrange} onPress={handleProcessSubscription} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Payer 3 000 FCFA</Text>}
-                  </AnimatedButton>
-                </View>
-              </FadeInView>
-            ) : (
-              <FadeInView key={`${dashboardTab}-${activeRoleMode}`} style={styles.mainWrapper}>
-                {activeRoleMode === 'depot' && (
-                  <View style={styles.trialBannerRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.trialBannerTitle}>
-                        {user.isSubscribed ? 'Abonnement Vendeur Actif' : `Essai gratuit : ${daysLeft} jours restants`}
-                      </Text>
-                    </View>
-                    {!user.isSubscribed && (
-                      <AnimatedButton style={styles.btnPayNowInline} onPress={() => setShowPaymentSection(true)}>
-                        <Text style={styles.btnPayNowInlineText}>Activer</Text>
-                      </AnimatedButton>
-                    )}
-                  </View>
-                )}
-
-                {/* BARRE D'ONGLETS */}
-                <View style={styles.pillsContainerOuter}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScrollContent}>
-                    <AnimatedButton
-                      style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
-                      onPress={() => setDashboardTab('home')}
-                    >
-                      <Text style={[styles.pillText, dashboardTab === 'home' && styles.pillTextActive]}>Accueil</Text>
-                    </AnimatedButton>
-
-                    {activeRoleMode === 'depot' ? (
-                      <>
-                        <AnimatedButton
-                          style={[styles.pillBtn, dashboardTab === 'pricing' && styles.pillBtnActive]}
-                          onPress={() => setDashboardTab('pricing')}
-                        >
-                          <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Prix Vendeur</Text>
-                        </AnimatedButton>
-                        <AnimatedButton
-                          style={[styles.pillBtn, dashboardTab === 'sales_report' && styles.pillBtnActive]}
-                          onPress={() => setDashboardTab('sales_report')}
-                        >
-                          <Text style={[styles.pillText, dashboardTab === 'sales_report' && styles.pillTextActive]}>Bilan & PDF</Text>
-                        </AnimatedButton>
-                        <AnimatedButton
-                          style={[styles.pillBtn, dashboardTab === 'add_stock' && styles.pillBtnActive]}
-                          onPress={() => setDashboardTab('add_stock')}
-                        >
-                          <Text style={[styles.pillText, dashboardTab === 'add_stock' && styles.pillTextActive]}>Stocks</Text>
-                        </AnimatedButton>
-                        <AnimatedButton
-                          style={[styles.pillBtn, dashboardTab === 'sales_list' && styles.pillBtnActive]}
-                          onPress={() => setDashboardTab('sales_list')}
-                        >
-                          <Text style={[styles.pillText, dashboardTab === 'sales_list' && styles.pillTextActive]}>Inventaire</Text>
-                        </AnimatedButton>
-                      </>
-                    ) : (
-                      <>
-                        <AnimatedButton
-                          style={[styles.pillBtn, dashboardTab === 'catalog' && styles.pillBtnActive]}
-                          onPress={() => setDashboardTab('catalog')}
-                        >
-                          <Text style={[styles.pillText, dashboardTab === 'catalog' && styles.pillTextActive]}>Catalogue</Text>
-                        </AnimatedButton>
-                        <AnimatedButton
-                          style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
-                          onPress={() => setDashboardTab('depots')}
-                        >
-                          <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts</Text>
-                        </AnimatedButton>
-                        <AnimatedButton
-                          style={[styles.pillBtn, dashboardTab === 'order' && styles.pillBtnActive]}
-                          onPress={() => setDashboardTab('order')}
-                        >
-                          <Text style={[styles.pillText, dashboardTab === 'order' && styles.pillTextActive]}>Commander</Text>
-                        </AnimatedButton>
-                        <AnimatedButton
-                          style={[styles.pillBtn, dashboardTab === 'orders_list' && styles.pillBtnActive]}
-                          onPress={() => setDashboardTab('orders_list')}
-                        >
-                          <Text style={[styles.pillText, dashboardTab === 'orders_list' && styles.pillTextActive]}>
-                            Suivi ({commandes.length})
-                          </Text>
-                        </AnimatedButton>
-                      </>
-                    )}
-                  </ScrollView>
-                </View>
-
-                {/* ACCUEIL TABLEAU DE BORD */}
-                {dashboardTab === 'home' && (
-                  <View style={styles.fullSection}>
-                    <View style={styles.userGreetingCard}>
-                      <View style={styles.avatarCircle}>
-                        <Text style={styles.avatarText}>{(user.nom || 'U').charAt(0).toUpperCase()}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Utilisateur'}</Text>
-                        <Text style={styles.greetingSubtitle}>
-                          {activeRoleMode === 'depot' ? 'Mode Gestionnaire Dépôt' : 'Mode Client Livraisons'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.kpiGrid}>
-                      {activeRoleMode === 'depot' ? (
-                        <>
-                          <View style={styles.kpiCard}>
-                            <Text style={styles.kpiCardTag}>RECETTE DU JOUR</Text>
-                            <Text style={styles.kpiCardNum}>{(salesReport.totalRecette || 0).toLocaleString('fr-FR')} F</Text>
-                          </View>
-                          <View style={styles.kpiCard}>
-                            <Text style={styles.kpiCardTag}>TRANSACTIONS</Text>
-                            <Text style={styles.kpiCardNum}>{salesReport.count || 0}</Text>
-                          </View>
-                        </>
-                      ) : (
-                        <>
-                          <View style={styles.kpiCard}>
-                            <Text style={styles.kpiCardTag}>COMMANDES</Text>
-                            <Text style={styles.kpiCardNum}>{commandes.length}</Text>
-                          </View>
-                          <View style={styles.kpiCard}>
-                            <Text style={styles.kpiCardTag}>DÉPÔTS ACTIFS</Text>
-                            <Text style={styles.kpiCardNum}>3</Text>
-                          </View>
-                        </>
-                      )}
-                    </View>
-
-                    {activeRoleMode === 'depot' ? (
-                      <View style={{ gap: 10 }}>
-                        <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('pricing')}>
-                          <Text style={styles.actionCardTitle}>Configurer mes Prix Vendeur</Text>
-                        </AnimatedButton>
-
-                        <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('sales_report')}>
-                          <Text style={styles.actionCardTitleWhite}>Saisie Caisse & Bilan PDF</Text>
-                        </AnimatedButton>
-
-                        <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('add_stock')}>
-                          <Text style={styles.actionCardTitleWhite}>Gestion des Stocks</Text>
-                        </AnimatedButton>
-                      </View>
-                    ) : (
-                      <View style={{ gap: 10 }}>
-                        <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('catalog')}>
-                          <Text style={styles.actionCardTitle}>Catalogue des Bouteilles</Text>
-                        </AnimatedButton>
-
-                        <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.actionCardTitleWhite}>Commander une Livraison</Text>
-                        </AnimatedButton>
-
-                        <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('depots')}>
-                          <Text style={styles.actionCardTitleWhite}>Dépôts à Proximité</Text>
-                        </AnimatedButton>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {/* TARIFS VENDEUR */}
-                {dashboardTab === 'pricing' && activeRoleMode === 'depot' && (
-                  <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Prix Vendeur</Text>
-
-                    <Text style={styles.priceSectionHeader}>Format B6 (6 kg)</Text>
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.label}>Recharge (F)</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, recharge: val } })} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.label}>Achat Neuf (F)</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, achat: val } })} />
-                      </View>
-                    </View>
-
-                    <Text style={styles.priceSectionHeader}>Format B12 (12.5 kg)</Text>
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.label}>Recharge (F)</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, recharge: val } })} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.label}>Achat Neuf (F)</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, achat: val } })} />
-                      </View>
-                    </View>
-
-                    <Text style={styles.priceSectionHeader}>Format B28 (28 kg)</Text>
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.label}>Recharge (F)</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, recharge: val } })} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.label}>Achat Neuf (F)</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, achat: val } })} />
-                      </View>
-                    </View>
-
-                    <AnimatedButton style={styles.btnOrange} onPress={handleSaveVendorPrices} disabled={loading}>
-                      {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Enregistrer</Text>}
-                    </AnimatedButton>
-                  </View>
-                )}
-
-                {/* CATALOGUE ET COMMANDE CLIENT */}
-                {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
-                  <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>
-                      {dashboardTab === 'catalog' ? 'Catalogue Bouteilles' : 'Nouvelle Commande'}
-                    </Text>
-
-                    <Text style={styles.label}>Type d'opération *</Text>
-                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-                      <AnimatedButton
-                        style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
-                        onPress={() => setOperationType('recharge')}
-                      >
-                        <Text style={[styles.opTypeText, operationType === 'recharge' && styles.opTypeTextActive]}>Recharge</Text>
-                      </AnimatedButton>
-                      <AnimatedButton
-                        style={[styles.opTypeBtn, operationType === 'achat' && styles.opTypeBtnActive]}
-                        onPress={() => setOperationType('achat')}
-                      >
-                        <Text style={[styles.opTypeText, operationType === 'achat' && styles.opTypeTextActive]}>Achat Neuf</Text>
-                      </AnimatedButton>
-                    </View>
-
-                    <Text style={styles.label}>Format *</Text>
-                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                      {CYLINDER_TYPES.map((cyl) => {
-                        const isSelected = selectedCylinder.id === cyl.id;
-                        const activePrice = operationType === 'recharge' 
-                          ? (parseInt(vendorPrices[cyl.id]?.recharge, 10) || cyl.priceRecharge)
-                          : (parseInt(vendorPrices[cyl.id]?.achat, 10) || cyl.priceAchat);
-
+                  <Text style={styles.label}>Marque de Gaz *</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {MARQUES_GAZ.map((m) => {
+                        const isSelected = selectedMarque.id === m.id;
                         return (
                           <AnimatedButton
-                            key={cyl.id}
-                            style={[styles.smallCylBtn, isSelected && styles.smallCylBtnActive]}
-                            onPress={() => setSelectedCylinder(cyl)}
+                            key={m.id}
+                            style={[styles.brandChip, isSelected && { backgroundColor: m.color, borderColor: m.color }]}
+                            onPress={() => {
+                              setSelectedMarque(m);
+                              if (dashboardTab === 'catalog') setDashboardTab('order');
+                            }}
                           >
-                            <Text style={[styles.smallCylText, isSelected && styles.smallCylTextActive]}>{cyl.id}</Text>
-                            <Text style={{ fontSize: 9, color: isSelected ? '#F97316' : '#94A3B8', marginTop: 2 }}>
-                              {activePrice.toLocaleString('fr-FR')} F
+                            <Text style={[styles.brandChipText, isSelected && { color: '#FFFFFF', fontWeight: '800' }]}>
+                              {m.name}
                             </Text>
                           </AnimatedButton>
                         );
                       })}
                     </View>
+                  </ScrollView>
 
-                    <Text style={styles.label}>Marque de Gaz *</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
-                        {MARQUES_GAZ.map((m) => {
-                          const isSelected = selectedMarque.id === m.id;
-                          return (
-                            <AnimatedButton
-                              key={m.id}
-                              style={[styles.brandChip, isSelected && { backgroundColor: m.color, borderColor: m.color }]}
-                              onPress={() => {
-                                setSelectedMarque(m);
-                                if (dashboardTab === 'catalog') setDashboardTab('order');
-                              }}
-                            >
-                              <Text style={[styles.brandChipText, isSelected && { color: '#FFFFFF', fontWeight: '800' }]}>
-                                {m.name}
-                              </Text>
-                            </AnimatedButton>
-                          );
-                        })}
-                      </View>
-                    </ScrollView>
-
-                    {dashboardTab === 'order' && (
-                      <View style={{ marginTop: 8 }}>
-                        <Text style={styles.label}>Quantité</Text>
-                        <QuantityStepper value={quantite} onChange={setQuantite} />
-
-                        <Text style={styles.label}>Adresse de livraison *</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="Commune, quartier, repère..."
-                          placeholderTextColor="#64748B"
-                          value={adresseLivraison}
-                          onChangeText={setAdresseLivraison}
-                        />
-
-                        <View style={styles.totalSummary}>
-                          <Text style={styles.totalSummaryLabel}>Total à payer :</Text>
-                          <Text style={styles.totalSummaryValue}>
-                            {((parseInt(quantite, 10) || 1) * currentUnitPrice).toLocaleString('fr-FR')} FCFA
-                          </Text>
-                        </View>
-
-                        <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
-                          <Text style={styles.btnOrangeText}>Valider la commande</Text>
-                        </AnimatedButton>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {/* BILAN & SAISIE CAISSE VENDEUR */}
-                {dashboardTab === 'sales_report' && activeRoleMode === 'depot' && (
-                  <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Bilan & Saisie Caisse</Text>
-
-                    <View style={styles.vendorSaleBox}>
-                      <Text style={styles.vendorSaleBoxTitle}>Nouvelle Vente Directe</Text>
-
-                      <Text style={styles.label}>Marque de Gaz *</Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                        <View style={{ flexDirection: 'row', gap: 6 }}>
-                          {MARQUES_GAZ.map((m) => {
-                            const isSelected = selectedMarque.id === m.id;
-                            return (
-                              <AnimatedButton
-                                key={m.id}
-                                style={[styles.brandChip, isSelected && { backgroundColor: m.color, borderColor: m.color }]}
-                                onPress={() => setSelectedMarque(m)}
-                              >
-                                <Text style={[styles.brandChipText, isSelected && { color: '#FFFFFF', fontWeight: '800' }]}>
-                                  {m.name}
-                                </Text>
-                              </AnimatedButton>
-                            );
-                          })}
-                        </View>
-                      </ScrollView>
-
-                      <Text style={styles.label}>Type d'opération *</Text>
-                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                        <AnimatedButton
-                          style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
-                          onPress={() => setOperationType('recharge')}
-                        >
-                          <Text style={[styles.opTypeText, operationType === 'recharge' && styles.opTypeTextActive]}>Recharge</Text>
-                        </AnimatedButton>
-                        <AnimatedButton
-                          style={[styles.opTypeBtn, operationType === 'achat' && styles.opTypeBtnActive]}
-                          onPress={() => setOperationType('achat')}
-                        >
-                          <Text style={[styles.opTypeText, operationType === 'achat' && styles.opTypeTextActive]}>Achat Neuf</Text>
-                        </AnimatedButton>
-                      </View>
-
-                      <Text style={styles.label}>Format *</Text>
-                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                        {CYLINDER_TYPES.map((cyl) => {
-                          const isSelected = selectedCylinder.id === cyl.id;
-                          return (
-                            <AnimatedButton
-                              key={cyl.id}
-                              style={[styles.smallCylBtn, isSelected && styles.smallCylBtnActive]}
-                              onPress={() => setSelectedCylinder(cyl)}
-                            >
-                              <Text style={[styles.smallCylText, isSelected && styles.smallCylTextActive]}>{cyl.id}</Text>
-                            </AnimatedButton>
-                          );
-                        })}
-                      </View>
-
-                      <Text style={styles.label}>Client (optionnel)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Ex: Client Passage, M. Kouassi"
-                        placeholderTextColor="#64748B"
-                        value={newSaleClient}
-                        onChangeText={setNewSaleClient}
-                      />
-
+                  {dashboardTab === 'order' && (
+                    <View style={{ marginTop: 8 }}>
                       <Text style={styles.label}>Quantité</Text>
                       <QuantityStepper value={quantite} onChange={setQuantite} />
 
+                      <Text style={styles.label}>Adresse de livraison *</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Commune, quartier, repère..."
+                        placeholderTextColor="#64748B"
+                        value={adresseLivraison}
+                        onChangeText={setAdresseLivraison}
+                      />
+
                       <View style={styles.totalSummary}>
-                        <Text style={styles.totalSummaryLabel}>Montant Vente :</Text>
+                        <Text style={styles.totalSummaryLabel}>Total à payer :</Text>
                         <Text style={styles.totalSummaryValue}>
                           {((parseInt(quantite, 10) || 1) * currentUnitPrice).toLocaleString('fr-FR')} FCFA
                         </Text>
                       </View>
 
-                      <AnimatedButton style={styles.btnOrange} onPress={handleAddDirectSale} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Enregistrer la vente</Text>}
+                      <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
+                        <Text style={styles.btnOrangeText}>Transmettre la commande</Text>
                       </AnimatedButton>
                     </View>
+                  )}
+                </View>
+              )}
 
-                    <Text style={[styles.cardBoxTitle, { marginTop: 18 }]}>Rapport de Recette</Text>
-
-                    <View style={styles.filterRow}>
-                      <AnimatedButton style={[styles.filterBtn, salesPeriod === 'day' && styles.filterBtnActive]} onPress={() => setSalesPeriod('day')}>
-                        <Text style={[styles.filterText, salesPeriod === 'day' && styles.filterTextActive]}>Jour</Text>
-                      </AnimatedButton>
-                      <AnimatedButton style={[styles.filterBtn, salesPeriod === 'week' && styles.filterBtnActive]} onPress={() => setSalesPeriod('week')}>
-                        <Text style={[styles.filterText, salesPeriod === 'week' && styles.filterTextActive]}>Hebdo</Text>
-                      </AnimatedButton>
-                      <AnimatedButton style={[styles.filterBtn, salesPeriod === 'month' && styles.filterBtnActive]} onPress={() => setSalesPeriod('month')}>
-                        <Text style={[styles.filterText, salesPeriod === 'month' && styles.filterTextActive]}>Mois</Text>
-                      </AnimatedButton>
-                      <AnimatedButton style={[styles.filterBtn, salesPeriod === 'year' && styles.filterBtnActive]} onPress={() => setSalesPeriod('year')}>
-                        <Text style={[styles.filterText, salesPeriod === 'year' && styles.filterTextActive]}>An</Text>
-                      </AnimatedButton>
-                    </View>
-
-                    <View style={styles.totalSummary}>
-                      <Text style={styles.totalSummaryLabel}>Recette Cumulée :</Text>
-                      <Text style={styles.totalSummaryValue}>
-                        {(salesReport.totalRecette || 0).toLocaleString('fr-FR')} FCFA
-                      </Text>
-                    </View>
-
-                    <AnimatedButton style={styles.btnNavyPdf} onPress={handlePrintPDFReport}>
-                      <Text style={styles.btnNavyPdfText}>Exporter le Bilan PDF</Text>
-                    </AnimatedButton>
-                  </View>
-                )}
-
-                {dashboardTab === 'depots' && (
-                  <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Dépôts Proches</Text>
-                    <TextInput style={styles.input} placeholder="Rechercher par quartier..." placeholderTextColor="#64748B" value={searchDepot} onChangeText={setSearchDepot} />
-
-                    {filteredDepots.map((depot) => (
-                      <View key={depot.id} style={styles.depotCard}>
-                        <View style={styles.depotHeader}>
-                          <Text style={styles.depotTitle}>{depot.nom}</Text>
-                          <Text style={styles.depotDistance}>{depot.distance}</Text>
+              {/* SUIVI COMMANDES CLIENT */}
+              {dashboardTab === 'orders_list' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Mes Commandes & Suivi</Text>
+                  {myClientOrders.length === 0 ? (
+                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune commande enregistrée</Text>
+                  ) : (
+                    myClientOrders.map((cmd) => (
+                      <View key={cmd.id} style={styles.orderRow}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <Text style={styles.orderRowId}>{cmd.id} • {cmd.date}</Text>
+                          <Text style={[
+                            styles.orderRowStatus,
+                            cmd.status === 'accepted' ? { color: '#4ADE80' } : { color: '#F97316' }
+                          ]}>
+                            {cmd.status === 'accepted' ? `Acceptée (${cmd.assignedVendorNom})` : 'En attente d\'un dépôt'}
+                          </Text>
                         </View>
-                        <AnimatedButton style={styles.btnDepotSelect} onPress={() => { setAdresseLivraison(depot.quartier); setDashboardTab('order'); }}>
-                          <Text style={styles.btnDepotSelectText}>Commander ici</Text>
-                        </AnimatedButton>
+                        <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type} ({cmd.operation})</Text>
+                        <Text style={styles.orderRowTotal}>{cmd.total}</Text>
                       </View>
-                    ))}
-                  </View>
-                )}
+                    ))
+                  )}
+                </View>
+              )}
 
-                {dashboardTab === 'orders_list' && (
-                  <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Mes Commandes</Text>
-                    {commandes.length === 0 ? (
-                      <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune commande en cours</Text>
-                    ) : (
-                      filteredCommandes.map((cmd) => (
-                        <View key={cmd.id} style={styles.orderRow}>
-                          <Text style={styles.orderRowId}>{cmd.id} • {cmd.statut}</Text>
-                          <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type}</Text>
-                          <Text style={styles.orderRowTotal}>{cmd.total}</Text>
-                        </View>
-                      ))
-                    )}
+              {/* AUTRES ONGLETS VENDEURS */}
+              {dashboardTab === 'pricing' && activeRoleMode === 'depot' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Prix Vendeur</Text>
+                  <Text style={styles.priceSectionHeader}>Format B6 (6 kg)</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Recharge (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, recharge: val } })} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Achat Neuf (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, achat: val } })} />
+                    </View>
                   </View>
-                )}
 
-                {dashboardTab === 'add_stock' && activeRoleMode === 'depot' && (
-                  <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Stock Dépôt</Text>
-                    <Text style={styles.label}>Bouteilles B6</Text>
-                    <TextInput style={styles.input} keyboardType="numeric" value={stockB6} onChangeText={setStockB6} />
-                    <Text style={styles.label}>Bouteilles B12</Text>
-                    <TextInput style={styles.input} keyboardType="numeric" value={stockB12} onChangeText={setStockB12} />
-                    <Text style={styles.label}>Bouteilles B28</Text>
-                    <TextInput style={styles.input} keyboardType="numeric" value={stockB28} onChangeText={setStockB28} />
-                    <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Stock mis à jour.')}>
-                      <Text style={styles.btnOrangeText}>Enregistrer</Text>
-                    </AnimatedButton>
+                  <Text style={styles.priceSectionHeader}>Format B12 (12.5 kg)</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Recharge (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, recharge: val } })} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Achat Neuf (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, achat: val } })} />
+                    </View>
                   </View>
-                )}
 
-                {dashboardTab === 'sales_list' && activeRoleMode === 'depot' && (
-                  <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Inventaire Dépôt</Text>
-                    <Text style={styles.inventoryLabel}>• B6 : {stockB6} disponibles</Text>
-                    <Text style={styles.inventoryLabel}>• B12 : {stockB12} disponibles</Text>
-                    <Text style={styles.inventoryLabel}>• B28 : {stockB28} disponibles</Text>
-                  </View>
-                )}
-              </FadeInView>
-            )
+                  <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Tarifs mis à jour.')}>
+                    <Text style={styles.btnOrangeText}>Enregistrer</Text>
+                  </AnimatedButton>
+                </View>
+              )}
+
+            </FadeInView>
           ) : (
-            /* ÉCRANS D'AUTHENTIFICATION DE L'APPLICATION */
+            /* ÉCRANS D'AUTHENTIFICATION */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
@@ -1501,17 +1144,17 @@ export default function App() {
                   </AnimatedButton>
                   
                   <Text style={styles.cardBoxTitle}>
-                    {currentScreen === 'register_depot' ? 'Inscrire un Dépôt' : 'Compte Client'}
+                    {currentScreen === 'register_depot' ? 'Inscrire un Dépôt Vendeur' : 'Compte Client'}
                   </Text>
 
-                  <Text style={styles.label}>Nom complet *</Text>
-                  <TextInput style={styles.input} placeholder="Nom et Prénom" placeholderTextColor="#64748B" value={nom} onChangeText={setNom} />
+                  <Text style={styles.label}>Nom complet / Dépôt *</Text>
+                  <TextInput style={styles.input} placeholder="Ex: Dépôt Gaz Angré ou M. Kouassi" placeholderTextColor="#64748B" value={nom} onChangeText={setNom} />
 
                   <Text style={styles.label}>Téléphone *</Text>
                   <TextInput style={styles.input} keyboardType="phone-pad" placeholder="07 00 00 00 00" placeholderTextColor="#64748B" value={telephone} onChangeText={setTelephone} />
 
-                  <Text style={styles.label}>Adresse</Text>
-                  <TextInput style={styles.input} placeholder="Quartier / Commune" placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
+                  <Text style={styles.label}>Adresse / Localisation *</Text>
+                  <TextInput style={styles.input} placeholder="Commune, quartier, repère..." placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
 
                   <Text style={styles.label}>Email *</Text>
                   <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#64748B" value={email} onChangeText={setEmail} />
@@ -1539,51 +1182,9 @@ export default function App() {
                   <Text style={styles.label}>Mot de passe</Text>
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" placeholderTextColor="#64748B" value={password} onChangeText={setPassword} />
 
-                  <AnimatedButton style={{ alignSelf: 'flex-end', marginBottom: 16 }} onPress={() => { setForgotEmail(email); setResetStep(1); setCurrentScreen('forgot_password'); }}>
-                    <Text style={styles.forgotLinkText}>Mot de passe oublié ?</Text>
-                  </AnimatedButton>
-
                   <AnimatedButton style={styles.btnOrange} onPress={handleLogin} disabled={loading}>
                     {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Se connecter</Text>}
                   </AnimatedButton>
-                </View>
-              )}
-
-              {currentScreen === 'forgot_password' && (
-                <View style={styles.cardBox}>
-                  <AnimatedButton onPress={() => setCurrentScreen('login')} style={styles.backBtnInline}>
-                    <Text style={styles.backBtnInlineText}>Retour</Text>
-                  </AnimatedButton>
-
-                  {resetStep === 1 && (
-                    <>
-                      <Text style={styles.cardBoxTitle}>Récupération</Text>
-                      <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="Votre email" placeholderTextColor="#64748B" value={forgotEmail} onChangeText={setForgotEmail} />
-                      <AnimatedButton style={styles.btnOrange} onPress={handleRequestResetCode} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Envoyer le code</Text>}
-                      </AnimatedButton>
-                    </>
-                  )}
-
-                  {resetStep === 2 && (
-                    <>
-                      <Text style={styles.cardBoxTitle}>Saisie du Code</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" maxLength={5} placeholder="Code à 5 chiffres" placeholderTextColor="#64748B" value={resetCode} onChangeText={setResetCode} />
-                      <AnimatedButton style={styles.btnOrange} onPress={handleVerifyResetCode} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Confirmer</Text>}
-                      </AnimatedButton>
-                    </>
-                  )}
-
-                  {resetStep === 3 && (
-                    <>
-                      <Text style={styles.cardBoxTitle}>Nouveau Mot de Passe</Text>
-                      <TextInput style={styles.input} secureTextEntry placeholder="••••••••" placeholderTextColor="#64748B" value={newPassword} onChangeText={setNewPassword} />
-                      <AnimatedButton style={styles.btnOrange} onPress={handleConfirmNewPassword} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Enregistrer</Text>}
-                      </AnimatedButton>
-                    </>
-                  )}
                 </View>
               )}
             </FadeInView>
@@ -1602,7 +1203,6 @@ const styles = StyleSheet.create({
   splashTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '900', letterSpacing: 1 },
   splashSubTitle: { color: '#94A3B8', fontSize: 10, fontWeight: '700', letterSpacing: 2, marginTop: 4 },
   
-  // STYLES ÉCRANS DE BIENVENUE (ONBOARDING)
   onboardingContainer: { flex: 1, backgroundColor: '#0F172A', paddingHorizontal: 20, justifyContent: 'space-between' },
   onboardingHeader: { alignItems: 'flex-end', paddingTop: 16 },
   skipBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#1E293B' },
@@ -1638,11 +1238,6 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, padding: 16 },
   mainWrapper: { flex: 1, justifyContent: 'space-between' },
   
-  trialBannerRow: { backgroundColor: '#FEF3C7', borderLeftWidth: 4, borderLeftColor: '#F59E0B', padding: 10, borderRadius: 10, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  trialBannerTitle: { color: '#B45309', fontSize: 12, fontWeight: '800' },
-  btnPayNowInline: { backgroundColor: '#F59E0B', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  btnPayNowInlineText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
-  
   pillsContainerOuter: { backgroundColor: '#0F172A', borderRadius: 12, padding: 3, marginBottom: 14 },
   pillsScrollContent: { flexDirection: 'row', gap: 4, alignItems: 'center' },
   pillBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center' },
@@ -1668,22 +1263,38 @@ const styles = StyleSheet.create({
   
   cardBox: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#1E293B' },
   cardBoxTitle: { fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 12 },
+  introText: { color: '#94A3B8', fontSize: 12, marginBottom: 12 },
   backBtnInline: { marginBottom: 10 },
   backBtnInlineText: { color: '#F97316', fontWeight: '800', fontSize: 12 },
-  
-  priceSectionHeader: { fontSize: 13, fontWeight: '800', color: '#FFFFFF', marginTop: 8, marginBottom: 6 },
 
-  vendorSaleBox: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 12, padding: 14, marginBottom: 14 },
-  vendorSaleBoxTitle: { fontSize: 14, fontWeight: '800', color: '#FFFFFF', marginBottom: 10 },
-  brandChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
-  brandChipText: { fontSize: 11, fontWeight: '700', color: '#CBD5E1' },
-
-  depotCard: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 12, marginBottom: 10 },
-  depotHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  // STYLES DÉPÔTS GÉOLOCALISÉS ET TRIÉS
+  depotCardSorted: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 12, padding: 12, marginBottom: 10 },
+  depotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  rankBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center' },
+  rankBadgeText: { color: '#FFFFFF', fontWeight: '900', fontSize: 11 },
   depotTitle: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
-  depotDistance: { color: '#F97316', fontWeight: '800', fontSize: 12 },
+  depotSub: { fontSize: 11, color: '#94A3B8' },
+  depotDistanceHighlight: { color: '#4ADE80', fontWeight: '900', fontSize: 13 },
   btnDepotSelect: { backgroundColor: '#F97316', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
   btnDepotSelectText: { color: '#FFFFFF', fontWeight: '700', fontSize: 11 },
+  selectedDepotBanner: { backgroundColor: '#1E293B', padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#F97316' },
+  selectedDepotText: { color: '#FFFFFF', fontSize: 12 },
+
+  // STYLES VUE VENDEUR - COMMANDES TEMPS RÉEL
+  liveOrderCard: { backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 12, marginBottom: 10 },
+  liveOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  liveOrderId: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
+  liveOrderBadge: { backgroundColor: 'rgba(249, 115, 22, 0.2)', color: '#F97316', fontWeight: '800', fontSize: 9, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  liveOrderClient: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  liveOrderArticle: { color: '#CBD5E1', fontSize: 12, marginVertical: 2 },
+  liveOrderAddress: { color: '#94A3B8', fontSize: 11 },
+  liveOrderTotal: { color: '#F97316', fontWeight: '900', fontSize: 14, marginTop: 4 },
+  btnAcceptOrder: { backgroundColor: '#22C55E', paddingVertical: 10, borderRadius: 8, alignItems: 'center', marginTop: 10 },
+  btnAcceptOrderText: { color: '#FFFFFF', fontWeight: '900', fontSize: 13 },
+
+  emptyStateBox: { backgroundColor: '#1E293B', padding: 20, borderRadius: 12, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#334155' },
+  emptyStateText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  emptyStateSub: { color: '#94A3B8', fontSize: 11, marginTop: 4, textAlign: 'center' },
 
   opTypeBtn: { flex: 1, paddingVertical: 9, borderRadius: 8, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
   opTypeBtnActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
@@ -1699,41 +1310,25 @@ const styles = StyleSheet.create({
   
   label: { fontSize: 12, fontWeight: '700', color: '#CBD5E1', marginBottom: 4 },
   input: { backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#334155', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#FFFFFF', marginBottom: 12 },
-  forgotLinkText: { color: '#F97316', fontSize: 12, fontWeight: '800' },
   totalSummary: { backgroundColor: '#1E293B', padding: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#334155' },
   totalSummaryLabel: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   totalSummaryValue: { color: '#F97316', fontSize: 16, fontWeight: '900' },
   btnOrange: { backgroundColor: '#F97316', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginTop: 4 },
   btnOrangeText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
-  btnNavyPdf: { backgroundColor: '#1E293B', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginTop: 4, borderWidth: 1, borderColor: '#334155' },
-  btnNavyPdfText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
   
   smallCylBtn: { flex: 1, paddingVertical: 7, borderRadius: 8, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
   smallCylBtnActive: { backgroundColor: '#334155', borderColor: '#F97316' },
   smallCylText: { fontSize: 11, fontWeight: '700', color: '#CBD5E1' },
   smallCylTextActive: { color: '#F97316', fontWeight: '800' },
 
-  filterRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
-  filterBtn: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: 6, backgroundColor: '#1E293B' },
-  filterBtnActive: { backgroundColor: '#F97316' },
-  filterText: { fontSize: 11, fontWeight: '700', color: '#CBD5E1' },
-  filterTextActive: { color: '#FFFFFF' },
+  brandChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
+  brandChipText: { fontSize: 11, fontWeight: '700', color: '#CBD5E1' },
+
   orderRow: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 10, marginBottom: 8 },
   orderRowId: { fontWeight: '800', color: '#FFFFFF', fontSize: 12 },
+  orderRowStatus: { fontWeight: '800', fontSize: 11 },
   orderRowBody: { fontSize: 12, color: '#CBD5E1', marginVertical: 2 },
   orderRowTotal: { color: '#F97316', fontWeight: '800', fontSize: 12 },
-  
-  subCard: { backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 14 },
-  subCardBadge: { backgroundColor: '#FFF7ED', color: '#C2410C', fontSize: 9, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
-  subCardTitle: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
-  subCardPrice: { fontSize: 20, fontWeight: '900', color: '#F97316', marginTop: 2 },
-  subCardMonth: { fontSize: 11, color: '#94A3B8' },
-  paymentMethodsGrid: { flexDirection: 'row', gap: 6, marginBottom: 14 },
-  paymentBtn: { flex: 1, backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#334155', padding: 8, borderRadius: 8, alignItems: 'center' },
-  paymentLogoImage: { width: 26, height: 22 },
-  paymentBtnText: { fontSize: 9, fontWeight: '700', color: '#94A3B8', marginTop: 2 },
-  
-  inventoryLabel: { fontSize: 13, color: '#CBD5E1', fontWeight: '700', paddingVertical: 6 },
   
   welcomeContainer: { flex: 1, justifyContent: 'space-between' },
   heroSection: { marginVertical: 10 },
