@@ -174,9 +174,14 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState('welcome');
   const [user, setUser] = useState(null);
   const [activeRoleMode, setActiveRoleMode] = useState('client');
-  const [loginRole, setLoginRole] = useState('client'); // Permet de choisir le rôle à la connexion
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
+
+  // Base de données locale des comptes enregistrés
+  const [registeredUsers, setRegisteredUsers] = useState([
+    { email: 'vendeur@monan.ci', role: 'depot', nom: 'Dépôt Angré', telephone: '0707070707' },
+    { email: 'client@monan.ci', role: 'client', nom: 'Kouassi Yves', telephone: '0505050505' }
+  ]);
 
   const [vendorPrices, setVendorPrices] = useState({
     B6: { recharge: '2000', achat: '13000' },
@@ -311,16 +316,20 @@ export default function App() {
     }
 
     setLoading(true);
+    const cleanEmail = email.trim().toLowerCase();
     const newUser = {
       id: `USR-${Math.floor(1000 + Math.random() * 9000)}`,
       nom: nom.trim(),
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       telephone: telephone.trim(),
       adresse: adresse.trim() || 'Abidjan',
       role: type,
       createdAt: new Date().toISOString(),
       isSubscribed: false
     };
+
+    // Enregistrement dans la liste locale des utilisateurs
+    setRegisteredUsers(prev => [...prev, newUser]);
 
     if (type === 'depot') {
       const newDepot = {
@@ -335,7 +344,7 @@ export default function App() {
     }
 
     setUser(newUser);
-    setActiveRoleMode(type);
+    setActiveRoleMode(type); // Vendeur -> espace vendeur | Client -> espace client
     setAdresseLivraison(adresse.trim());
     setDashboardTab('home');
     setLoading(false);
@@ -343,26 +352,37 @@ export default function App() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Champs requis', 'Veuillez remplir vos identifiants.');
+      Alert.alert('Champs requis', 'Veuillez entrer votre email et mot de passe.');
       return;
     }
 
     setLoading(true);
-    // Prise en compte explicite du rôle choisi (Vendeur ou Client)
-    const isDepot = loginRole === 'depot' || email.toLowerCase().includes('depot') || email.toLowerCase().includes('vendeur');
-    const selectedRole = isDepot ? 'depot' : 'client';
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Recherche de l'utilisateur dans les comptes enregistrés
+    const foundUser = registeredUsers.find(u => u.email === cleanEmail);
+
+    let userRole = 'client';
+    let userName = cleanEmail.split('@')[0];
+
+    if (foundUser) {
+      userRole = foundUser.role;
+      userName = foundUser.nom;
+    } else if (cleanEmail.includes('depot') || cleanEmail.includes('vendeur') || cleanEmail.includes('pro')) {
+      userRole = 'depot';
+    }
 
     const userData = {
-      id: isDepot ? 'DEP-CURRENT' : 'CLI-CURRENT',
-      email: email.trim().toLowerCase(),
-      nom: email.split('@')[0],
-      role: selectedRole,
+      id: userRole === 'depot' ? 'DEP-CURRENT' : 'CLI-CURRENT',
+      email: cleanEmail,
+      nom: userName,
+      role: userRole,
       createdAt: new Date().toISOString(),
       isSubscribed: false
     };
 
     setUser(userData);
-    setActiveRoleMode(selectedRole);
+    setActiveRoleMode(userRole); // Redirection automatique vers son espace officiel
     setDashboardTab('home');
     setLoading(false);
   };
@@ -521,7 +541,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* BARRE SUPERIEURE */}
+      {/* BARRE SUPÉRIEURE */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -537,6 +557,7 @@ export default function App() {
 
         {user && (
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            {/* SEUL UN COMPTE VENDEUR PEUT BASCULER ENTRE VUE CLIENT ET VUE VENDEUR */}
             {user.role === 'depot' && (
               <AnimatedButton style={styles.roleToggleBtn} onPress={handleToggleRoleMode}>
                 <Text style={styles.roleToggleBtnText}>
@@ -558,7 +579,7 @@ export default function App() {
           {user ? (
             <FadeInView key={`${dashboardTab}-${activeRoleMode}`} style={styles.mainWrapper}>
               
-              {/* ONGLETS NAVIGATION */}
+              {/* ONGLETS NAVIGATION DE BORD */}
               <View style={styles.pillsContainerOuter}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScrollContent}>
                   <AnimatedButton
@@ -638,7 +659,7 @@ export default function App() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Utilisateur'}</Text>
                       <Text style={styles.greetingSubtitle}>
-                        {activeRoleMode === 'depot' ? 'Vendeur / Dépôt' : 'Client'}
+                        {user.role === 'depot' ? (activeRoleMode === 'depot' ? 'Mode Vendeur' : 'Mode Client (Vendeur)') : 'Compte Client'}
                       </Text>
                     </View>
                   </View>
@@ -1041,27 +1062,11 @@ export default function App() {
                   
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
-                  {/* SÉLECTEUR DE RÔLE FIABLE (FIX REDIRECTION) */}
-                  <Text style={styles.label}>Type de compte *</Text>
-                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-                    <AnimatedButton
-                      style={[styles.opTypeBtn, loginRole === 'client' && styles.opTypeBtnActive]}
-                      onPress={() => setLoginRole('client')}
-                    >
-                      <Text style={[styles.opTypeText, loginRole === 'client' && styles.opTypeTextActive]}>Client</Text>
-                    </AnimatedButton>
-                    <AnimatedButton
-                      style={[styles.opTypeBtn, loginRole === 'depot' && styles.opTypeBtnActive]}
-                      onPress={() => setLoginRole('depot')}
-                    >
-                      <Text style={[styles.opTypeText, loginRole === 'depot' && styles.opTypeTextActive]}>Vendeur / Dépôt</Text>
-                    </AnimatedButton>
-                  </View>
-
-                  <Text style={styles.label}>Email</Text>
+                  {/* FORMULAIRE DE CONNEXION ÉPURÉ : EMAIL ET MOT DE PASSE UNIQUEMENT */}
+                  <Text style={styles.label}>Email *</Text>
                   <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#64748B" value={email} onChangeText={setEmail} />
 
-                  <Text style={styles.label}>Mot de passe</Text>
+                  <Text style={styles.label}>Mot de passe *</Text>
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" placeholderTextColor="#64748B" value={password} onChangeText={setPassword} />
 
                   <AnimatedButton style={styles.btnOrange} onPress={handleLogin} disabled={loading}>
