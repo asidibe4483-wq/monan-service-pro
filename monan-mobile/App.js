@@ -18,12 +18,9 @@ import {
   BackHandler
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 
 const API_URL = "https://monan-backend.onrender.com";
 
-// Fonction utilitaire : Calcul des jours d'essai restants (30 jours)
 const getDaysLeftInTrial = (createdAtDate) => {
   if (!createdAtDate) return 30;
   const created = new Date(createdAtDate);
@@ -34,27 +31,26 @@ const getDaysLeftInTrial = (createdAtDate) => {
   return remaining > 0 ? remaining : 0;
 };
 
-// Écrans d'introduction (Onboarding Première Utilisation)
 const ONBOARDING_SLIDES = [
   {
     id: '1',
     badge: 'BIENVENUE',
-    title: 'Bienvenue sur Monan Service',
-    subtitle: 'La plateforme de référence pour la distribution, la livraison et la gestion des dépôts de gaz en Côte d’Ivoire.',
+    title: 'Monan Service',
+    subtitle: 'Plateforme de distribution et livraison de gaz en Côte d’Ivoire.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '2',
-    badge: 'ESPACE CLIENT',
-    title: 'Commandez votre Gaz en Quelques Clics',
-    subtitle: 'Trouvez les dépôts les plus proches de chez vous et suivez votre livraison en temps réel.',
+    badge: 'CLIENT',
+    title: 'Commandez en 1 clic',
+    subtitle: 'Trouvez les dépôts proches et suivez votre livraison en direct.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '3',
-    badge: 'ESPACE VENDEUR',
-    title: 'Acceptez les Commandes en Temps Réel',
-    subtitle: 'Recevez les commandes clients à proximité, réservez-les instantanément et gérez vos stocks.',
+    badge: 'VENDEUR',
+    title: 'Commandes en direct',
+    subtitle: 'Recevez les commandes clients, acceptez-les et gérez votre dépôt.',
     icon: require('./assets/splash-icon.png')
   }
 ];
@@ -95,60 +91,31 @@ const PulsingBadge = ({ children }) => {
   useEffect(() => {
     const animation = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.04,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
+        Animated.timing(pulseAnim, { toValue: 1.04, duration: 1200, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
       ])
     );
     animation.start();
     return () => animation.stop();
   }, []);
 
-  return (
-    <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-      {children}
-    </Animated.View>
-  );
+  return <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>{children}</Animated.View>;
 };
 
 const AnimatedButton = ({ onPress, style, children, disabled }) => {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scale, {
-      toValue: 0.97,
-      friction: 8,
-      tension: 50,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scale, { toValue: 0.97, friction: 8, tension: 50, useNativeDriver: true }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scale, {
-      toValue: 1,
-      friction: 5,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scale, { toValue: 1, friction: 5, tension: 40, useNativeDriver: true }).start();
   };
 
   return (
-    <Pressable
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      onPress={onPress}
-      disabled={disabled}
-    >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>
-        {children}
-      </Animated.View>
+    <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={onPress} disabled={disabled}>
+      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   );
 };
@@ -167,10 +134,7 @@ const QuantityStepper = ({ value, onChange }) => {
       <View style={styles.stepperValueBox}>
         <Text style={styles.stepperValueText}>{qty}</Text>
       </View>
-      <Pressable
-        style={styles.stepperBtn}
-        onPress={() => onChange((qty + 1).toString())}
-      >
+      <Pressable style={styles.stepperBtn} onPress={() => onChange((qty + 1).toString())}>
         <Text style={styles.stepperBtnText}>+</Text>
       </Pressable>
     </View>
@@ -195,15 +159,8 @@ const CYLINDER_TYPES = [
   { id: 'B28', name: 'B28 (28 kg)', priceRecharge: 13000, priceAchat: 45000 },
 ];
 
-const PAYMENT_METHODS = [
-  { id: 'wave', name: 'Wave', color: '#1DC3F3', logo: require('./assets/wave.jpeg') },
-  { id: 'orange', name: 'Orange', color: '#FF6600', logo: require('./assets/Orange.jpeg') },
-  { id: 'mtn', name: 'MTN MoMo', color: '#FFCC00', logo: require('./assets/MTN.jpeg') },
-  { id: 'moov', name: 'Moov Money', color: '#0055A5', logo: require('./assets/Moov.jpeg') },
-];
-
 const INITIAL_DEPOTS = [
-  { id: 'DEP-01', nom: 'Dépôt Angré 8ème Tranche', distanceKm: 0.3, distance: '0.3 km', quartier: 'Cocody Angré', telephone: '0707010203' },
+  { id: 'DEP-01', nom: 'Dépôt Angré 8e Tranche', distanceKm: 0.3, distance: '0.3 km', quartier: 'Cocody Angré', telephone: '0707010203' },
   { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distanceKm: 1.2, distance: '1.2 km', quartier: 'Cocody Centre', telephone: '0708020304' },
   { id: 'DEP-03', nom: 'Dépôt Riviera 2', distanceKm: 2.5, distance: '2.5 km', quartier: 'Cocody Riviera', telephone: '0709030405' },
   { id: 'DEP-04', nom: 'Dépôt Yopougon Maroc', distanceKm: 5.8, distance: '5.8 km', quartier: 'Yopougon', telephone: '0501020304' },
@@ -217,6 +174,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState('welcome');
   const [user, setUser] = useState(null);
   const [activeRoleMode, setActiveRoleMode] = useState('client');
+  const [loginRole, setLoginRole] = useState('client'); // Permet de choisir le rôle à la connexion
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
@@ -231,15 +189,6 @@ export default function App() {
   const [nom, setNom] = useState('');
   const [telephone, setTelephone] = useState('');
   const [adresse, setAdresse] = useState('');
-
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [resetCode, setResetCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [resetStep, setResetStep] = useState(1);
-
-  const [showPaymentSection, setShowPaymentSection] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState('wave');
-  const [paymentPhone, setPaymentPhone] = useState('');
 
   const [selectedMarque, setSelectedMarque] = useState(MARQUES_GAZ[0]);
   const [selectedCylinder, setSelectedCylinder] = useState(CYLINDER_TYPES[1]);
@@ -275,33 +224,12 @@ export default function App() {
       operation: 'Achat Neuf',
       qte: 2,
       total: '26 000 FCFA',
-      adresse: 'Riviera 3 Near Cap Sud',
+      adresse: 'Riviera 3 Cap Sud',
       status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
     }
   ]);
-
-  const [stockB6, setStockB6] = useState('10');
-  const [stockB12, setStockB12] = useState('25');
-  const [stockB28, setStockB28] = useState('5');
-
-  const [salesPeriod, setSalesPeriod] = useState('day');
-  const [dayOffset, setDayOffset] = useState(0);
-  const [salesReport, setSalesReport] = useState({
-    totalRecette: 185000,
-    count: 12,
-    totals: { b6: 8, b12: 18, b28: 4 },
-    sales: [
-      { id: 101, client_nom: 'Kouassi Yves', marque: 'TotalEnergies', couleur: '#F97316', bouteille_type: 'B12 (12.5 kg)', type_operation: 'Recharge', quantite: 2, montant_total: 11000, created_at: new Date().toISOString() },
-      { id: 102, client_nom: 'Mme Koné', marque: 'Shell Gas', couleur: '#1E40AF', bouteille_type: 'B6 (6 kg)', type_operation: 'Recharge', quantite: 1, montant_total: 2000, created_at: new Date().toISOString() },
-    ]
-  });
-
-  const [newSaleClient, setNewSaleClient] = useState('');
-
-  const daysLeft = user ? getDaysLeftInTrial(user.createdAt) : 30;
-  const isTrialExpired = user && activeRoleMode === 'depot' && !user.isSubscribed && daysLeft <= 0;
 
   useEffect(() => {
     checkFirstLaunchStatus();
@@ -312,11 +240,7 @@ export default function App() {
   const checkFirstLaunchStatus = async () => {
     try {
       const value = await AsyncStorage.getItem('@has_seen_onboarding');
-      if (value !== null) {
-        setHasSeenOnboarding(true);
-      } else {
-        setHasSeenOnboarding(false);
-      }
+      setHasSeenOnboarding(value !== null);
     } catch (e) {
       setHasSeenOnboarding(false);
     }
@@ -342,26 +266,11 @@ export default function App() {
       }
 
       if (!user) {
-        if (currentScreen === 'forgot_password') {
-          if (resetStep > 1) {
-            setResetStep((prev) => prev - 1);
-            return true;
-          }
-          setCurrentScreen('login');
-          return true;
-        }
-
-        if (currentScreen === 'login' || currentScreen === 'register_client' || currentScreen === 'register_depot') {
+        if (currentScreen !== 'welcome') {
           setCurrentScreen('welcome');
           return true;
         }
-
         return false;
-      }
-
-      if (showPaymentSection && !isTrialExpired) {
-        setShowPaymentSection(false);
-        return true;
       }
 
       if (dashboardTab !== 'home') {
@@ -380,7 +289,7 @@ export default function App() {
         BackHandler.removeEventListener('hardwareBackPress', onBackPress);
       }
     };
-  }, [hasSeenOnboarding, onboardingStep, user, currentScreen, resetStep, showPaymentSection, isTrialExpired, dashboardTab]);
+  }, [hasSeenOnboarding, onboardingStep, user, currentScreen, dashboardTab]);
 
   const activeFormatPrices = vendorPrices[selectedCylinder.id] || { recharge: selectedCylinder.priceRecharge, achat: selectedCylinder.priceAchat };
   const currentUnitPrice = operationType === 'recharge' 
@@ -397,7 +306,7 @@ export default function App() {
 
   const handleRegister = async (type) => {
     if (!nom || !telephone || !email || !password) {
-      Alert.alert('Formulaire incomplet', 'Veuillez remplir les champs obligatoires.');
+      Alert.alert('Champs requis', 'Veuillez remplir les champs obligatoires.');
       return;
     }
 
@@ -418,7 +327,7 @@ export default function App() {
         id: newUser.id,
         nom: `Dépôt ${nom.trim()}`,
         distanceKm: 0.1,
-        distance: '0.1 km (Nouveau)',
+        distance: '0.1 km',
         quartier: adresse.trim() || 'Commune Vendeur',
         telephone: telephone.trim()
       };
@@ -439,18 +348,21 @@ export default function App() {
     }
 
     setLoading(true);
-    const isDepotUser = email.toLowerCase().includes('depot') || email.toLowerCase().includes('vendeur');
+    // Prise en compte explicite du rôle choisi (Vendeur ou Client)
+    const isDepot = loginRole === 'depot' || email.toLowerCase().includes('depot') || email.toLowerCase().includes('vendeur');
+    const selectedRole = isDepot ? 'depot' : 'client';
+
     const userData = {
-      id: isDepotUser ? 'DEP-CURRENT' : 'CLI-CURRENT',
+      id: isDepot ? 'DEP-CURRENT' : 'CLI-CURRENT',
       email: email.trim().toLowerCase(),
       nom: email.split('@')[0],
-      role: isDepotUser ? 'depot' : 'client',
+      role: selectedRole,
       createdAt: new Date().toISOString(),
       isSubscribed: false
     };
 
     setUser(userData);
-    setActiveRoleMode(userData.role);
+    setActiveRoleMode(selectedRole);
     setDashboardTab('home');
     setLoading(false);
   };
@@ -459,8 +371,7 @@ export default function App() {
     if (!adresseLivraison) return Alert.alert('Adresse requise', 'Précisez votre lieu de livraison.');
 
     const qteNum = parseInt(quantite, 10) || 1;
-    const pu = currentUnitPrice;
-    const totalCalculated = qteNum * pu;
+    const totalCalculated = qteNum * currentUnitPrice;
 
     const newCmd = {
       id: `CMD-${Math.floor(100 + Math.random() * 900)}`,
@@ -475,15 +386,15 @@ export default function App() {
       assignedVendorNom: null,
       total: `${totalCalculated.toLocaleString('fr-FR')} FCFA`,
       adresse: adresseLivraison,
-      depotCible: selectedDepotTarget ? selectedDepotTarget.nom : 'Dépôt le plus proche'
+      depotCible: selectedDepotTarget ? selectedDepotTarget.nom : 'Dépôt proche'
     };
 
     setAllOrders(prev => [newCmd, ...prev]);
 
     Alert.alert(
-      'Commande Transmise !',
-      `Votre commande de ${totalCalculated.toLocaleString('fr-FR')} FCFA est visible par les dépôts de gaz environnants en temps réel.`,
-      [{ text: 'Suivre ma commande', onPress: () => setDashboardTab('orders_list') }]
+      'Commande envoyée',
+      `Montant : ${totalCalculated.toLocaleString('fr-FR')} FCFA. Les vendeurs proches la traitent.`,
+      [{ text: 'Suivre', onPress: () => setDashboardTab('orders_list') }]
     );
   };
 
@@ -502,10 +413,7 @@ export default function App() {
       })
     );
 
-    Alert.alert(
-      'Commande Prise en Charge !',
-      'Cette commande vous a été attribuée avec succès. Les autres vendeurs ne la voient plus.'
-    );
+    Alert.alert('Commande acceptée', 'Cette commande est réservée pour votre dépôt.');
   };
 
   const handleMarkAsDelivered = (orderId) => {
@@ -517,14 +425,13 @@ export default function App() {
         return order;
       })
     );
-    Alert.alert('Succès', 'Commande marquée comme livrée !');
+    Alert.alert('Succès', 'Commande livrée.');
   };
 
   const handleLogout = () => {
     setUser(null);
     setEmail('');
     setPassword('');
-    setShowPaymentSection(false);
     setCurrentScreen('welcome');
     setDashboardTab('home');
   };
@@ -587,39 +494,22 @@ export default function App() {
         <View style={styles.onboardingFooter}>
           <View style={styles.paginationDotsRow}>
             {ONBOARDING_SLIDES.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.dot,
-                  onboardingStep === index ? styles.dotActive : styles.dotInactive
-                ]}
-              />
+              <View key={index} style={[styles.dot, onboardingStep === index ? styles.dotActive : styles.dotInactive]} />
             ))}
           </View>
 
           <View style={styles.onboardingBtnRow}>
             {onboardingStep > 0 && (
-              <AnimatedButton
-                style={styles.onboardingBackBtn}
-                onPress={() => setOnboardingStep(prev => prev - 1)}
-              >
-                <Text style={styles.onboardingBackText}>Précédent</Text>
+              <AnimatedButton style={styles.onboardingBackBtn} onPress={() => setOnboardingStep(prev => prev - 1)}>
+                <Text style={styles.onboardingBackText}>Retour</Text>
               </AnimatedButton>
             )}
 
             <AnimatedButton
               style={[styles.btnOrange, { flex: 1, marginLeft: onboardingStep > 0 ? 10 : 0 }]}
-              onPress={() => {
-                if (isLastSlide) {
-                  handleFinishOnboarding();
-                } else {
-                  setOnboardingStep(prev => prev + 1);
-                }
-              }}
+              onPress={() => (isLastSlide ? handleFinishOnboarding() : setOnboardingStep(prev => prev + 1))}
             >
-              <Text style={styles.btnOrangeText}>
-                {isLastSlide ? 'Commencer' : 'Suivant'}
-              </Text>
+              <Text style={styles.btnOrangeText}>{isLastSlide ? 'Commencer' : 'Suivant'}</Text>
             </AnimatedButton>
           </View>
         </View>
@@ -631,6 +521,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
+      {/* BARRE SUPERIEURE */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
@@ -639,7 +530,7 @@ export default function App() {
           <View>
             <Text style={styles.brandTitle}>MONAN SERVICE</Text>
             <Text style={styles.brandSub}>
-              {user ? (activeRoleMode === 'depot' ? 'ESPACE VENDEUR' : 'ESPACE CLIENT') : 'DISTRIBUTION DE GAZ'}
+              {user ? (activeRoleMode === 'depot' ? 'ESPACE VENDEUR' : 'ESPACE CLIENT') : 'GAZ EN LIGNE'}
             </Text>
           </View>
         </View>
@@ -667,6 +558,7 @@ export default function App() {
           {user ? (
             <FadeInView key={`${dashboardTab}-${activeRoleMode}`} style={styles.mainWrapper}>
               
+              {/* ONGLETS NAVIGATION */}
               <View style={styles.pillsContainerOuter}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScrollContent}>
                   <AnimatedButton
@@ -683,7 +575,7 @@ export default function App() {
                         onPress={() => setDashboardTab('vendor_live_orders')}
                       >
                         <Text style={[styles.pillText, dashboardTab === 'vendor_live_orders' && styles.pillTextActive]}>
-                          Commandes Directes ({availableOrdersForVendors.length})
+                          Commandes ({availableOrdersForVendors.length})
                         </Text>
                       </AnimatedButton>
 
@@ -692,7 +584,7 @@ export default function App() {
                         onPress={() => setDashboardTab('my_deliveries')}
                       >
                         <Text style={[styles.pillText, dashboardTab === 'my_deliveries' && styles.pillTextActive]}>
-                          Mes Livraisons ({myAcceptedOrders.length})
+                          Livraisons ({myAcceptedOrders.length})
                         </Text>
                       </AnimatedButton>
 
@@ -700,14 +592,7 @@ export default function App() {
                         style={[styles.pillBtn, dashboardTab === 'pricing' && styles.pillBtnActive]}
                         onPress={() => setDashboardTab('pricing')}
                       >
-                        <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Prix Vendeur</Text>
-                      </AnimatedButton>
-                      
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'sales_report' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('sales_report')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'sales_report' && styles.pillTextActive]}>Bilan Caisse</Text>
+                        <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Mes Prix</Text>
                       </AnimatedButton>
                     </>
                   ) : (
@@ -716,7 +601,7 @@ export default function App() {
                         style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
                         onPress={() => setDashboardTab('depots')}
                       >
-                        <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts Proches</Text>
+                        <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts proches</Text>
                       </AnimatedButton>
                       <AnimatedButton
                         style={[styles.pillBtn, dashboardTab === 'catalog' && styles.pillBtnActive]}
@@ -735,7 +620,7 @@ export default function App() {
                         onPress={() => setDashboardTab('orders_list')}
                       >
                         <Text style={[styles.pillText, dashboardTab === 'orders_list' && styles.pillTextActive]}>
-                          Mes Suivis ({myClientOrders.length})
+                          Suivis ({myClientOrders.length})
                         </Text>
                       </AnimatedButton>
                     </>
@@ -743,6 +628,7 @@ export default function App() {
                 </ScrollView>
               </View>
 
+              {/* TABLEAU DE BORD PRINCIPAL */}
               {dashboardTab === 'home' && (
                 <View style={styles.fullSection}>
                   <View style={styles.userGreetingCard}>
@@ -752,7 +638,7 @@ export default function App() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Utilisateur'}</Text>
                       <Text style={styles.greetingSubtitle}>
-                        {activeRoleMode === 'depot' ? 'Mode Gestionnaire & Livraisons Dépôt' : 'Mode Client Livraisons'}
+                        {activeRoleMode === 'depot' ? 'Vendeur / Dépôt' : 'Client'}
                       </Text>
                     </View>
                   </View>
@@ -772,7 +658,7 @@ export default function App() {
                     ) : (
                       <>
                         <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>DÉPÔTS AUTOUR DE MOI</Text>
+                          <Text style={styles.kpiCardTag}>DÉPÔTS PROCHES</Text>
                           <Text style={styles.kpiCardNum}>{sortedAndFilteredDepots.length}</Text>
                         </View>
                         <View style={styles.kpiCard}>
@@ -786,42 +672,35 @@ export default function App() {
                   {activeRoleMode === 'depot' ? (
                     <View style={{ gap: 10 }}>
                       <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('vendor_live_orders')}>
-                        <Text style={styles.actionCardTitle}>Voir les Commandes Clients en Temps Réel</Text>
-                        <Text style={{ color: '#C2410C', fontSize: 11, marginTop: 2 }}>
-                          {availableOrdersForVendors.length} commande(s) en attente à réserver
-                        </Text>
+                        <Text style={styles.actionCardTitle}>Commandes en direct</Text>
                       </AnimatedButton>
 
                       <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('pricing')}>
-                        <Text style={styles.actionCardTitleWhite}>Configurer mes Prix Vendeur</Text>
+                        <Text style={styles.actionCardTitleWhite}>Gérer mes prix</Text>
                       </AnimatedButton>
                     </View>
                   ) : (
                     <View style={{ gap: 10 }}>
                       <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
-                        <Text style={styles.actionCardTitle}>Dépôts les plus proches de chez moi</Text>
-                        <Text style={{ color: '#C2410C', fontSize: 11, marginTop: 2 }}>Classés du plus proche au plus éloigné</Text>
+                        <Text style={styles.actionCardTitle}>Dépôts proches</Text>
                       </AnimatedButton>
 
                       <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                        <Text style={styles.actionCardTitleWhite}>Passer une Nouvelle Commande</Text>
+                        <Text style={styles.actionCardTitleWhite}>Nouvelle commande</Text>
                       </AnimatedButton>
                     </View>
                   )}
                 </View>
               )}
 
+              {/* COMMANDES VENDEUR (TEMPS RÉEL) */}
               {dashboardTab === 'vendor_live_orders' && activeRoleMode === 'depot' && (
                 <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Commandes Clients Disponibles</Text>
-                  <Text style={styles.introText}>
-                    Réservez et prenez en charge les demandes des clients. Dès que vous acceptez une commande, elle est verrouillée pour votre dépôt.
-                  </Text>
+                  <Text style={styles.cardBoxTitle}>Commandes disponibles</Text>
 
                   {availableOrdersForVendors.length === 0 ? (
                     <View style={styles.emptyStateBox}>
-                      <Text style={styles.emptyStateText}>Aucune commande en attente pour le moment.</Text>
-                      <Text style={styles.emptyStateSub}>Les nouvelles demandes apparaîtront automatiquement ici.</Text>
+                      <Text style={styles.emptyStateText}>Aucune commande en attente.</Text>
                     </View>
                   ) : (
                     availableOrdersForVendors.map((order) => (
@@ -830,16 +709,13 @@ export default function App() {
                           <Text style={styles.liveOrderId}>{order.id} • {order.date}</Text>
                           <Text style={styles.liveOrderBadge}>EN ATTENTE</Text>
                         </View>
-                        <Text style={styles.liveOrderClient}>Client : {order.clientNom} ({order.clientPhone})</Text>
+                        <Text style={styles.liveOrderClient}>{order.clientNom} ({order.clientPhone})</Text>
                         <Text style={styles.liveOrderArticle}>{order.qte}x {order.type} ({order.operation})</Text>
                         <Text style={styles.liveOrderAddress}>Lieu : {order.adresse}</Text>
                         <Text style={styles.liveOrderTotal}>Total : {order.total}</Text>
 
-                        <AnimatedButton
-                          style={styles.btnAcceptOrder}
-                          onPress={() => handleAcceptOrder(order.id)}
-                        >
-                          <Text style={styles.btnAcceptOrderText}>Accepter la commande</Text>
+                        <AnimatedButton style={styles.btnAcceptOrder} onPress={() => handleAcceptOrder(order.id)}>
+                          <Text style={styles.btnAcceptOrderText}>Accepter</Text>
                         </AnimatedButton>
                       </View>
                     ))
@@ -847,20 +723,19 @@ export default function App() {
                 </View>
               )}
 
+              {/* MES LIVRAISONS VENDEUR */}
               {dashboardTab === 'my_deliveries' && activeRoleMode === 'depot' && (
                 <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Mes Livraisons en Cours</Text>
+                  <Text style={styles.cardBoxTitle}>Livraisons en cours</Text>
                   {myAcceptedOrders.length === 0 ? (
-                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>
-                      Vous n'avez pas de commande en cours de livraison.
-                    </Text>
+                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune livraison en cours.</Text>
                   ) : (
                     myAcceptedOrders.map((order) => (
                       <View key={order.id} style={[styles.liveOrderCard, { borderColor: '#4ADE80' }]}>
                         <View style={styles.liveOrderHeader}>
                           <Text style={styles.liveOrderId}>{order.id}</Text>
                           <Text style={[styles.liveOrderBadge, { backgroundColor: 'rgba(74, 222, 128, 0.2)', color: '#4ADE80' }]}>
-                            RESERVÉE PAR VOUS
+                            RESERVÉE
                           </Text>
                         </View>
                         <Text style={styles.liveOrderClient}>Client : {order.clientNom}</Text>
@@ -868,11 +743,8 @@ export default function App() {
                         <Text style={styles.liveOrderAddress}>Adresse : {order.adresse}</Text>
                         <Text style={styles.liveOrderTotal}>Total : {order.total}</Text>
 
-                        <AnimatedButton
-                          style={[styles.btnOrange, { marginTop: 8 }]}
-                          onPress={() => handleMarkAsDelivered(order.id)}
-                        >
-                          <Text style={styles.btnOrangeText}>Marquer comme Livrée</Text>
+                        <AnimatedButton style={[styles.btnOrange, { marginTop: 8 }]} onPress={() => handleMarkAsDelivered(order.id)}>
+                          <Text style={styles.btnOrangeText}>Valider la livraison</Text>
                         </AnimatedButton>
                       </View>
                     ))
@@ -880,14 +752,14 @@ export default function App() {
                 </View>
               )}
 
+              {/* DÉPÔTS PROCHES */}
               {dashboardTab === 'depots' && (
                 <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Dépôts les plus proches</Text>
-                  <Text style={styles.introText}>Affichage automatique selon la distance (du plus proche au plus éloigné) :</Text>
+                  <Text style={styles.cardBoxTitle}>Dépôts proches</Text>
 
                   <TextInput
                     style={styles.input}
-                    placeholder="Filtrer par quartier ou commune..."
+                    placeholder="Filtrer par quartier..."
                     placeholderTextColor="#64748B"
                     value={searchDepot}
                     onChangeText={setSearchDepot}
@@ -916,28 +788,29 @@ export default function App() {
                           setDashboardTab('order');
                         }}
                       >
-                        <Text style={styles.btnDepotSelectText}>Commander dans ce dépôt</Text>
+                        <Text style={styles.btnDepotSelectText}>Commander ici</Text>
                       </AnimatedButton>
                     </View>
                   ))}
                 </View>
               )}
 
+              {/* CATALOGUE ET COMMANDE */}
               {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>
-                    {dashboardTab === 'catalog' ? 'Catalogue Bouteilles' : 'Nouvelle Commande'}
+                    {dashboardTab === 'catalog' ? 'Catalogue' : 'Nouvelle commande'}
                   </Text>
 
                   {selectedDepotTarget && (
                     <View style={styles.selectedDepotBanner}>
                       <Text style={styles.selectedDepotText}>
-                        Dépôt sélectionné : <Text style={{ fontWeight: '900', color: '#F97316' }}>{selectedDepotTarget.nom}</Text> ({selectedDepotTarget.distance})
+                        Dépôt : <Text style={{ fontWeight: '900', color: '#F97316' }}>{selectedDepotTarget.nom}</Text> ({selectedDepotTarget.distance})
                       </Text>
                     </View>
                   )}
 
-                  <Text style={styles.label}>Type d'opération *</Text>
+                  <Text style={styles.label}>Opération *</Text>
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
                     <AnimatedButton
                       style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
@@ -976,7 +849,7 @@ export default function App() {
                     })}
                   </View>
 
-                  <Text style={styles.label}>Marque de Gaz *</Text>
+                  <Text style={styles.label}>Marque *</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
                       {MARQUES_GAZ.map((m) => {
@@ -1004,35 +877,36 @@ export default function App() {
                       <Text style={styles.label}>Quantité</Text>
                       <QuantityStepper value={quantite} onChange={setQuantite} />
 
-                      <Text style={styles.label}>Adresse de livraison *</Text>
+                      <Text style={styles.label}>Adresse *</Text>
                       <TextInput
                         style={styles.input}
-                        placeholder="Commune, quartier, repère..."
+                        placeholder="Commune, quartier..."
                         placeholderTextColor="#64748B"
                         value={adresseLivraison}
                         onChangeText={setAdresseLivraison}
                       />
 
                       <View style={styles.totalSummary}>
-                        <Text style={styles.totalSummaryLabel}>Total à payer :</Text>
+                        <Text style={styles.totalSummaryLabel}>Total :</Text>
                         <Text style={styles.totalSummaryValue}>
                           {((parseInt(quantite, 10) || 1) * currentUnitPrice).toLocaleString('fr-FR')} FCFA
                         </Text>
                       </View>
 
                       <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
-                        <Text style={styles.btnOrangeText}>Transmettre la commande</Text>
+                        <Text style={styles.btnOrangeText}>Valider la commande</Text>
                       </AnimatedButton>
                     </View>
                   )}
                 </View>
               )}
 
+              {/* SUIVIS CLIENT */}
               {dashboardTab === 'orders_list' && (
                 <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Mes Commandes & Suivi</Text>
+                  <Text style={styles.cardBoxTitle}>Mes suivis</Text>
                   {myClientOrders.length === 0 ? (
-                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune commande enregistrée</Text>
+                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune commande.</Text>
                   ) : (
                     myClientOrders.map((cmd) => (
                       <View key={cmd.id} style={styles.orderRow}>
@@ -1042,7 +916,7 @@ export default function App() {
                             styles.orderRowStatus,
                             cmd.status === 'accepted' ? { color: '#4ADE80' } : { color: '#F97316' }
                           ]}>
-                            {cmd.status === 'accepted' ? `Acceptée (${cmd.assignedVendorNom})` : 'En attente d\'un dépôt'}
+                            {cmd.status === 'accepted' ? `Acceptée (${cmd.assignedVendorNom})` : 'En attente'}
                           </Text>
                         </View>
                         <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type} ({cmd.operation})</Text>
@@ -1053,29 +927,30 @@ export default function App() {
                 </View>
               )}
 
+              {/* PRIX VENDEUR */}
               {dashboardTab === 'pricing' && activeRoleMode === 'depot' && (
                 <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Prix Vendeur</Text>
-                  <Text style={styles.priceSectionHeader}>Format B6 (6 kg)</Text>
+                  <Text style={styles.cardBoxTitle}>Mes prix</Text>
+                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B6 (6 kg)</Text>
                   <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.label}>Recharge (F)</Text>
                       <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, recharge: val } })} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Achat Neuf (F)</Text>
+                      <Text style={styles.label}>Achat (F)</Text>
                       <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, achat: val } })} />
                     </View>
                   </View>
 
-                  <Text style={styles.priceSectionHeader}>Format B12 (12.5 kg)</Text>
+                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B12 (12.5 kg)</Text>
                   <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.label}>Recharge (F)</Text>
                       <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, recharge: val } })} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Achat Neuf (F)</Text>
+                      <Text style={styles.label}>Achat (F)</Text>
                       <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, achat: val } })} />
                     </View>
                   </View>
@@ -1088,6 +963,7 @@ export default function App() {
 
             </FadeInView>
           ) : (
+            /* ACCUEIL & AUTHENTIFICATION */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
@@ -1098,7 +974,7 @@ export default function App() {
                           <Text style={styles.heroBadgeText}>RAPIDE & SÉCURISÉ</Text>
                         </View>
                       </PulsingBadge>
-                      <Text style={styles.heroTitle}>Distribution & Livraison de Gaz</Text>
+                      <Text style={styles.heroTitle}>Livraison & Gestion de Gaz</Text>
                     </View>
                   </FadeInView>
 
@@ -1106,14 +982,14 @@ export default function App() {
                     <FadeInView delay={120}>
                       <AnimatedButton style={styles.welcomeCardDark} onPress={() => setCurrentScreen('register_client')}>
                         <Text style={styles.welcomeCardTitleLight}>Espace Client</Text>
-                        <Text style={styles.welcomeCardSubLight}>Commandes & Livraisons</Text>
+                        <Text style={styles.welcomeCardSubLight}>Commandes de gaz</Text>
                       </AnimatedButton>
                     </FadeInView>
 
                     <FadeInView delay={200}>
                       <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
                         <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
-                        <Text style={styles.welcomeCardSubDark}>Gestion Dépôt & Stocks</Text>
+                        <Text style={styles.welcomeCardSubDark}>Gérer mon dépôt</Text>
                       </AnimatedButton>
                     </FadeInView>
                   </View>
@@ -1133,17 +1009,17 @@ export default function App() {
                   </AnimatedButton>
                   
                   <Text style={styles.cardBoxTitle}>
-                    {currentScreen === 'register_depot' ? 'Inscrire un Dépôt Vendeur' : 'Compte Client'}
+                    {currentScreen === 'register_depot' ? 'Inscription Vendeur' : 'Inscription Client'}
                   </Text>
 
                   <Text style={styles.label}>Nom complet / Dépôt *</Text>
-                  <TextInput style={styles.input} placeholder="Ex: Dépôt Gaz Angré ou M. Kouassi" placeholderTextColor="#64748B" value={nom} onChangeText={setNom} />
+                  <TextInput style={styles.input} placeholder="Ex: Dépôt Angré" placeholderTextColor="#64748B" value={nom} onChangeText={setNom} />
 
                   <Text style={styles.label}>Téléphone *</Text>
-                  <TextInput style={styles.input} keyboardType="phone-pad" placeholder="07 00 00 00 00" placeholderTextColor="#64748B" value={telephone} onChangeText={setTelephone} />
+                  <TextInput style={styles.input} keyboardType="phone-pad" placeholder="0700000000" placeholderTextColor="#64748B" value={telephone} onChangeText={setTelephone} />
 
-                  <Text style={styles.label}>Adresse / Localisation *</Text>
-                  <TextInput style={styles.input} placeholder="Commune, quartier, repère..." placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
+                  <Text style={styles.label}>Adresse *</Text>
+                  <TextInput style={styles.input} placeholder="Quartier, repère..." placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
 
                   <Text style={styles.label}>Email *</Text>
                   <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#64748B" value={email} onChangeText={setEmail} />
@@ -1164,6 +1040,23 @@ export default function App() {
                   </AnimatedButton>
                   
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
+
+                  {/* SÉLECTEUR DE RÔLE FIABLE (FIX REDIRECTION) */}
+                  <Text style={styles.label}>Type de compte *</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                    <AnimatedButton
+                      style={[styles.opTypeBtn, loginRole === 'client' && styles.opTypeBtnActive]}
+                      onPress={() => setLoginRole('client')}
+                    >
+                      <Text style={[styles.opTypeText, loginRole === 'client' && styles.opTypeTextActive]}>Client</Text>
+                    </AnimatedButton>
+                    <AnimatedButton
+                      style={[styles.opTypeBtn, loginRole === 'depot' && styles.opTypeBtnActive]}
+                      onPress={() => setLoginRole('depot')}
+                    >
+                      <Text style={[styles.opTypeText, loginRole === 'depot' && styles.opTypeTextActive]}>Vendeur / Dépôt</Text>
+                    </AnimatedButton>
+                  </View>
 
                   <Text style={styles.label}>Email</Text>
                   <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#64748B" value={email} onChangeText={setEmail} />
@@ -1201,7 +1094,7 @@ const styles = StyleSheet.create({
   onboardingBadgeBox: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#F97316' },
   onboardingLogo: { width: 60, height: 60 },
   onboardingTextContainer: { alignItems: 'center', paddingHorizontal: 10 },
-  onboardingTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', textAlign: 'center', marginBottom: 10, lineHeight: 28 },
+  onboardingTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', textAlign: 'center', marginBottom: 10 },
   onboardingSub: { color: '#94A3B8', fontSize: 13, textAlign: 'center', lineHeight: 20 },
   onboardingFooter: { paddingBottom: 24 },
   paginationDotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginBottom: 20 },
@@ -1230,7 +1123,7 @@ const styles = StyleSheet.create({
   pillsContainerOuter: { backgroundColor: '#0F172A', borderRadius: 12, padding: 3, marginBottom: 14 },
   pillsScrollContent: { flexDirection: 'row', gap: 4, alignItems: 'center' },
   pillBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center' },
-  pillBtnActive: { backgroundColor: '#F97316', elevation: 1 },
+  pillBtnActive: { backgroundColor: '#F97316' },
   pillText: { fontSize: 12, fontWeight: '700', color: '#94A3B8' },
   pillTextActive: { color: '#FFFFFF', fontWeight: '800' },
   
@@ -1245,14 +1138,13 @@ const styles = StyleSheet.create({
   kpiCardTag: { fontSize: 9, fontWeight: '800', color: '#94A3B8' },
   kpiCardNum: { fontSize: 17, fontWeight: '900', color: '#F97316', marginTop: 2 },
   
-  actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 14 },
+  actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 14, alignItems: 'center' },
   actionCardTitle: { fontSize: 14, fontWeight: '800', color: '#C2410C' },
-  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#1E293B' },
+  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#1E293B', alignItems: 'center' },
   actionCardTitleWhite: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   
   cardBox: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#1E293B' },
   cardBoxTitle: { fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 12 },
-  introText: { color: '#94A3B8', fontSize: 12, marginBottom: 12 },
   backBtnInline: { marginBottom: 10 },
   backBtnInlineText: { color: '#F97316', fontWeight: '800', fontSize: 12 },
 
@@ -1276,12 +1168,11 @@ const styles = StyleSheet.create({
   liveOrderArticle: { color: '#CBD5E1', fontSize: 12, marginVertical: 2 },
   liveOrderAddress: { color: '#94A3B8', fontSize: 11 },
   liveOrderTotal: { color: '#F97316', fontWeight: '900', fontSize: 14, marginTop: 4 },
-  btnAcceptOrder: { backgroundColor: '#22C55E', paddingVertical: 10, borderRadius: 8, alignItems: 'center', marginTop: 10 },
+  btnAcceptOrder: { backgroundColor: '#22C55E', paddingVertical: 8, borderRadius: 8, alignItems: 'center', marginTop: 10 },
   btnAcceptOrderText: { color: '#FFFFFF', fontWeight: '900', fontSize: 13 },
 
   emptyStateBox: { backgroundColor: '#1E293B', padding: 20, borderRadius: 12, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#334155' },
   emptyStateText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
-  emptyStateSub: { color: '#94A3B8', fontSize: 11, marginTop: 4, textAlign: 'center' },
 
   opTypeBtn: { flex: 1, paddingVertical: 9, borderRadius: 8, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
   opTypeBtnActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
