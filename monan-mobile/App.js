@@ -177,7 +177,6 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
-  // Base de données locale des comptes enregistrés
   const [registeredUsers, setRegisteredUsers] = useState([
     { email: 'vendeur@monan.ci', role: 'depot', nom: 'Dépôt Angré', telephone: '0707070707' },
     { email: 'client@monan.ci', role: 'client', nom: 'Kouassi Yves', telephone: '0505050505' }
@@ -204,6 +203,7 @@ export default function App() {
 
   const [searchDepot, setSearchDepot] = useState('');
   const [depotsList, setDepotsList] = useState(INITIAL_DEPOTS);
+  const [orderSuccessBanner, setOrderSuccessBanner] = useState('');
 
   const [allOrders, setAllOrders] = useState([
     {
@@ -328,7 +328,6 @@ export default function App() {
       isSubscribed: false
     };
 
-    // Enregistrement dans la liste locale des utilisateurs
     setRegisteredUsers(prev => [...prev, newUser]);
 
     if (type === 'depot') {
@@ -344,7 +343,7 @@ export default function App() {
     }
 
     setUser(newUser);
-    setActiveRoleMode(type); // Vendeur -> espace vendeur | Client -> espace client
+    setActiveRoleMode(type);
     setAdresseLivraison(adresse.trim());
     setDashboardTab('home');
     setLoading(false);
@@ -358,8 +357,6 @@ export default function App() {
 
     setLoading(true);
     const cleanEmail = email.trim().toLowerCase();
-
-    // Recherche de l'utilisateur dans les comptes enregistrés
     const foundUser = registeredUsers.find(u => u.email === cleanEmail);
 
     let userRole = 'client';
@@ -382,19 +379,23 @@ export default function App() {
     };
 
     setUser(userData);
-    setActiveRoleMode(userRole); // Redirection automatique vers son espace officiel
+    setActiveRoleMode(userRole);
     setDashboardTab('home');
     setLoading(false);
   };
 
+  // SOUMISSION DE LA COMMANDE AVEC REDIRECTION ET CONFIRMATION IMMÉDIATES
   const handleCreateOrder = () => {
     if (!adresseLivraison) return Alert.alert('Adresse requise', 'Précisez votre lieu de livraison.');
 
+    setLoading(true);
+
     const qteNum = parseInt(quantite, 10) || 1;
     const totalCalculated = qteNum * currentUnitPrice;
+    const newCmdId = `CMD-${Math.floor(100 + Math.random() * 900)}`;
 
     const newCmd = {
-      id: `CMD-${Math.floor(100 + Math.random() * 900)}`,
+      id: newCmdId,
       date: new Date().toLocaleDateString('fr-FR'),
       clientNom: user?.nom || 'Client',
       clientPhone: user?.telephone || 'Non renseigné',
@@ -409,13 +410,16 @@ export default function App() {
       depotCible: selectedDepotTarget ? selectedDepotTarget.nom : 'Dépôt proche'
     };
 
+    // 1. Enregistrement de la nouvelle commande
     setAllOrders(prev => [newCmd, ...prev]);
 
-    Alert.alert(
-      'Commande envoyée',
-      `Montant : ${totalCalculated.toLocaleString('fr-FR')} FCFA. Les vendeurs proches la traitent.`,
-      [{ text: 'Suivre', onPress: () => setDashboardTab('orders_list') }]
-    );
+    // 2. Message de confirmation
+    setOrderSuccessBanner(`Votre commande ${newCmdId} de ${totalCalculated.toLocaleString('fr-FR')} FCFA a été transmise avec succès !`);
+
+    // 3. Changement immédiat d'écran vers les Suivis pour l'utilisateur
+    setDashboardTab('orders_list');
+
+    setLoading(false);
   };
 
   const handleAcceptOrder = (orderId) => {
@@ -557,7 +561,6 @@ export default function App() {
 
         {user && (
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            {/* SEUL UN COMPTE VENDEUR PEUT BASCULER ENTRE VUE CLIENT ET VUE VENDEUR */}
             {user.role === 'depot' && (
               <AnimatedButton style={styles.roleToggleBtn} onPress={handleToggleRoleMode}>
                 <Text style={styles.roleToggleBtnText}>
@@ -579,7 +582,7 @@ export default function App() {
           {user ? (
             <FadeInView key={`${dashboardTab}-${activeRoleMode}`} style={styles.mainWrapper}>
               
-              {/* ONGLETS NAVIGATION DE BORD */}
+              {/* ONGLETS NAVIGATION */}
               <View style={styles.pillsContainerOuter}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScrollContent}>
                   <AnimatedButton
@@ -649,7 +652,7 @@ export default function App() {
                 </ScrollView>
               </View>
 
-              {/* TABLEAU DE BORD PRINCIPAL */}
+              {/* ACCUEIL */}
               {dashboardTab === 'home' && (
                 <View style={styles.fullSection}>
                   <View style={styles.userGreetingCard}>
@@ -714,7 +717,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* COMMANDES VENDEUR (TEMPS RÉEL) */}
+              {/* COMMANDES VENDEUR */}
               {dashboardTab === 'vendor_live_orders' && activeRoleMode === 'depot' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Commandes disponibles</Text>
@@ -744,7 +747,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* MES LIVRAISONS VENDEUR */}
+              {/* LIVRAISONS VENDEUR */}
               {dashboardTab === 'my_deliveries' && activeRoleMode === 'depot' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Livraisons en cours</Text>
@@ -816,7 +819,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* CATALOGUE ET COMMANDE */}
+              {/* CATALOGUE ET COMMANDE CLIENT */}
               {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>
@@ -914,18 +917,31 @@ export default function App() {
                         </Text>
                       </View>
 
-                      <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder}>
-                        <Text style={styles.btnOrangeText}>Valider la commande</Text>
+                      {/* BOUTON AVEC CHARGEMENT ET DÉSACTIVATION POUR ÉVITER LES DOUBLONS */}
+                      <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder} disabled={loading}>
+                        {loading ? (
+                          <ActivityIndicator color="#FFFFFF" />
+                        ) : (
+                          <Text style={styles.btnOrangeText}>Valider la commande</Text>
+                        )}
                       </AnimatedButton>
                     </View>
                   )}
                 </View>
               )}
 
-              {/* SUIVIS CLIENT */}
+              {/* MES SUIVIS CLIENT */}
               {dashboardTab === 'orders_list' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Mes suivis</Text>
+
+                  {/* BANNIÈRE VERT DE CONFIRMATION VISUELLE IMMÉDIATE */}
+                  {orderSuccessBanner !== '' && (
+                    <View style={styles.successBannerBox}>
+                      <Text style={styles.successBannerText}>{orderSuccessBanner}</Text>
+                    </View>
+                  )}
+
                   {myClientOrders.length === 0 ? (
                     <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune commande.</Text>
                   ) : (
@@ -937,7 +953,7 @@ export default function App() {
                             styles.orderRowStatus,
                             cmd.status === 'accepted' ? { color: '#4ADE80' } : { color: '#F97316' }
                           ]}>
-                            {cmd.status === 'accepted' ? `Acceptée (${cmd.assignedVendorNom})` : 'En attente'}
+                            {cmd.status === 'accepted' ? `Acceptée (${cmd.assignedVendorNom})` : 'En attente d\'un dépôt'}
                           </Text>
                         </View>
                         <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type} ({cmd.operation})</Text>
@@ -984,7 +1000,7 @@ export default function App() {
 
             </FadeInView>
           ) : (
-            /* ACCUEIL & AUTHENTIFICATION */
+            /* AUTHENTIFICATION */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
@@ -1062,7 +1078,6 @@ export default function App() {
                   
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
-                  {/* FORMULAIRE DE CONNEXION ÉPURÉ : EMAIL ET MOT DE PASSE UNIQUEMENT */}
                   <Text style={styles.label}>Email *</Text>
                   <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#64748B" value={email} onChangeText={setEmail} />
 
@@ -1152,6 +1167,9 @@ const styles = StyleSheet.create({
   cardBoxTitle: { fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 12 },
   backBtnInline: { marginBottom: 10 },
   backBtnInlineText: { color: '#F97316', fontWeight: '800', fontSize: 12 },
+
+  successBannerBox: { backgroundColor: 'rgba(34, 197, 94, 0.15)', borderWidth: 1.5, borderColor: '#22C55E', padding: 12, borderRadius: 10, marginBottom: 14 },
+  successBannerText: { color: '#4ADE80', fontWeight: '800', fontSize: 12, textAlign: 'center' },
 
   depotCardSorted: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 12, padding: 12, marginBottom: 10 },
   depotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
