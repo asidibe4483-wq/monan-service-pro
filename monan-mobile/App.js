@@ -238,9 +238,21 @@ export default function App() {
 
   useEffect(() => {
     checkFirstLaunchStatus();
+    loadStoredUsers();
     const timer = setTimeout(() => setIsAppReady(true), 800);
     return () => clearTimeout(timer);
   }, []);
+
+  const loadStoredUsers = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('@registered_users');
+      if (stored) {
+        setRegisteredUsers(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.log('Erreur de chargement des utilisateurs:', e);
+    }
+  };
 
   const checkFirstLaunchStatus = async () => {
     try {
@@ -328,7 +340,14 @@ export default function App() {
       isSubscribed: false
     };
 
-    setRegisteredUsers(prev => [...prev, newUser]);
+    const updatedUsers = [...registeredUsers, newUser];
+    setRegisteredUsers(updatedUsers);
+
+    try {
+      await AsyncStorage.setItem('@registered_users', JSON.stringify(updatedUsers));
+    } catch (e) {
+      console.log('Erreur sauvegarde utilisateurs:', e);
+    }
 
     if (type === 'depot') {
       const newDepot = {
@@ -357,7 +376,19 @@ export default function App() {
 
     setLoading(true);
     const cleanEmail = email.trim().toLowerCase();
-    const foundUser = registeredUsers.find(u => u.email === cleanEmail);
+    
+    let storedUsers = registeredUsers;
+    try {
+      const stored = await AsyncStorage.getItem('@registered_users');
+      if (stored) {
+        storedUsers = JSON.parse(stored);
+        setRegisteredUsers(storedUsers);
+      }
+    } catch (e) {
+      console.log('Erreur lecture utilisateurs:', e);
+    }
+
+    const foundUser = storedUsers.find(u => u.email === cleanEmail);
 
     let userRole = 'client';
     let userName = cleanEmail.split('@')[0];
@@ -384,7 +415,6 @@ export default function App() {
     setLoading(false);
   };
 
-  // SOUMISSION DE LA COMMANDE AVEC REDIRECTION ET CONFIRMATION IMMÉDIATES
   const handleCreateOrder = () => {
     if (!adresseLivraison) return Alert.alert('Adresse requise', 'Précisez votre lieu de livraison.');
 
@@ -410,15 +440,9 @@ export default function App() {
       depotCible: selectedDepotTarget ? selectedDepotTarget.nom : 'Dépôt proche'
     };
 
-    // 1. Enregistrement de la nouvelle commande
     setAllOrders(prev => [newCmd, ...prev]);
-
-    // 2. Message de confirmation
     setOrderSuccessBanner(`Votre commande ${newCmdId} de ${totalCalculated.toLocaleString('fr-FR')} FCFA a été transmise avec succès !`);
-
-    // 3. Changement immédiat d'écran vers les Suivis pour l'utilisateur
     setDashboardTab('orders_list');
-
     setLoading(false);
   };
 
@@ -917,7 +941,6 @@ export default function App() {
                         </Text>
                       </View>
 
-                      {/* BOUTON AVEC CHARGEMENT ET DÉSACTIVATION POUR ÉVITER LES DOUBLONS */}
                       <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder} disabled={loading}>
                         {loading ? (
                           <ActivityIndicator color="#FFFFFF" />
@@ -935,7 +958,6 @@ export default function App() {
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Mes suivis</Text>
 
-                  {/* BANNIÈRE VERT DE CONFIRMATION VISUELLE IMMÉDIATE */}
                   {orderSuccessBanner !== '' && (
                     <View style={styles.successBannerBox}>
                       <Text style={styles.successBannerText}>{orderSuccessBanner}</Text>
