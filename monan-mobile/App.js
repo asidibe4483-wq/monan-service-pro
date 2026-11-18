@@ -51,25 +51,21 @@ const PAYMENT_OPERATORS = [
   {
     id: 'wave',
     name: 'Wave',
-    shortLabel: 'Wave',
     logo: require('./assets/wave.jpeg'),
   },
   {
     id: 'orange',
     name: 'Orange Money',
-    shortLabel: 'Orange',
     logo: require('./assets/Orange.jpeg'),
   },
   {
     id: 'mtn',
     name: 'MTN MoMo',
-    shortLabel: 'MTN MoMo',
     logo: require('./assets/MTN.jpeg'),
   },
   {
     id: 'moov',
     name: 'Moov Money',
-    shortLabel: 'Moov',
     logo: require('./assets/Moov.jpeg'),
   },
 ];
@@ -881,7 +877,7 @@ export default function App() {
         >
           {user ? (
             isVendorSubscriptionExpired ? (
-              /* BLOCAGE ABONNEMENT EXPIRÉ AVEC LOGOS OPÉRATEURS (.jpeg) */
+              /* BLOCAGE ABONNEMENT EXPIRÉ — TUILES OPÉRATEURS STYLE 1XBET */
               <FadeInView key="subscription-lock" style={styles.mainWrapper}>
                 <View style={styles.cardBox}>
                   <View style={styles.statusPillDanger}>
@@ -922,29 +918,28 @@ export default function App() {
                     })}
                   </View>
 
-                  <Text style={styles.label}>Opérateur Mobile Money</Text>
+                  <Text style={styles.label}>Moyen de paiement</Text>
                   <View style={styles.operatorGrid}>
                     {PAYMENT_OPERATORS.map((op) => {
                       const isSelected = paymentMethod === op.name;
                       return (
                         <AnimatedButton
                           key={op.id}
-                          style={[styles.operatorCard, isSelected && styles.operatorCardActive]}
+                          style={[styles.operatorTile, isSelected && styles.operatorTileActive]}
                           onPress={() => setPaymentMethod(op.name)}
                         >
-                          <View style={styles.operatorLogoWrapper}>
-                            <Image source={op.logo} style={styles.operatorLogoImg} resizeMode="cover" />
+                          {isSelected && (
+                            <View style={styles.operatorCheckBadge}>
+                              <Text style={styles.operatorCheckText}>✓</Text>
+                            </View>
+                          )}
+                          <View style={styles.operatorImageArea}>
+                            <Image source={op.logo} style={styles.operatorTileLogo} resizeMode="contain" />
                           </View>
-                          <View style={{ flex: 1 }}>
-                            <Text
-                              numberOfLines={1}
-                              style={[styles.operatorName, isSelected && { color: '#FFFFFF' }]}
-                            >
-                              {op.shortLabel}
+                          <View style={[styles.operatorTileFooter, isSelected && styles.operatorTileFooterActive]}>
+                            <Text style={[styles.operatorTileLabel, isSelected && styles.operatorTileLabelActive]}>
+                              {op.name}
                             </Text>
-                          </View>
-                          <View style={[styles.radioOuter, isSelected && styles.radioOuterActive]}>
-                            {isSelected && <View style={styles.radioInner} />}
                           </View>
                         </AnimatedButton>
                       );
@@ -1827,63 +1822,75 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
   chipTextActive: { color: '#FFFFFF', fontWeight: '800' },
 
+  // TUILES OPÉRATEURS STYLE 1XBET
   operatorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 14,
+    gap: 10,
+    marginBottom: 16,
   },
-  operatorCard: {
-    width: '48.5%',
-    backgroundColor: '#1E293B',
-    borderWidth: 1.5,
-    borderColor: '#334155',
-    borderRadius: 12,
-    padding: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-  },
-  operatorCardActive: {
-    borderColor: '#F97316',
-    backgroundColor: '#263347',
-  },
-  operatorLogoWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    overflow: 'hidden',
+  operatorTile: {
+    width: '48.2%',
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
+    borderRadius: 12,
+    borderWidth: 2,
     borderColor: '#334155',
+    overflow: 'hidden',
+    position: 'relative',
   },
-  operatorLogoImg: {
-    width: '100%',
-    height: '100%',
+  operatorTileActive: {
+    borderColor: '#F97316',
   },
-  operatorName: {
-    color: '#CBD5E1',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  radioOuter: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#475569',
+  operatorCheckBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    zIndex: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#F97316',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  radioOuterActive: {
-    borderColor: '#F97316',
+  operatorCheckText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
   },
-  radioInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  operatorImageArea: {
+    width: '100%',
+    height: 54,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  operatorTileLogo: {
+    width: '100%',
+    height: '100%',
+  },
+  operatorTileFooter: {
+    width: '100%',
+    paddingVertical: 6,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  operatorTileFooterActive: {
     backgroundColor: '#F97316',
+    borderTopColor: '#F97316',
+  },
+  operatorTileLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  operatorTileLabelActive: {
+    color: '#FFFFFF',
   },
 
   stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 4, width: 132, justifyContent: 'space-between', marginBottom: 14 },
