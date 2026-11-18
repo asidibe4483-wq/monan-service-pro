@@ -43,6 +43,12 @@ const getRemainingSubscriptionDays = (userObj) => {
   return getDaysLeftInTrial(userObj.createdAt);
 };
 
+const ROLE_LABELS = {
+  client: 'Client',
+  depot: 'Vendeur',
+  livreur: 'Livreur',
+};
+
 const SUBSCRIPTION_PLANS = [
   { id: '1m', label: '1 Mois', days: 30, price: 2000, originalPrice: null, badge: 'TARIF DE BASE' },
   { id: '3m', label: '3 Mois', days: 90, price: 4500, originalPrice: 6000, badge: '-25% DE RÉDUCTION' },
@@ -189,10 +195,44 @@ const CYLINDER_TYPES = [
 ];
 
 const INITIAL_DEPOTS = [
-  { id: 'DEP-01', nom: 'Dépôt Angré 8e Tranche', distanceKm: 0.3, distance: '0.3 km', quartier: 'Cocody Angré', telephone: '0707010203' },
+  { id: 'DEP-DEFAULT', nom: 'Dépôt Angré 8e Tranche', distanceKm: 0.3, distance: '0.3 km', quartier: 'Cocody Angré', telephone: '0707070707' },
   { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distanceKm: 1.2, distance: '1.2 km', quartier: 'Cocody Centre', telephone: '0708020304' },
   { id: 'DEP-03', nom: 'Dépôt Riviera 2', distanceKm: 2.5, distance: '2.5 km', quartier: 'Cocody Riviera', telephone: '0709030405' },
   { id: 'DEP-04', nom: 'Dépôt Yopougon Maroc', distanceKm: 5.8, distance: '5.8 km', quartier: 'Yopougon', telephone: '0501020304' },
+];
+
+const DEFAULT_USERS = [
+  {
+    id: 'DEP-DEFAULT',
+    email: 'vendeur@monan.ci',
+    role: 'depot',
+    nom: 'Dépôt Angré',
+    telephone: '0707070707',
+    adresse: 'Cocody Angré',
+    createdAt: new Date().toISOString(),
+    subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    isSubscribed: true
+  },
+  {
+    id: 'CLI-DEFAULT',
+    email: 'client@monan.ci',
+    role: 'client',
+    nom: 'Kouassi Yves',
+    telephone: '0505050505',
+    adresse: 'Angré Star 10',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'LIV-DEFAULT',
+    email: 'livreur@monan.ci',
+    role: 'livreur',
+    depotId: 'DEP-DEFAULT',
+    nom: 'Koné Moussa',
+    telephone: '0102030405',
+    adresse: 'Cocody / Angré',
+    vehicule: 'Tricycle',
+    createdAt: new Date().toISOString()
+  }
 ];
 
 export default function App() {
@@ -201,8 +241,8 @@ export default function App() {
   const [onboardingStep, setOnboardingStep] = useState(0);
 
   const [currentScreen, setCurrentScreen] = useState('welcome');
+  const [loginRole, setLoginRole] = useState('client');
   const [user, setUser] = useState(null);
-  const [activeRoleMode, setActiveRoleMode] = useState('client');
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
@@ -210,38 +250,7 @@ export default function App() {
   const [paymentMethod, setPaymentMethod] = useState('Wave');
   const [paymentPhone, setPaymentPhone] = useState('');
 
-  const [registeredUsers, setRegisteredUsers] = useState([
-    {
-      id: 'DEP-DEFAULT',
-      email: 'vendeur@monan.ci',
-      role: 'depot',
-      nom: 'Dépôt Angré',
-      telephone: '0707070707',
-      adresse: 'Cocody Angré',
-      createdAt: new Date().toISOString(),
-      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      isSubscribed: true
-    },
-    {
-      id: 'CLI-DEFAULT',
-      email: 'client@monan.ci',
-      role: 'client',
-      nom: 'Kouassi Yves',
-      telephone: '0505050505',
-      adresse: 'Angré Star 10',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'LIV-DEFAULT',
-      email: 'livreur@monan.ci',
-      role: 'livreur',
-      nom: 'Koné Moussa',
-      telephone: '0102030405',
-      adresse: 'Cocody / Angré',
-      vehicule: 'Tricycle',
-      createdAt: new Date().toISOString()
-    }
-  ]);
+  const [registeredUsers, setRegisteredUsers] = useState(DEFAULT_USERS);
 
   const [vendorPrices, setVendorPrices] = useState({
     B6: { recharge: '2000', achat: '13000' },
@@ -255,6 +264,7 @@ export default function App() {
   const [telephone, setTelephone] = useState('');
   const [adresse, setAdresse] = useState('');
   const [vehicule, setVehicule] = useState('Moto');
+  const [selectedDepotForDriver, setSelectedDepotForDriver] = useState('DEP-DEFAULT');
 
   // Ajout rapide de livreur par le vendeur
   const [newDriverName, setNewDriverName] = useState('');
@@ -277,8 +287,9 @@ export default function App() {
     {
       id: 'CMD-801',
       date: new Date().toLocaleDateString('fr-FR'),
+      clientId: 'CLI-DEFAULT',
       clientNom: 'Kouassi Yves',
-      clientPhone: '0708091011',
+      clientPhone: '0505050505',
       type: 'TotalEnergies B12 (12.5 kg)',
       operation: 'Recharge',
       qte: 1,
@@ -294,6 +305,7 @@ export default function App() {
     {
       id: 'CMD-802',
       date: new Date().toLocaleDateString('fr-FR'),
+      clientId: 'CLI-OTHER',
       clientNom: 'Mme Traoré',
       clientPhone: '0506070809',
       type: 'Shell Gas B6 (6 kg)',
@@ -319,7 +331,7 @@ export default function App() {
 
   const loadStoredUsers = async () => {
     try {
-      const stored = await AsyncStorage.getItem('@registered_users');
+      const stored = await AsyncStorage.getItem('@registered_users_v2');
       if (stored) {
         setRegisteredUsers(JSON.parse(stored));
       }
@@ -382,22 +394,14 @@ export default function App() {
     };
   }, [hasSeenOnboarding, onboardingStep, user, currentScreen, dashboardTab]);
 
-  const remainingSubDays = user?.role === 'depot' ? getRemainingSubscriptionDays(user) : null;
-  const isVendorSubscriptionExpired = user?.role === 'depot' && remainingSubDays <= 0;
+  const currentRole = user?.role || null;
+  const remainingSubDays = currentRole === 'depot' ? getRemainingSubscriptionDays(user) : null;
+  const isVendorSubscriptionExpired = currentRole === 'depot' && remainingSubDays <= 0;
 
   const activeFormatPrices = vendorPrices[selectedCylinder.id] || { recharge: selectedCylinder.priceRecharge, achat: selectedCylinder.priceAchat };
   const currentUnitPrice = operationType === 'recharge' 
     ? (parseInt(activeFormatPrices.recharge, 10) || selectedCylinder.priceRecharge)
     : (parseInt(activeFormatPrices.achat, 10) || selectedCylinder.priceAchat);
-
-  const handleToggleRoleMode = () => {
-    if (isVendorSubscriptionExpired) return;
-    if (user && user.role === 'depot') {
-      const newMode = activeRoleMode === 'depot' ? 'client' : 'depot';
-      setActiveRoleMode(newMode);
-      setDashboardTab('home');
-    }
-  };
 
   const persistUserUpdate = async (updatedUserObj) => {
     setUser(updatedUserObj);
@@ -408,7 +412,7 @@ export default function App() {
     const finalList = exists ? updatedList : [...updatedList, updatedUserObj];
     setRegisteredUsers(finalList);
     try {
-      await AsyncStorage.setItem('@registered_users', JSON.stringify(finalList));
+      await AsyncStorage.setItem('@registered_users_v2', JSON.stringify(finalList));
     } catch (e) {
       console.log('Erreur sauvegarde utilisateur:', e);
     }
@@ -435,7 +439,6 @@ export default function App() {
     };
 
     await persistUserUpdate(updatedUser);
-    setActiveRoleMode('depot');
     setDashboardTab('home');
     setLoading(false);
 
@@ -454,7 +457,6 @@ export default function App() {
       subscriptionExpiresAt: expiredDate
     };
     await persistUserUpdate(expiredUser);
-    setActiveRoleMode('depot');
     setDashboardTab('home');
   };
 
@@ -464,29 +466,39 @@ export default function App() {
       return;
     }
 
-    setLoading(true);
     const cleanEmail = email.trim().toLowerCase();
+    const existingAccount = registeredUsers.find(u => u.email === cleanEmail);
+    if (existingAccount) {
+      Alert.alert(
+        'Compte existant',
+        `Cet email est déjà utilisé pour un compte ${ROLE_LABELS[existingAccount.role]}. Utilisez un autre email ou connectez-vous.`
+      );
+      return;
+    }
+
+    setLoading(true);
     const nowIso = new Date().toISOString();
     const trialExpiryIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const newUser = {
-      id: `USR-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: `${type === 'depot' ? 'DEP' : type === 'livreur' ? 'LIV' : 'CLI'}-${Math.floor(1000 + Math.random() * 9000)}`,
       nom: nom.trim(),
       email: cleanEmail,
       telephone: telephone.trim(),
       adresse: adresse.trim() || 'Abidjan',
       role: type,
+      depotId: type === 'livreur' ? selectedDepotForDriver : null,
       vehicule: type === 'livreur' ? vehicule : null,
       createdAt: nowIso,
       subscriptionExpiresAt: type === 'depot' ? trialExpiryIso : null,
       isSubscribed: false
     };
 
-    const updatedUsers = [...registeredUsers.filter(u => u.email !== cleanEmail), newUser];
+    const updatedUsers = [...registeredUsers, newUser];
     setRegisteredUsers(updatedUsers);
 
     try {
-      await AsyncStorage.setItem('@registered_users', JSON.stringify(updatedUsers));
+      await AsyncStorage.setItem('@registered_users_v2', JSON.stringify(updatedUsers));
     } catch (e) {
       console.log('Erreur sauvegarde utilisateurs:', e);
     }
@@ -505,8 +517,9 @@ export default function App() {
 
     setUser(newUser);
     setPaymentPhone(telephone.trim());
-    setActiveRoleMode(type);
-    setAdresseLivraison(adresse.trim());
+    if (type === 'client') {
+      setAdresseLivraison(adresse.trim());
+    }
     setDashboardTab('home');
     setLoading(false);
   };
@@ -522,7 +535,7 @@ export default function App() {
     
     let storedUsers = registeredUsers;
     try {
-      const stored = await AsyncStorage.getItem('@registered_users');
+      const stored = await AsyncStorage.getItem('@registered_users_v2');
       if (stored) {
         storedUsers = JSON.parse(stored);
         setRegisteredUsers(storedUsers);
@@ -533,45 +546,41 @@ export default function App() {
 
     const foundUser = storedUsers.find(u => u.email === cleanEmail);
 
-    let userData;
-    if (foundUser) {
-      userData = {
-        ...foundUser,
-        subscriptionExpiresAt:
-          foundUser.subscriptionExpiresAt ||
-          (foundUser.role === 'depot'
-            ? new Date(new Date(foundUser.createdAt || Date.now()).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
-            : null)
-      };
-    } else {
-      let inferredRole = 'client';
-      if (cleanEmail.includes('depot') || cleanEmail.includes('vendeur') || cleanEmail.includes('pro')) {
-        inferredRole = 'depot';
-      } else if (cleanEmail.includes('livreur') || cleanEmail.includes('coursier') || cleanEmail.includes('driver')) {
-        inferredRole = 'livreur';
-      }
-
-      userData = {
-        id: inferredRole === 'depot' ? 'DEP-CURRENT' : inferredRole === 'livreur' ? 'LIV-CURRENT' : 'CLI-CURRENT',
-        email: cleanEmail,
-        nom: cleanEmail.split('@')[0],
-        telephone: '0700000000',
-        vehicule: inferredRole === 'livreur' ? 'Moto' : null,
-        role: inferredRole,
-        createdAt: new Date().toISOString(),
-        subscriptionExpiresAt: inferredRole === 'depot' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
-        isSubscribed: false
-      };
+    if (!foundUser) {
+      setLoading(false);
+      Alert.alert(
+        'Compte introuvable',
+        `Aucun compte ${ROLE_LABELS[loginRole]} trouvé avec cet email. Veuillez d'abord vous inscrire dans l'espace ${ROLE_LABELS[loginRole]}.`
+      );
+      return;
     }
+
+    if (foundUser.role !== loginRole) {
+      setLoading(false);
+      Alert.alert(
+        'Mauvais espace sélectionné',
+        `Cet email correspond à un compte ${ROLE_LABELS[foundUser.role]}. Sélectionnez "${ROLE_LABELS[foundUser.role]}" avant de vous connecter.`
+      );
+      return;
+    }
+
+    const userData = {
+      ...foundUser,
+      subscriptionExpiresAt:
+        foundUser.subscriptionExpiresAt ||
+        (foundUser.role === 'depot'
+          ? new Date(new Date(foundUser.createdAt || Date.now()).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          : null)
+    };
 
     setUser(userData);
     setPaymentPhone(userData.telephone || '');
-    setActiveRoleMode(userData.role);
     setDashboardTab('home');
     setLoading(false);
   };
 
   const handleAddDriverFromVendor = async () => {
+    if (user?.role !== 'depot') return;
     if (!newDriverName.trim() || !newDriverPhone.trim()) {
       Alert.alert('Champs requis', 'Entrez le nom et le téléphone du livreur.');
       return;
@@ -585,6 +594,7 @@ export default function App() {
       email: `${newDriverPhone.trim()}@livreur.monan.ci`,
       adresse: user?.adresse || 'Zone Dépôt',
       role: 'livreur',
+      depotId: user.id,
       vehicule: newDriverVehicle,
       createdAt: new Date().toISOString()
     };
@@ -592,17 +602,18 @@ export default function App() {
     const updatedUsers = [...registeredUsers, driverObj];
     setRegisteredUsers(updatedUsers);
     try {
-      await AsyncStorage.setItem('@registered_users', JSON.stringify(updatedUsers));
+      await AsyncStorage.setItem('@registered_users_v2', JSON.stringify(updatedUsers));
     } catch (e) {
       console.log('Erreur ajout livreur:', e);
     }
 
     setNewDriverName('');
     setNewDriverPhone('');
-    Alert.alert('Livreur ajouté', `${driverObj.nom} est maintenant associé aux livraisons.`);
+    Alert.alert('Livreur rattaché', `${driverObj.nom} est maintenant rattaché à votre dépôt.`);
   };
 
   const handleCreateOrder = () => {
+    if (user?.role !== 'client') return;
     if (!adresseLivraison) return Alert.alert('Adresse requise', 'Précisez votre lieu de livraison.');
 
     setLoading(true);
@@ -614,8 +625,9 @@ export default function App() {
     const newCmd = {
       id: newCmdId,
       date: new Date().toLocaleDateString('fr-FR'),
-      clientNom: user?.nom || 'Client',
-      clientPhone: user?.telephone || 'Non renseigné',
+      clientId: user.id,
+      clientNom: user.nom || 'Client',
+      clientPhone: user.telephone || 'Non renseigné',
       type: `${selectedMarque.name} ${selectedCylinder.name}`,
       operation: operationType === 'recharge' ? 'Recharge' : 'Achat Neuf',
       qte: qteNum,
@@ -637,7 +649,7 @@ export default function App() {
   };
 
   const handleAcceptOrder = (orderId) => {
-    if (isVendorSubscriptionExpired) return;
+    if (user?.role !== 'depot' || isVendorSubscriptionExpired) return;
     setAllOrders(prevOrders =>
       prevOrders.map(order => {
         if (order.id === orderId) {
@@ -652,19 +664,18 @@ export default function App() {
       })
     );
 
-    Alert.alert('Commande acceptée', 'Vous pouvez maintenant lui assigner un livreur dans l’onglet Livraisons.');
+    Alert.alert('Commande acceptée', 'Assignez maintenant un livreur dans l’onglet Livraisons.');
   };
 
   const handleAssignDriverToOrder = (orderId) => {
-    if (isVendorSubscriptionExpired) return;
-    const drivers = registeredUsers.filter(u => u.role === 'livreur');
-    if (drivers.length === 0) {
+    if (user?.role !== 'depot' || isVendorSubscriptionExpired) return;
+    if (myDepotDrivers.length === 0) {
       Alert.alert('Aucun livreur', 'Ajoutez d’abord un livreur dans l’onglet Livreurs.');
       return;
     }
 
-    const chosenDriverId = selectedDriverByOrder[orderId] || drivers[0].id;
-    const driver = drivers.find(d => d.id === chosenDriverId) || drivers[0];
+    const chosenDriverId = selectedDriverByOrder[orderId] || myDepotDrivers[0].id;
+    const driver = myDepotDrivers.find(d => d.id === chosenDriverId) || myDepotDrivers[0];
 
     setAllOrders(prevOrders =>
       prevOrders.map(order => {
@@ -681,10 +692,11 @@ export default function App() {
       })
     );
 
-    Alert.alert('Livreur associé', `La commande ${orderId} a été confiée à ${driver.nom} (${driver.telephone}).`);
+    Alert.alert('Livreur assigné', `La commande ${orderId} a été confiée à ${driver.nom} (${driver.telephone}).`);
   };
 
   const handleDriverClaimOrder = (orderId) => {
+    if (user?.role !== 'livreur') return;
     setAllOrders(prevOrders =>
       prevOrders.map(order => {
         if (order.id === orderId) {
@@ -704,17 +716,17 @@ export default function App() {
     setDashboardTab('driver_active');
   };
 
-  const handleMarkAsDelivered = (orderId) => {
-    if (isVendorSubscriptionExpired) return;
+  const handleDriverConfirmDelivery = (orderId) => {
+    if (user?.role !== 'livreur') return;
     setAllOrders(prevOrders =>
       prevOrders.map(order => {
-        if (order.id === orderId) {
+        if (order.id === orderId && order.assignedDriverId === user.id) {
           return { ...order, status: 'delivered' };
         }
         return order;
       })
     );
-    Alert.alert('Livraison validée', 'La commande a été marquée comme livrée au client.');
+    Alert.alert('Livraison confirmée', 'La commande est clôturée et marquée comme livrée.');
   };
 
   const handleLogout = () => {
@@ -732,26 +744,44 @@ export default function App() {
       d.quartier.toLowerCase().includes(searchDepot.toLowerCase())
     );
 
-  const registeredDrivers = registeredUsers.filter(u => u.role === 'livreur');
+  // Données filtrées par rôle strict
+  const myDepotDrivers = currentRole === 'depot'
+    ? registeredUsers.filter(u => u.role === 'livreur' && (!u.depotId || u.depotId === user?.id))
+    : [];
 
-  // Filtres Vendeur
-  const availableOrdersForVendors = allOrders.filter(cmd => cmd.status === 'available');
-  const myVendorDeliveries = allOrders.filter(
-    cmd => cmd.assignedVendorId === user?.id && (cmd.status === 'accepted' || cmd.status === 'in_delivery')
-  );
+  const availableOrdersForVendors = currentRole === 'depot'
+    ? allOrders.filter(cmd => cmd.status === 'available')
+    : [];
 
-  // Filtres Livreur
-  const availableOrdersForDrivers = allOrders.filter(cmd => cmd.status === 'accepted' && !cmd.assignedDriverId);
-  const myDriverActiveOrders = allOrders.filter(cmd => cmd.assignedDriverId === user?.id && cmd.status === 'in_delivery');
-  const myDriverDeliveredOrders = allOrders.filter(cmd => cmd.assignedDriverId === user?.id && cmd.status === 'delivered');
+  const myVendorDeliveries = currentRole === 'depot'
+    ? allOrders.filter(cmd => cmd.assignedVendorId === user?.id && (cmd.status === 'accepted' || cmd.status === 'in_delivery'))
+    : [];
 
-  // Filtres Client
-  const myClientOrders = allOrders.filter(cmd => cmd.clientNom === user?.nom || user?.role === 'client');
+  const availableOrdersForDrivers = currentRole === 'livreur'
+    ? allOrders.filter(
+        cmd =>
+          cmd.status === 'accepted' &&
+          !cmd.assignedDriverId &&
+          (!user?.depotId || cmd.assignedVendorId === user.depotId)
+      )
+    : [];
+
+  const myDriverActiveOrders = currentRole === 'livreur'
+    ? allOrders.filter(cmd => cmd.assignedDriverId === user?.id && cmd.status === 'in_delivery')
+    : [];
+
+  const myDriverDeliveredOrders = currentRole === 'livreur'
+    ? allOrders.filter(cmd => cmd.assignedDriverId === user?.id && cmd.status === 'delivered')
+    : [];
+
+  const myClientOrders = currentRole === 'client'
+    ? allOrders.filter(cmd => cmd.clientId === user?.id)
+    : [];
 
   const getRoleHeaderLabel = () => {
     if (!user) return 'GAZ EN LIGNE';
-    if (activeRoleMode === 'depot') return 'ESPACE VENDEUR';
-    if (activeRoleMode === 'livreur') return 'ESPACE LIVREUR';
+    if (currentRole === 'depot') return 'ESPACE VENDEUR';
+    if (currentRole === 'livreur') return 'ESPACE LIVREUR';
     return 'ESPACE CLIENT';
   };
 
@@ -761,7 +791,7 @@ export default function App() {
       return `En livraison • ${cmd.assignedDriverNom} (${cmd.assignedDriverPhone})`;
     }
     if (cmd.status === 'accepted') {
-      return `Préparation (${cmd.assignedVendorNom})`;
+      return `En préparation (${cmd.assignedVendorNom})`;
     }
     return "En attente d'un dépôt";
   };
@@ -853,19 +883,9 @@ export default function App() {
         </View>
 
         {user && (
-          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            {user.role === 'depot' && !isVendorSubscriptionExpired && (
-              <AnimatedButton style={styles.roleToggleBtn} onPress={handleToggleRoleMode}>
-                <Text style={styles.roleToggleBtnText}>
-                  {activeRoleMode === 'depot' ? 'Vue Client' : 'Vue Vendeur'}
-                </Text>
-              </AnimatedButton>
-            )}
-
-            <AnimatedButton style={styles.logoutBtn} onPress={handleLogout}>
-              <Text style={styles.logoutBtnText}>Quitter</Text>
-            </AnimatedButton>
-          </View>
+          <AnimatedButton style={styles.logoutBtn} onPress={handleLogout}>
+            <Text style={styles.logoutBtnText}>Quitter</Text>
+          </AnimatedButton>
         )}
       </View>
 
@@ -965,9 +985,9 @@ export default function App() {
                 </View>
               </FadeInView>
             ) : (
-            <FadeInView key={`${dashboardTab}-${activeRoleMode}`} style={styles.mainWrapper}>
+            <FadeInView key={`${dashboardTab}-${currentRole}`} style={styles.mainWrapper}>
               
-              {/* ONGLETS NAVIGATION */}
+              {/* ONGLETS STRICTEMENT PAR RÔLE */}
               <View style={styles.pillsContainerOuter}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScrollContent}>
                   <AnimatedButton
@@ -977,7 +997,7 @@ export default function App() {
                     <Text style={[styles.pillText, dashboardTab === 'home' && styles.pillTextActive]}>Accueil</Text>
                   </AnimatedButton>
 
-                  {activeRoleMode === 'depot' ? (
+                  {currentRole === 'depot' && (
                     <>
                       <AnimatedButton
                         style={[styles.pillBtn, dashboardTab === 'vendor_live_orders' && styles.pillBtnActive]}
@@ -1002,7 +1022,7 @@ export default function App() {
                         onPress={() => setDashboardTab('vendor_drivers')}
                       >
                         <Text style={[styles.pillText, dashboardTab === 'vendor_drivers' && styles.pillTextActive]}>
-                          Livreurs ({registeredDrivers.length})
+                          Livreurs ({myDepotDrivers.length})
                         </Text>
                       </AnimatedButton>
 
@@ -1013,7 +1033,9 @@ export default function App() {
                         <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Mes Prix</Text>
                       </AnimatedButton>
                     </>
-                  ) : activeRoleMode === 'livreur' ? (
+                  )}
+
+                  {currentRole === 'livreur' && (
                     <>
                       <AnimatedButton
                         style={[styles.pillBtn, dashboardTab === 'driver_available' && styles.pillBtnActive]}
@@ -1042,7 +1064,9 @@ export default function App() {
                         </Text>
                       </AnimatedButton>
                     </>
-                  ) : (
+                  )}
+
+                  {currentRole === 'client' && (
                     <>
                       <AnimatedButton
                         style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
@@ -1075,7 +1099,7 @@ export default function App() {
                 </ScrollView>
               </View>
 
-              {/* ACCUEIL */}
+              {/* ACCUEIL PAR RÔLE */}
               {dashboardTab === 'home' && (
                 <View style={styles.fullSection}>
                   <View style={styles.userGreetingCard}>
@@ -1085,17 +1109,17 @@ export default function App() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Utilisateur'}</Text>
                       <Text style={styles.greetingSubtitle}>
-                        {user.role === 'depot'
-                          ? (activeRoleMode === 'depot' ? 'Mode Vendeur' : 'Mode Client (Vendeur)')
-                          : user.role === 'livreur'
-                          ? `Livreur • ${user.vehicule || 'Moto'}`
+                        {currentRole === 'depot'
+                          ? 'Compte Vendeur / Dépôt'
+                          : currentRole === 'livreur'
+                          ? `Compte Livreur • ${user.vehicule || 'Moto'}`
                           : 'Compte Client'}
                       </Text>
                     </View>
                   </View>
 
-                  {/* STATUT ABONNEMENT VENDEUR */}
-                  {user.role === 'depot' && (
+                  {/* STATUT ABONNEMENT VENDEUR UNIQUEMENT */}
+                  {currentRole === 'depot' && (
                     <View style={styles.subStatusCard}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.subStatusLabel}>ABONNEMENT VENDEUR</Text>
@@ -1110,7 +1134,7 @@ export default function App() {
                   )}
 
                   <View style={styles.kpiGrid}>
-                    {activeRoleMode === 'depot' ? (
+                    {currentRole === 'depot' && (
                       <>
                         <View style={styles.kpiCard}>
                           <Text style={styles.kpiCardTag}>COMMANDES DISPO</Text>
@@ -1122,10 +1146,12 @@ export default function App() {
                         </View>
                         <View style={styles.kpiCard}>
                           <Text style={styles.kpiCardTag}>LIVREURS</Text>
-                          <Text style={styles.kpiCardNum}>{registeredDrivers.length}</Text>
+                          <Text style={styles.kpiCardNum}>{myDepotDrivers.length}</Text>
                         </View>
                       </>
-                    ) : activeRoleMode === 'livreur' ? (
+                    )}
+
+                    {currentRole === 'livreur' && (
                       <>
                         <View style={styles.kpiCard}>
                           <Text style={styles.kpiCardTag}>COURSES DISPO</Text>
@@ -1140,7 +1166,9 @@ export default function App() {
                           <Text style={styles.kpiCardNum}>{myDriverDeliveredOrders.length}</Text>
                         </View>
                       </>
-                    ) : (
+                    )}
+
+                    {currentRole === 'client' && (
                       <>
                         <View style={styles.kpiCard}>
                           <Text style={styles.kpiCardTag}>DÉPÔTS PROCHES</Text>
@@ -1154,7 +1182,7 @@ export default function App() {
                     )}
                   </View>
 
-                  {activeRoleMode === 'depot' ? (
+                  {currentRole === 'depot' && (
                     <View style={{ gap: 10 }}>
                       <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('vendor_live_orders')}>
                         <Text style={styles.actionCardTitle}>Commandes en direct</Text>
@@ -1168,7 +1196,9 @@ export default function App() {
                         <Text style={styles.actionCardTitleWhite}>Gérer mes prix</Text>
                       </AnimatedButton>
                     </View>
-                  ) : activeRoleMode === 'livreur' ? (
+                  )}
+
+                  {currentRole === 'livreur' && (
                     <View style={{ gap: 10 }}>
                       <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('driver_available')}>
                         <Text style={styles.actionCardTitle}>Courses disponibles</Text>
@@ -1178,7 +1208,9 @@ export default function App() {
                         <Text style={styles.actionCardTitleWhite}>Mes courses en cours</Text>
                       </AnimatedButton>
                     </View>
-                  ) : (
+                  )}
+
+                  {currentRole === 'client' && (
                     <View style={{ gap: 10 }}>
                       <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
                         <Text style={styles.actionCardTitle}>Dépôts proches</Text>
@@ -1192,8 +1224,8 @@ export default function App() {
                 </View>
               )}
 
-              {/* COMMANDES VENDEUR */}
-              {dashboardTab === 'vendor_live_orders' && activeRoleMode === 'depot' && (
+              {/* === VUES EXCLUSIVES VENDEUR === */}
+              {currentRole === 'depot' && dashboardTab === 'vendor_live_orders' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Commandes disponibles</Text>
 
@@ -1222,15 +1254,14 @@ export default function App() {
                 </View>
               )}
 
-              {/* LIVRAISONS & ASSIGNATION LIVREUR (VENDEUR) */}
-              {dashboardTab === 'my_deliveries' && activeRoleMode === 'depot' && (
+              {currentRole === 'depot' && dashboardTab === 'my_deliveries' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Livraisons & Livreurs</Text>
                   {myVendorDeliveries.length === 0 ? (
                     <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune livraison en cours.</Text>
                   ) : (
                     myVendorDeliveries.map((order) => {
-                      const activeSelectedDriverId = selectedDriverByOrder[order.id] || registeredDrivers[0]?.id;
+                      const activeSelectedDriverId = selectedDriverByOrder[order.id] || myDepotDrivers[0]?.id;
 
                       return (
                         <View key={order.id} style={[styles.liveOrderCard, { borderColor: order.status === 'in_delivery' ? '#38BDF8' : '#4ADE80' }]}>
@@ -1242,7 +1273,7 @@ export default function App() {
                                 ? { backgroundColor: 'rgba(56, 189, 248, 0.2)', color: '#38BDF8' }
                                 : { backgroundColor: 'rgba(74, 222, 128, 0.2)', color: '#4ADE80' }
                             ]}>
-                              {order.status === 'in_delivery' ? 'EN LIVRAISON' : 'PRÊTE À LIVRER'}
+                              {order.status === 'in_delivery' ? 'EN COURS DE LIVRAISON' : 'À ASSIGNER'}
                             </Text>
                           </View>
                           <Text style={styles.liveOrderClient}>Client : {order.clientNom} ({order.clientPhone})</Text>
@@ -1252,10 +1283,10 @@ export default function App() {
 
                           {order.status === 'accepted' ? (
                             <View style={styles.assignDriverBox}>
-                              <Text style={styles.assignDriverLabel}>Choisir un livreur :</Text>
+                              <Text style={styles.assignDriverLabel}>Choisir un livreur de mon dépôt :</Text>
                               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
                                 <View style={{ flexDirection: 'row', gap: 6 }}>
-                                  {registeredDrivers.map((drv) => {
+                                  {myDepotDrivers.map((drv) => {
                                     const isChosen = activeSelectedDriverId === drv.id;
                                     return (
                                       <AnimatedButton
@@ -1279,11 +1310,11 @@ export default function App() {
                           ) : (
                             <View style={styles.assignedDriverBanner}>
                               <Text style={styles.assignedDriverText}>
-                                Livreur : <Text style={{ fontWeight: '900', color: '#38BDF8' }}>{order.assignedDriverNom}</Text> ({order.assignedDriverPhone})
+                                Confiée à : <Text style={{ fontWeight: '900', color: '#38BDF8' }}>{order.assignedDriverNom}</Text> ({order.assignedDriverPhone})
                               </Text>
-                              <AnimatedButton style={[styles.btnOrange, { marginTop: 8 }]} onPress={() => handleMarkAsDelivered(order.id)}>
-                                <Text style={styles.btnOrangeText}>Valider la livraison</Text>
-                              </AnimatedButton>
+                              <Text style={{ color: '#94A3B8', fontSize: 11, marginTop: 4 }}>
+                                En attente de confirmation par le livreur chez le client.
+                              </Text>
                             </View>
                           )}
                         </View>
@@ -1293,13 +1324,12 @@ export default function App() {
                 </View>
               )}
 
-              {/* GESTION DES LIVREURS (VENDEUR) */}
-              {dashboardTab === 'vendor_drivers' && activeRoleMode === 'depot' && (
+              {currentRole === 'depot' && dashboardTab === 'vendor_drivers' && (
                 <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Mes livreurs ({registeredDrivers.length})</Text>
+                  <Text style={styles.cardBoxTitle}>Mes livreurs ({myDepotDrivers.length})</Text>
 
                   <View style={styles.addDriverForm}>
-                    <Text style={styles.label}>Ajouter un livreur</Text>
+                    <Text style={styles.label}>Ajouter un livreur à mon dépôt</Text>
                     <TextInput
                       style={styles.input}
                       placeholder="Nom du livreur (Ex: Yao Paul)"
@@ -1331,7 +1361,7 @@ export default function App() {
                     </AnimatedButton>
                   </View>
 
-                  {registeredDrivers.map((drv) => {
+                  {myDepotDrivers.map((drv) => {
                     const activeDeliveriesCount = allOrders.filter(
                       o => o.assignedDriverId === drv.id && o.status === 'in_delivery'
                     ).length;
@@ -1359,8 +1389,53 @@ export default function App() {
                 </View>
               )}
 
-              {/* ESPACE LIVREUR : COURSES DISPONIBLES */}
-              {dashboardTab === 'driver_available' && activeRoleMode === 'livreur' && (
+              {currentRole === 'depot' && dashboardTab === 'pricing' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Mes prix</Text>
+                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B6 (6 kg)</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Recharge (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, recharge: val } })} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Achat (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, achat: val } })} />
+                    </View>
+                  </View>
+
+                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B12 (12.5 kg)</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Recharge (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, recharge: val } })} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Achat (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, achat: val } })} />
+                    </View>
+                  </View>
+
+                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B28 (28 kg)</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Recharge (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, recharge: val } })} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Achat (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, achat: val } })} />
+                    </View>
+                  </View>
+
+                  <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Tarifs mis à jour.')}>
+                    <Text style={styles.btnOrangeText}>Enregistrer</Text>
+                  </AnimatedButton>
+                </View>
+              )}
+
+              {/* === VUES EXCLUSIVES LIVREUR === */}
+              {currentRole === 'livreur' && dashboardTab === 'driver_available' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Courses disponibles</Text>
 
@@ -1389,8 +1464,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* ESPACE LIVREUR : MES COURSES EN COURS */}
-              {dashboardTab === 'driver_active' && activeRoleMode === 'livreur' && (
+              {currentRole === 'livreur' && dashboardTab === 'driver_active' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Mes courses en cours</Text>
 
@@ -1413,7 +1487,7 @@ export default function App() {
                         <Text style={styles.liveOrderAddress}>Dépôt : {order.assignedVendorNom}</Text>
                         <Text style={styles.liveOrderTotal}>À encaisser : {order.total}</Text>
 
-                        <AnimatedButton style={[styles.btnAcceptOrder, { marginTop: 10 }]} onPress={() => handleMarkAsDelivered(order.id)}>
+                        <AnimatedButton style={[styles.btnAcceptOrder, { marginTop: 10 }]} onPress={() => handleDriverConfirmDelivery(order.id)}>
                           <Text style={styles.btnAcceptOrderText}>Confirmer la livraison</Text>
                         </AnimatedButton>
                       </View>
@@ -1422,8 +1496,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* ESPACE LIVREUR : HISTORIQUE LIVRÉES */}
-              {dashboardTab === 'driver_history' && activeRoleMode === 'livreur' && (
+              {currentRole === 'livreur' && dashboardTab === 'driver_history' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Courses livrées</Text>
 
@@ -1444,8 +1517,8 @@ export default function App() {
                 </View>
               )}
 
-              {/* DÉPÔTS PROCHES */}
-              {dashboardTab === 'depots' && (
+              {/* === VUES EXCLUSIVES CLIENT === */}
+              {currentRole === 'client' && dashboardTab === 'depots' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Dépôts proches</Text>
 
@@ -1487,8 +1560,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* CATALOGUE ET COMMANDE CLIENT */}
-              {(dashboardTab === 'catalog' || dashboardTab === 'order') && (
+              {currentRole === 'client' && (dashboardTab === 'catalog' || dashboardTab === 'order') && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>
                     {dashboardTab === 'catalog' ? 'Catalogue' : 'Nouvelle commande'}
@@ -1597,8 +1669,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* MES SUIVIS CLIENT */}
-              {dashboardTab === 'orders_list' && (
+              {currentRole === 'client' && dashboardTab === 'orders_list' && (
                 <View style={styles.cardBox}>
                   <Text style={styles.cardBoxTitle}>Mes suivis</Text>
 
@@ -1613,7 +1684,7 @@ export default function App() {
                   ) : (
                     myClientOrders.map((cmd) => (
                       <View key={cmd.id} style={styles.orderRow}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
                           <Text style={styles.orderRowId}>{cmd.id} • {cmd.date}</Text>
                           <Text style={[
                             styles.orderRowStatus,
@@ -1633,52 +1704,6 @@ export default function App() {
                       </View>
                     ))
                   )}
-                </View>
-              )}
-
-              {/* PRIX VENDEUR */}
-              {dashboardTab === 'pricing' && activeRoleMode === 'depot' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Mes prix</Text>
-                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B6 (6 kg)</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Recharge (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, recharge: val } })} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Achat (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, achat: val } })} />
-                    </View>
-                  </View>
-
-                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B12 (12.5 kg)</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Recharge (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, recharge: val } })} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Achat (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, achat: val } })} />
-                    </View>
-                  </View>
-
-                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B28 (28 kg)</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Recharge (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, recharge: val } })} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Achat (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, achat: val } })} />
-                    </View>
-                  </View>
-
-                  <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Tarifs mis à jour.')}>
-                    <Text style={styles.btnOrangeText}>Enregistrer</Text>
-                  </AnimatedButton>
                 </View>
               )}
 
@@ -1760,6 +1785,26 @@ export default function App() {
 
                   {currentScreen === 'register_livreur' && (
                     <>
+                      <Text style={styles.label}>Dépôt de rattachement *</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          {depotsList.map((dep) => {
+                            const isSelected = selectedDepotForDriver === dep.id;
+                            return (
+                              <AnimatedButton
+                                key={dep.id}
+                                style={[styles.driverChip, isSelected && styles.driverChipActive]}
+                                onPress={() => setSelectedDepotForDriver(dep.id)}
+                              >
+                                <Text style={[styles.driverChipText, isSelected && { color: '#FFFFFF' }]}>
+                                  {dep.nom}
+                                </Text>
+                              </AnimatedButton>
+                            );
+                          })}
+                        </View>
+                      </ScrollView>
+
                       <Text style={styles.label}>Véhicule *</Text>
                       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                         {VEHICLE_TYPES.map((v) => (
@@ -1807,14 +1852,43 @@ export default function App() {
                   
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
+                  <Text style={styles.label}>Choisissez votre espace *</Text>
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 14 }}>
+                    {['client', 'depot', 'livreur'].map((roleKey) => (
+                      <AnimatedButton
+                        key={roleKey}
+                        style={[styles.opTypeBtn, loginRole === roleKey && styles.opTypeBtnActive]}
+                        onPress={() => setLoginRole(roleKey)}
+                      >
+                        <Text style={[styles.opTypeText, loginRole === roleKey && styles.opTypeTextActive]}>
+                          {ROLE_LABELS[roleKey]}
+                        </Text>
+                      </AnimatedButton>
+                    ))}
+                  </View>
+
                   <Text style={styles.label}>Email *</Text>
-                  <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#64748B" value={email} onChangeText={setEmail} />
+                  <TextInput
+                    style={styles.input}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    placeholder={
+                      loginRole === 'depot'
+                        ? 'vendeur@monan.ci'
+                        : loginRole === 'livreur'
+                        ? 'livreur@monan.ci'
+                        : 'client@monan.ci'
+                    }
+                    placeholderTextColor="#64748B"
+                    value={email}
+                    onChangeText={setEmail}
+                  />
 
                   <Text style={styles.label}>Mot de passe *</Text>
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" placeholderTextColor="#64748B" value={password} onChangeText={setPassword} />
 
                   <AnimatedButton style={styles.btnOrange} onPress={handleLogin} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Se connecter</Text>}
+                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Se connecter ({ROLE_LABELS[loginRole]})</Text>}
                   </AnimatedButton>
                 </View>
               )}
@@ -1861,8 +1935,6 @@ const styles = StyleSheet.create({
   brandTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   brandSub: { color: '#94A3B8', fontSize: 9, fontWeight: '700' },
   
-  roleToggleBtn: { backgroundColor: '#F97316', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  roleToggleBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   logoutBtn: { backgroundColor: 'rgba(239, 68, 68, 0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
   logoutBtnText: { color: '#F87171', fontSize: 11, fontWeight: '700' },
   
