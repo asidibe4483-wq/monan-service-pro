@@ -19,26 +19,17 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = "https://monan-backend.onrender.com";
-
 const getDaysLeftInTrial = (createdAtDate) => {
   if (!createdAtDate) return 30;
-  const created = new Date(createdAtDate);
-  const now = new Date();
-  const diffTime = now - created;
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  const remaining = 30 - diffDays;
-  return remaining > 0 ? remaining : 0;
+  const diffDays = Math.floor((Date.now() - new Date(createdAtDate)) / (1000 * 60 * 60 * 24));
+  return Math.max(0, 30 - diffDays);
 };
 
 const getRemainingSubscriptionDays = (userObj) => {
   if (!userObj) return 0;
   if (userObj.subscriptionExpiresAt) {
-    const expires = new Date(userObj.subscriptionExpiresAt);
-    const now = new Date();
-    const diffTime = expires.getTime() - now.getTime();
-    if (diffTime <= 0) return 0;
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffTime = new Date(userObj.subscriptionExpiresAt).getTime() - Date.now();
+    return diffTime <= 0 ? 0 : Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   }
   return getDaysLeftInTrial(userObj.createdAt);
 };
@@ -50,10 +41,10 @@ const ROLE_LABELS = {
 };
 
 const SUBSCRIPTION_PLANS = [
-  { id: '1m', label: '1 Mois', days: 30, price: 2000, originalPrice: null, badge: 'TARIF DE BASE' },
-  { id: '3m', label: '3 Mois', days: 90, price: 4500, originalPrice: 6000, badge: '-25% DE RÉDUCTION' },
-  { id: '6m', label: '6 Mois', days: 180, price: 9000, originalPrice: 12000, badge: '-25% DE RÉDUCTION' },
-  { id: '1y', label: '1 An', days: 365, price: 18000, originalPrice: 24000, badge: '-25% DE RÉDUCTION' },
+  { id: '1m', label: '1 Mois', days: 30, price: 2000, originalPrice: null, badge: 'Standard' },
+  { id: '3m', label: '3 Mois', days: 90, price: 4500, originalPrice: 6000, badge: '-25%' },
+  { id: '6m', label: '6 Mois', days: 180, price: 9000, originalPrice: 12000, badge: '-25%' },
+  { id: '1y', label: '1 An', days: 365, price: 18000, originalPrice: 24000, badge: '-25%' },
 ];
 
 const PAYMENT_METHODS = ['Wave', 'Orange Money', 'MTN MoMo', 'Moov Money'];
@@ -62,50 +53,50 @@ const VEHICLE_TYPES = ['Moto', 'Tricycle'];
 const ONBOARDING_SLIDES = [
   {
     id: '1',
-    badge: 'BIENVENUE',
-    title: 'Monan Service',
-    subtitle: 'Plateforme de distribution et livraison de gaz en Côte d’Ivoire.',
+    badge: 'MONAN SERVICE',
+    title: 'Le gaz livré chez vous',
+    subtitle: 'Commandez, gérez votre dépôt ou livrez en toute simplicité.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '2',
     badge: 'CLIENT',
-    title: 'Commandez en 1 clic',
-    subtitle: 'Trouvez les dépôts proches et suivez votre livraison en direct.',
+    title: 'Commande rapide',
+    subtitle: 'Choisissez votre bouteille et suivez le livreur en direct.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '3',
     badge: 'VENDEUR',
-    title: 'Commandes en direct',
-    subtitle: 'Recevez les commandes clients, assignez un livreur et gérez votre dépôt.',
+    title: 'Gestion de dépôt',
+    subtitle: 'Acceptez les commandes et pilotez vos livraisons.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '4',
     badge: 'LIVREUR',
-    title: 'Courses & Livraisons',
-    subtitle: 'Récupérez les bouteilles dans les dépôts proches et livrez librement.',
+    title: 'Courses libres',
+    subtitle: 'Prenez les livraisons disponibles autour de vous.',
     icon: require('./assets/splash-icon.png')
   }
 ];
 
 const FadeInView = ({ children, style, delay = 0 }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(12)).current;
+  const translateY = useRef(new Animated.Value(8)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 250,
+        duration: 220,
         delay,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic)
       }),
       Animated.timing(translateY, {
         toValue: 0,
-        duration: 300,
+        duration: 240,
         delay,
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic)
@@ -120,32 +111,15 @@ const FadeInView = ({ children, style, delay = 0 }) => {
   );
 };
 
-const PulsingBadge = ({ children }) => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.04, duration: 1200, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
-      ])
-    );
-    animation.start();
-    return () => animation.stop();
-  }, []);
-
-  return <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>{children}</Animated.View>;
-};
-
 const AnimatedButton = ({ onPress, style, children, disabled }) => {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scale, { toValue: 0.97, friction: 8, tension: 50, useNativeDriver: true }).start();
+    Animated.spring(scale, { toValue: 0.97, friction: 8, tension: 60, useNativeDriver: true }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scale, { toValue: 1, friction: 5, tension: 40, useNativeDriver: true }).start();
+    Animated.spring(scale, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }).start();
   };
 
   return (
@@ -183,7 +157,7 @@ const MARQUES_GAZ = [
   { id: 'oryx', name: 'Oryx Energies', color: '#0EA5E9' },
   { id: 'petroci', name: 'Pétroci', color: '#16A34A' },
   { id: 'simam', name: 'Simam Gas', color: '#EAB308' },
-  { id: 'districom', name: 'Districom Gaz', color: '#EF4444' },
+  { id: 'districom', name: 'Districom', color: '#EF4444' },
   { id: 'ola', name: 'OLA Energy', color: '#991B1B' },
   { id: 'corlay', name: 'Corlay', color: '#15803D' },
 ];
@@ -264,7 +238,6 @@ export default function App() {
   const [adresse, setAdresse] = useState('');
   const [vehicule, setVehicule] = useState('Moto');
 
-  // Enregistrement d'un livreur indépendant par le vendeur
   const [newDriverName, setNewDriverName] = useState('');
   const [newDriverPhone, setNewDriverPhone] = useState('');
   const [newDriverVehicle, setNewDriverVehicle] = useState('Moto');
@@ -323,19 +296,15 @@ export default function App() {
   useEffect(() => {
     checkFirstLaunchStatus();
     loadStoredUsers();
-    const timer = setTimeout(() => setIsAppReady(true), 800);
+    const timer = setTimeout(() => setIsAppReady(true), 600);
     return () => clearTimeout(timer);
   }, []);
 
   const loadStoredUsers = async () => {
     try {
       const stored = await AsyncStorage.getItem('@registered_users_v4');
-      if (stored) {
-        setRegisteredUsers(JSON.parse(stored));
-      }
-    } catch (e) {
-      console.log('Erreur de chargement des utilisateurs:', e);
-    }
+      if (stored) setRegisteredUsers(JSON.parse(stored));
+    } catch (e) {}
   };
 
   const checkFirstLaunchStatus = async () => {
@@ -350,10 +319,8 @@ export default function App() {
   const handleFinishOnboarding = async () => {
     try {
       await AsyncStorage.setItem('@has_seen_onboarding', 'true');
-      setHasSeenOnboarding(true);
-    } catch (e) {
-      setHasSeenOnboarding(true);
-    }
+    } catch (e) {}
+    setHasSeenOnboarding(true);
   };
 
   useEffect(() => {
@@ -365,7 +332,6 @@ export default function App() {
         }
         return false;
       }
-
       if (!user) {
         if (currentScreen !== 'welcome') {
           setCurrentScreen('welcome');
@@ -373,29 +339,17 @@ export default function App() {
         }
         return false;
       }
-
       if (dashboardTab !== 'home') {
         setDashboardTab('home');
         return true;
       }
-
       return false;
     };
 
     const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => {
-      if (backSub && typeof backSub.remove === 'function') {
-        backSub.remove();
-      } else {
-        BackHandler.removeEventListener('hardwareBackPress', onBackPress);
-      }
-    };
+    return () => backSub?.remove?.();
   }, [hasSeenOnboarding, onboardingStep, user, currentScreen, dashboardTab]);
 
-  // Mode actif strict :
-  // - Vendeur ('depot') : peut uniquement basculer entre 'depot' et 'client'
-  // - Livreur ('livreur') : indépendant et détaché ('livreur' uniquement)
-  // - Client ('client') : 'client' uniquement
   const activeViewRole = !user
     ? null
     : user.role === 'depot'
@@ -405,15 +359,19 @@ export default function App() {
   const remainingSubDays = user?.role === 'depot' ? getRemainingSubscriptionDays(user) : null;
   const isVendorSubscriptionExpired = user?.role === 'depot' && remainingSubDays <= 0;
 
-  const activeFormatPrices = vendorPrices[selectedCylinder.id] || { recharge: selectedCylinder.priceRecharge, achat: selectedCylinder.priceAchat };
-  const currentUnitPrice = operationType === 'recharge' 
+  const activeFormatPrices = vendorPrices[selectedCylinder.id] || {
+    recharge: selectedCylinder.priceRecharge,
+    achat: selectedCylinder.priceAchat
+  };
+  const currentUnitPrice = operationType === 'recharge'
     ? (parseInt(activeFormatPrices.recharge, 10) || selectedCylinder.priceRecharge)
     : (parseInt(activeFormatPrices.achat, 10) || selectedCylinder.priceAchat);
 
-  const handleToggleVendorView = () => {
-    if (!user || user.role !== 'depot' || isVendorSubscriptionExpired) return;
-    const nextMode = vendorViewMode === 'depot' ? 'client' : 'depot';
-    setVendorViewMode(nextMode);
+  const estimatedTotal = (parseInt(quantite, 10) || 1) * currentUnitPrice;
+
+  const switchVendorMode = (targetMode) => {
+    if (!user || user.role !== 'depot' || isVendorSubscriptionExpired || vendorViewMode === targetMode) return;
+    setVendorViewMode(targetMode);
     setDashboardTab('home');
   };
 
@@ -422,33 +380,31 @@ export default function App() {
     const updatedList = registeredUsers.map(u =>
       u.email === updatedUserObj.email ? { ...u, ...updatedUserObj } : u
     );
-    const exists = updatedList.some(u => u.email === updatedUserObj.email);
-    const finalList = exists ? updatedList : [...updatedList, updatedUserObj];
+    const finalList = updatedList.some(u => u.email === updatedUserObj.email)
+      ? updatedList
+      : [...updatedList, updatedUserObj];
     setRegisteredUsers(finalList);
     try {
       await AsyncStorage.setItem('@registered_users_v4', JSON.stringify(finalList));
-    } catch (e) {
-      console.log('Erreur sauvegarde utilisateur:', e);
-    }
+    } catch (e) {}
   };
 
   const handleRenewSubscription = async () => {
     const phoneToUse = (paymentPhone || user?.telephone || '').trim();
     if (!phoneToUse || phoneToUse.length < 8) {
-      Alert.alert('Numéro requis', 'Veuillez entrer un numéro Mobile Money valide pour le paiement.');
+      Alert.alert('Numéro requis', 'Entrez un numéro Mobile Money valide.');
       return;
     }
 
     setLoading(true);
-    const nowMs = Date.now();
-    const currentExpiryMs = user?.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt).getTime() : 0;
-    const baseTime = Math.max(nowMs, currentExpiryMs);
-    const newExpiryIso = new Date(baseTime + selectedPlan.days * 24 * 60 * 60 * 1000).toISOString();
-
+    const baseTime = Math.max(
+      Date.now(),
+      user?.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt).getTime() : 0
+    );
     const updatedUser = {
       ...user,
       isSubscribed: true,
-      subscriptionExpiresAt: newExpiryIso,
+      subscriptionExpiresAt: new Date(baseTime + selectedPlan.days * 24 * 60 * 60 * 1000).toISOString(),
       lastPlan: selectedPlan.label
     };
 
@@ -456,46 +412,35 @@ export default function App() {
     setVendorViewMode('depot');
     setDashboardTab('home');
     setLoading(false);
-
-    Alert.alert(
-      'Abonnement activé',
-      `Paiement de ${selectedPlan.price.toLocaleString('fr-FR')} FCFA (${selectedPlan.label}) via ${paymentMethod} confirmé. Votre espace vendeur est actif pour ${selectedPlan.days} jours.`
-    );
+    Alert.alert('Abonnement actif', `Forfait ${selectedPlan.label} activé via ${paymentMethod}.`);
   };
 
   const handleSimulateExpiration = async () => {
     if (!user || user.role !== 'depot') return;
-    const expiredDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const expiredUser = {
+    await persistUserUpdate({
       ...user,
       isSubscribed: false,
-      subscriptionExpiresAt: expiredDate
-    };
-    await persistUserUpdate(expiredUser);
+      subscriptionExpiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    });
     setVendorViewMode('depot');
     setDashboardTab('home');
   };
 
   const handleRegister = async (type) => {
     if (!nom || !telephone || !email || !password) {
-      Alert.alert('Champs requis', 'Veuillez remplir les champs obligatoires.');
+      Alert.alert('Champs requis', 'Complétez les informations obligatoires.');
       return;
     }
 
     const cleanEmail = email.trim().toLowerCase();
     const existingAccount = registeredUsers.find(u => u.email === cleanEmail);
     if (existingAccount) {
-      Alert.alert(
-        'Compte existant',
-        `Cet email est déjà utilisé pour un compte ${ROLE_LABELS[existingAccount.role]}. Utilisez un autre email ou connectez-vous.`
-      );
+      Alert.alert('Email utilisé', `Déjà associé à un compte ${ROLE_LABELS[existingAccount.role]}.`);
       return;
     }
 
     setLoading(true);
     const nowIso = new Date().toISOString();
-    const trialExpiryIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
     const newUser = {
       id: `${type === 'depot' ? 'DEP' : type === 'livreur' ? 'LIV' : 'CLI'}-${Math.floor(1000 + Math.random() * 9000)}`,
       nom: nom.trim(),
@@ -505,50 +450,46 @@ export default function App() {
       role: type,
       vehicule: type === 'livreur' ? vehicule : null,
       createdAt: nowIso,
-      subscriptionExpiresAt: type === 'depot' ? trialExpiryIso : null,
+      subscriptionExpiresAt: type === 'depot' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
       isSubscribed: false
     };
 
     const updatedUsers = [...registeredUsers, newUser];
     setRegisteredUsers(updatedUsers);
-
     try {
       await AsyncStorage.setItem('@registered_users_v4', JSON.stringify(updatedUsers));
-    } catch (e) {
-      console.log('Erreur sauvegarde utilisateurs:', e);
-    }
+    } catch (e) {}
 
     if (type === 'depot') {
-      const newDepot = {
-        id: newUser.id,
-        nom: `Dépôt ${nom.trim()}`,
-        distanceKm: 0.1,
-        distance: '0.1 km',
-        quartier: adresse.trim() || 'Commune Vendeur',
-        telephone: telephone.trim()
-      };
-      setDepotsList(prev => [newDepot, ...prev]);
+      setDepotsList(prev => [
+        {
+          id: newUser.id,
+          nom: `Dépôt ${nom.trim()}`,
+          distanceKm: 0.1,
+          distance: '0.1 km',
+          quartier: adresse.trim() || 'Abidjan',
+          telephone: telephone.trim()
+        },
+        ...prev
+      ]);
       setVendorViewMode('depot');
     }
 
     setUser(newUser);
     setPaymentPhone(telephone.trim());
-    if (type === 'client' || type === 'depot') {
-      setAdresseLivraison(adresse.trim());
-    }
+    if (type === 'client' || type === 'depot') setAdresseLivraison(adresse.trim());
     setDashboardTab('home');
     setLoading(false);
   };
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Champs requis', 'Veuillez entrer votre email et mot de passe.');
+      Alert.alert('Champs requis', 'Entrez votre email et mot de passe.');
       return;
     }
 
     setLoading(true);
     const cleanEmail = email.trim().toLowerCase();
-    
     let storedUsers = registeredUsers;
     try {
       const stored = await AsyncStorage.getItem('@registered_users_v4');
@@ -556,18 +497,12 @@ export default function App() {
         storedUsers = JSON.parse(stored);
         setRegisteredUsers(storedUsers);
       }
-    } catch (e) {
-      console.log('Erreur lecture utilisateurs:', e);
-    }
+    } catch (e) {}
 
     const foundUser = storedUsers.find(u => u.email === cleanEmail);
-
     if (!foundUser) {
       setLoading(false);
-      Alert.alert(
-        'Compte introuvable',
-        'Aucun compte enregistré avec cet email. Veuillez créer un compte depuis l’accueil.'
-      );
+      Alert.alert('Compte introuvable', 'Vérifiez votre email ou créez un compte.');
       return;
     }
 
@@ -582,9 +517,7 @@ export default function App() {
 
     setUser(userData);
     setPaymentPhone(userData.telephone || '');
-    if (userData.role === 'depot') {
-      setVendorViewMode('depot');
-    }
+    if (userData.role === 'depot') setVendorViewMode('depot');
     if (userData.adresse && (userData.role === 'client' || userData.role === 'depot')) {
       setAdresseLivraison(userData.adresse);
     }
@@ -595,20 +528,18 @@ export default function App() {
   const handleAddDriverFromVendor = async () => {
     if (user?.role !== 'depot') return;
     if (!newDriverName.trim() || !newDriverPhone.trim()) {
-      Alert.alert('Champs requis', 'Entrez le nom et le téléphone du livreur.');
+      Alert.alert('Champs requis', 'Renseignez le nom et le téléphone.');
       return;
     }
 
     const driverEmail = `${newDriverPhone.trim()}@livreur.monan.ci`;
-    const alreadyExists = registeredUsers.some(u => u.email === driverEmail);
-    if (alreadyExists) {
-      Alert.alert('Numéro déjà utilisé', 'Ce numéro est déjà associé à un compte livreur.');
+    if (registeredUsers.some(u => u.email === driverEmail)) {
+      Alert.alert('Déjà inscrit', 'Ce numéro est déjà enregistré.');
       return;
     }
 
-    const driverId = `LIV-${Math.floor(1000 + Math.random() * 9000)}`;
     const driverObj = {
-      id: driverId,
+      id: `LIV-${Math.floor(1000 + Math.random() * 9000)}`,
       nom: newDriverName.trim(),
       telephone: newDriverPhone.trim(),
       email: driverEmail,
@@ -622,23 +553,22 @@ export default function App() {
     setRegisteredUsers(updatedUsers);
     try {
       await AsyncStorage.setItem('@registered_users_v4', JSON.stringify(updatedUsers));
-    } catch (e) {
-      console.log('Erreur ajout livreur:', e);
-    }
+    } catch (e) {}
 
     setNewDriverName('');
     setNewDriverPhone('');
-    Alert.alert('Livreur enregistré', `${driverObj.nom} a été ajouté comme livreur indépendant.`);
+    Alert.alert('Livreur ajouté', `${driverObj.nom} est disponible pour vos courses.`);
   };
 
   const handleCreateOrder = () => {
     if (activeViewRole !== 'client') return;
-    if (!adresseLivraison) return Alert.alert('Adresse requise', 'Précisez votre lieu de livraison.');
+    if (!adresseLivraison.trim()) {
+      Alert.alert('Adresse requise', 'Indiquez le lieu de livraison.');
+      return;
+    }
 
     setLoading(true);
-
     const qteNum = parseInt(quantite, 10) || 1;
-    const totalCalculated = qteNum * currentUnitPrice;
     const newCmdId = `CMD-${Math.floor(100 + Math.random() * 900)}`;
 
     const newCmd = {
@@ -646,7 +576,7 @@ export default function App() {
       date: new Date().toLocaleDateString('fr-FR'),
       clientId: user.id,
       clientNom: user.nom || 'Client',
-      clientPhone: user.telephone || 'Non renseigné',
+      clientPhone: user.telephone || '',
       type: `${selectedMarque.name} ${selectedCylinder.name}`,
       operation: operationType === 'recharge' ? 'Recharge' : 'Achat Neuf',
       qte: qteNum,
@@ -656,96 +586,74 @@ export default function App() {
       assignedDriverId: null,
       assignedDriverNom: null,
       assignedDriverPhone: null,
-      total: `${totalCalculated.toLocaleString('fr-FR')} FCFA`,
-      adresse: adresseLivraison,
+      total: `${estimatedTotal.toLocaleString('fr-FR')} FCFA`,
+      adresse: adresseLivraison.trim(),
       depotCible: selectedDepotTarget ? selectedDepotTarget.nom : 'Dépôt proche'
     };
 
     setAllOrders(prev => [newCmd, ...prev]);
-    setOrderSuccessBanner(`Votre commande ${newCmdId} de ${totalCalculated.toLocaleString('fr-FR')} FCFA a été transmise avec succès !`);
+    setOrderSuccessBanner(`Commande ${newCmdId} envoyée.`);
     setDashboardTab('orders_list');
     setLoading(false);
   };
 
   const handleAcceptOrder = (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
-    setAllOrders(prevOrders =>
-      prevOrders.map(order => {
-        if (order.id === orderId) {
-          return {
-            ...order,
-            status: 'accepted',
-            assignedVendorId: user.id,
-            assignedVendorNom: user.nom || 'Mon Dépôt'
-          };
-        }
-        return order;
-      })
+    setAllOrders(prev =>
+      prev.map(o =>
+        o.id === orderId
+          ? { ...o, status: 'accepted', assignedVendorId: user.id, assignedVendorNom: user.nom || 'Dépôt' }
+          : o
+      )
     );
-
-    Alert.alert('Commande acceptée', 'La commande est disponible pour les livreurs indépendants ou assignable dans Livraisons.');
+    setDashboardTab('my_deliveries');
   };
 
   const handleAssignDriverToOrder = (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
-    if (independentDrivers.length === 0) {
-      Alert.alert('Aucun livreur', 'Aucun livreur indépendant disponible pour le moment.');
-      return;
-    }
+    if (independentDrivers.length === 0) return;
 
     const chosenDriverId = selectedDriverByOrder[orderId] || independentDrivers[0].id;
     const driver = independentDrivers.find(d => d.id === chosenDriverId) || independentDrivers[0];
 
-    setAllOrders(prevOrders =>
-      prevOrders.map(order => {
-        if (order.id === orderId) {
-          return {
-            ...order,
-            status: 'in_delivery',
-            assignedDriverId: driver.id,
-            assignedDriverNom: driver.nom,
-            assignedDriverPhone: driver.telephone
-          };
-        }
-        return order;
-      })
+    setAllOrders(prev =>
+      prev.map(o =>
+        o.id === orderId
+          ? {
+              ...o,
+              status: 'in_delivery',
+              assignedDriverId: driver.id,
+              assignedDriverNom: driver.nom,
+              assignedDriverPhone: driver.telephone
+            }
+          : o
+      )
     );
-
-    Alert.alert('Livreur assigné', `La commande ${orderId} a été confiée à ${driver.nom} (${driver.telephone}).`);
   };
 
   const handleDriverClaimOrder = (orderId) => {
     if (user?.role !== 'livreur' || activeViewRole !== 'livreur') return;
-    setAllOrders(prevOrders =>
-      prevOrders.map(order => {
-        if (order.id === orderId) {
-          return {
-            ...order,
-            status: 'in_delivery',
-            assignedDriverId: user.id,
-            assignedDriverNom: user.nom || 'Livreur',
-            assignedDriverPhone: user.telephone || ''
-          };
-        }
-        return order;
-      })
+    setAllOrders(prev =>
+      prev.map(o =>
+        o.id === orderId
+          ? {
+              ...o,
+              status: 'in_delivery',
+              assignedDriverId: user.id,
+              assignedDriverNom: user.nom || 'Livreur',
+              assignedDriverPhone: user.telephone || ''
+            }
+          : o
+      )
     );
-
-    Alert.alert('Course acceptée', 'Rendez-vous au dépôt pour récupérer la bouteille.');
     setDashboardTab('driver_active');
   };
 
   const handleDriverConfirmDelivery = (orderId) => {
     if (user?.role !== 'livreur' || activeViewRole !== 'livreur') return;
-    setAllOrders(prevOrders =>
-      prevOrders.map(order => {
-        if (order.id === orderId && order.assignedDriverId === user.id) {
-          return { ...order, status: 'delivered' };
-        }
-        return order;
-      })
+    setAllOrders(prev =>
+      prev.map(o => (o.id === orderId && o.assignedDriverId === user.id ? { ...o, status: 'delivered' } : o))
     );
-    Alert.alert('Livraison confirmée', 'La commande est clôturée et marquée comme livrée.');
   };
 
   const handleLogout = () => {
@@ -764,52 +672,74 @@ export default function App() {
       d.quartier.toLowerCase().includes(searchDepot.toLowerCase())
     );
 
-  // Tous les livreurs sont indépendants (aucun filtre depotId)
   const independentDrivers = registeredUsers.filter(u => u.role === 'livreur');
-
-  const availableOrdersForVendors = activeViewRole === 'depot'
-    ? allOrders.filter(cmd => cmd.status === 'available')
-    : [];
-
+  const availableOrdersForVendors = activeViewRole === 'depot' ? allOrders.filter(c => c.status === 'available') : [];
   const myVendorDeliveries = activeViewRole === 'depot'
-    ? allOrders.filter(cmd => cmd.assignedVendorId === user?.id && (cmd.status === 'accepted' || cmd.status === 'in_delivery'))
+    ? allOrders.filter(c => c.assignedVendorId === user?.id && (c.status === 'accepted' || c.status === 'in_delivery'))
     : [];
-
-  // Un livreur indépendant voit toutes les commandes prêtes au retrait quel que soit le dépôt
   const availableOrdersForDrivers = activeViewRole === 'livreur'
-    ? allOrders.filter(cmd => cmd.status === 'accepted' && !cmd.assignedDriverId)
+    ? allOrders.filter(c => c.status === 'accepted' && !c.assignedDriverId)
     : [];
-
   const myDriverActiveOrders = activeViewRole === 'livreur'
-    ? allOrders.filter(cmd => cmd.assignedDriverId === user?.id && cmd.status === 'in_delivery')
+    ? allOrders.filter(c => c.assignedDriverId === user?.id && c.status === 'in_delivery')
     : [];
-
   const myDriverDeliveredOrders = activeViewRole === 'livreur'
-    ? allOrders.filter(cmd => cmd.assignedDriverId === user?.id && cmd.status === 'delivered')
+    ? allOrders.filter(c => c.assignedDriverId === user?.id && c.status === 'delivered')
     : [];
-
   const myClientOrders = activeViewRole === 'client'
-    ? allOrders.filter(cmd => cmd.clientId === user?.id)
+    ? allOrders.filter(c => c.clientId === user?.id)
     : [];
 
-  const getRoleHeaderLabel = () => {
-    if (!user) return 'GAZ EN LIGNE';
-    if (user.role === 'depot') {
-      return activeViewRole === 'depot' ? 'VENDEUR • VUE DÉPÔT' : 'VENDEUR • VUE CLIENT';
-    }
-    if (user.role === 'livreur') return 'LIVREUR INDÉPENDANT';
-    return 'ESPACE CLIENT';
+  const getRoleSubtitle = () => {
+    if (!user) return 'Distribution de gaz';
+    if (user.role === 'depot') return activeViewRole === 'depot' ? 'Espace Vendeur' : 'Mode Client';
+    if (user.role === 'livreur') return 'Livreur indépendant';
+    return 'Espace Client';
   };
 
-  const getClientStatusLabel = (cmd) => {
-    if (cmd.status === 'delivered') return 'Livrée';
+  const getStatusMeta = (cmd) => {
+    if (cmd.status === 'delivered') return { label: 'Livrée', color: '#4ADE80', bg: 'rgba(74, 222, 128, 0.14)' };
     if (cmd.status === 'in_delivery') {
-      return `En livraison • ${cmd.assignedDriverNom} (${cmd.assignedDriverPhone})`;
+      return {
+        label: `En route • ${cmd.assignedDriverNom}`,
+        color: '#38BDF8',
+        bg: 'rgba(56, 189, 248, 0.14)'
+      };
     }
     if (cmd.status === 'accepted') {
-      return `En préparation (${cmd.assignedVendorNom})`;
+      return {
+        label: `Validée • ${cmd.assignedVendorNom}`,
+        color: '#FBBF24',
+        bg: 'rgba(251, 191, 36, 0.14)'
+      };
     }
-    return "En attente d'un dépôt";
+    return { label: 'En attente', color: '#F97316', bg: 'rgba(249, 115, 22, 0.14)' };
+  };
+
+  const getBottomNavItems = () => {
+    if (activeViewRole === 'depot') {
+      return [
+        { id: 'home', label: 'Accueil', badge: 0 },
+        { id: 'vendor_live_orders', label: 'Commandes', badge: availableOrdersForVendors.length },
+        { id: 'my_deliveries', label: 'Livraisons', badge: myVendorDeliveries.length },
+        { id: 'vendor_drivers', label: 'Livreurs', badge: 0 },
+        { id: 'pricing', label: 'Tarifs', badge: 0 },
+      ];
+    }
+    if (activeViewRole === 'livreur') {
+      return [
+        { id: 'home', label: 'Accueil', badge: 0 },
+        { id: 'driver_available', label: 'Courses', badge: availableOrdersForDrivers.length },
+        { id: 'driver_active', label: 'En cours', badge: myDriverActiveOrders.length },
+        { id: 'driver_history', label: 'Livrées', badge: 0 },
+      ];
+    }
+    return [
+      { id: 'home', label: 'Accueil', badge: 0 },
+      { id: 'depots', label: 'Dépôts', badge: 0 },
+      { id: 'order', label: 'Commander', badge: 0 },
+      { id: 'orders_list', label: 'Suivi', badge: myClientOrders.filter(o => o.status !== 'delivered').length },
+    ];
   };
 
   if (!isAppReady || hasSeenOnboarding === null) {
@@ -817,9 +747,8 @@ export default function App() {
       <View style={styles.splashContainer}>
         <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
         <Image source={require('./assets/splash-icon.png')} style={styles.splashLogo} resizeMode="contain" />
-        <Text style={styles.splashTitle}>MONAN SERVICE</Text>
-        <Text style={styles.splashSubTitle}>DISTRIBUTION DE GAZ</Text>
-        <ActivityIndicator size="small" color="#F97316" style={{ marginTop: 24 }} />
+        <Text style={styles.splashTitle}>MONAN</Text>
+        <ActivityIndicator size="small" color="#F97316" style={{ marginTop: 20 }} />
       </View>
     );
   }
@@ -831,7 +760,6 @@ export default function App() {
     return (
       <SafeAreaView style={styles.onboardingContainer}>
         <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
-        
         <View style={styles.onboardingHeader}>
           <Pressable onPress={handleFinishOnboarding} style={styles.skipBtn}>
             <Text style={styles.skipBtnText}>Passer</Text>
@@ -839,21 +767,14 @@ export default function App() {
         </View>
 
         <FadeInView key={currentSlide.id} style={styles.onboardingSlideWrapper}>
-          <View style={styles.onboardingImageContainer}>
-            <PulsingBadge>
-              <View style={styles.onboardingBadgeBox}>
-                <Image source={currentSlide.icon} style={styles.onboardingLogo} resizeMode="contain" />
-              </View>
-            </PulsingBadge>
+          <View style={styles.onboardingBadgeBox}>
+            <Image source={currentSlide.icon} style={styles.onboardingLogo} resizeMode="contain" />
           </View>
-
-          <View style={styles.onboardingTextContainer}>
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>{currentSlide.badge}</Text>
-            </View>
-            <Text style={styles.onboardingTitle}>{currentSlide.title}</Text>
-            <Text style={styles.onboardingSub}>{currentSlide.subtitle}</Text>
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeText}>{currentSlide.badge}</Text>
           </View>
+          <Text style={styles.onboardingTitle}>{currentSlide.title}</Text>
+          <Text style={styles.onboardingSub}>{currentSlide.subtitle}</Text>
         </FadeInView>
 
         <View style={styles.onboardingFooter}>
@@ -865,16 +786,15 @@ export default function App() {
 
           <View style={styles.onboardingBtnRow}>
             {onboardingStep > 0 && (
-              <AnimatedButton style={styles.onboardingBackBtn} onPress={() => setOnboardingStep(prev => prev - 1)}>
-                <Text style={styles.onboardingBackText}>Retour</Text>
+              <AnimatedButton style={styles.btnSecondary} onPress={() => setOnboardingStep(prev => prev - 1)}>
+                <Text style={styles.btnSecondaryText}>Retour</Text>
               </AnimatedButton>
             )}
-
             <AnimatedButton
-              style={[styles.btnOrange, { flex: 1, marginLeft: onboardingStep > 0 ? 10 : 0 }]}
+              style={[styles.btnPrimary, { flex: 1 }]}
               onPress={() => (isLastSlide ? handleFinishOnboarding() : setOnboardingStep(prev => prev + 1))}
             >
-              <Text style={styles.btnOrangeText}>{isLastSlide ? 'Commencer' : 'Suivant'}</Text>
+              <Text style={styles.btnPrimaryText}>{isLastSlide ? 'Démarrer' : 'Suivant'}</Text>
             </AnimatedButton>
           </View>
         </View>
@@ -886,955 +806,794 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* BARRE SUPÉRIEURE */}
+      {/* EN-TÊTE */}
       <View style={styles.appBar}>
         <View style={styles.brandRow}>
           <View style={styles.brandBadge}>
             <Image source={require('./assets/splash-icon.png')} style={styles.brandLogoImage} resizeMode="contain" />
           </View>
           <View>
-            <Text style={styles.brandTitle}>MONAN SERVICE</Text>
-            <Text style={styles.brandSub}>{getRoleHeaderLabel()}</Text>
+            <Text style={styles.brandTitle}>MONAN</Text>
+            <Text style={styles.brandSub}>{getRoleSubtitle()}</Text>
           </View>
         </View>
 
         {user && (
-          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            {/* BOUTON DE BASCULE EXCLUSIF AU COMPTE VENDEUR (VUE CLIENT <-> VUE VENDEUR) */}
+          <View style={styles.headerActions}>
+            {/* SÉLECTEUR SEGMENTÉ EXCLUSIF VENDEUR */}
             {user.role === 'depot' && !isVendorSubscriptionExpired && (
-              <AnimatedButton style={styles.roleToggleBtn} onPress={handleToggleVendorView}>
-                <Text style={styles.roleToggleBtnText}>
-                  {activeViewRole === 'depot' ? 'Vue Client' : 'Vue Vendeur'}
-                </Text>
-              </AnimatedButton>
+              <View style={styles.segmentedSwitch}>
+                <Pressable
+                  style={[styles.segmentItem, activeViewRole === 'depot' && styles.segmentItemActive]}
+                  onPress={() => switchVendorMode('depot')}
+                >
+                  <Text style={[styles.segmentText, activeViewRole === 'depot' && styles.segmentTextActive]}>
+                    Dépôt
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.segmentItem, activeViewRole === 'client' && styles.segmentItemActive]}
+                  onPress={() => switchVendorMode('client')}
+                >
+                  <Text style={[styles.segmentText, activeViewRole === 'client' && styles.segmentTextActive]}>
+                    Client
+                  </Text>
+                </Pressable>
+              </View>
             )}
 
             <AnimatedButton style={styles.logoutBtn} onPress={handleLogout}>
-              <Text style={styles.logoutBtnText}>Quitter</Text>
+              <Text style={styles.logoutBtnText}>Sortir</Text>
             </AnimatedButton>
           </View>
         )}
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
+        <ScrollView
+          contentContainerStyle={[styles.scrollContent, user && !isVendorSubscriptionExpired && { paddingBottom: 88 }]}
+          showsVerticalScrollIndicator={false}
+        >
           {user ? (
             isVendorSubscriptionExpired ? (
-              /* ÉCRAN DE BLOCAGE OBLIGATOIRE QUAND L'ABONNEMENT VENDEUR EST EXPIRÉ */
+              /* BLOCAGE ABONNEMENT EXPIRÉ */
               <FadeInView key="subscription-lock" style={styles.mainWrapper}>
-                <View style={styles.lockCardBox}>
-                  <View style={styles.lockBadge}>
-                    <Text style={styles.lockBadgeText}>ABONNEMENT EXPIRÉ</Text>
+                <View style={styles.cardBox}>
+                  <View style={styles.statusPillDanger}>
+                    <Text style={styles.statusPillDangerText}>ABONNEMENT EXPIRÉ</Text>
                   </View>
-
-                  <Text style={styles.lockTitle}>Renouvellement obligatoire</Text>
-                  <Text style={styles.lockSubtitle}>
-                    Bonjour <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>{user.nom}</Text>, votre abonnement vendeur est arrivé à terme. Souscrivez à une nouvelle offre pour continuer à recevoir des commandes et gérer votre dépôt.
+                  <Text style={styles.cardBoxTitle}>Renouveler l'accès</Text>
+                  <Text style={styles.mutedText}>
+                    Choisissez une formule pour réactiver votre dépôt ({user.nom}).
                   </Text>
 
-                  <View style={styles.promoBannerBox}>
-                    <Text style={styles.promoBannerText}>
-                      OFFRE SPÉCIALE : 25 % DE RÉDUCTION À PARTIR DE 3 MOIS
-                    </Text>
-                  </View>
-
-                  <Text style={styles.label}>1. Choisissez votre formule *</Text>
-                  <View style={{ gap: 8, marginBottom: 14 }}>
+                  <View style={{ gap: 8, marginTop: 14, marginBottom: 16 }}>
                     {SUBSCRIPTION_PLANS.map((plan) => {
                       const isSelected = selectedPlan.id === plan.id;
                       return (
                         <AnimatedButton
                           key={plan.id}
-                          style={[styles.planOptionCard, isSelected && styles.planOptionCardActive]}
+                          style={[styles.selectRowCard, isSelected && styles.selectRowCardActive]}
                           onPress={() => setSelectedPlan(plan)}
                         >
-                          <View>
-                            <Text style={[styles.planOptionTitle, isSelected && { color: '#F97316' }]}>
-                              {plan.label} ({plan.days} jours)
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={[styles.selectRowTitle, isSelected && { color: '#F97316' }]}>
+                              {plan.label}
                             </Text>
-                            <Text style={[styles.planOptionSub, !plan.originalPrice && { color: '#94A3B8' }]}>
-                              {plan.badge}
-                            </Text>
+                            {plan.originalPrice && (
+                              <View style={styles.discountBadge}>
+                                <Text style={styles.discountBadgeText}>{plan.badge}</Text>
+                              </View>
+                            )}
                           </View>
                           <View style={{ alignItems: 'flex-end' }}>
                             {plan.originalPrice && (
-                              <Text style={styles.planOriginalPrice}>
-                                {plan.originalPrice.toLocaleString('fr-FR')} F
-                              </Text>
+                              <Text style={styles.strikePrice}>{plan.originalPrice.toLocaleString('fr-FR')} F</Text>
                             )}
-                            <Text style={styles.planOptionPrice}>
-                              {plan.price.toLocaleString('fr-FR')} FCFA
-                            </Text>
+                            <Text style={styles.selectRowPrice}>{plan.price.toLocaleString('fr-FR')} F</Text>
                           </View>
                         </AnimatedButton>
                       );
                     })}
                   </View>
 
-                  <Text style={styles.label}>2. Moyen de paiement Mobile Money *</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                  <Text style={styles.label}>Paiement</Text>
+                  <View style={styles.chipRow}>
                     {PAYMENT_METHODS.map((method) => {
                       const isSelected = paymentMethod === method;
                       return (
                         <AnimatedButton
                           key={method}
-                          style={[styles.paymentMethodChip, isSelected && styles.paymentMethodChipActive]}
+                          style={[styles.chip, isSelected && styles.chipActive]}
                           onPress={() => setPaymentMethod(method)}
                         >
-                          <Text style={[styles.paymentMethodText, isSelected && { color: '#FFFFFF' }]}>
-                            {method}
-                          </Text>
+                          <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{method}</Text>
                         </AnimatedButton>
                       );
                     })}
                   </View>
 
-                  <Text style={styles.label}>3. Numéro {paymentMethod} *</Text>
+                  <Text style={styles.label}>Numéro {paymentMethod}</Text>
                   <TextInput
                     style={styles.input}
                     keyboardType="phone-pad"
-                    placeholder="Ex: 0707070707"
+                    placeholder="0707070707"
                     placeholderTextColor="#64748B"
                     value={paymentPhone}
                     onChangeText={setPaymentPhone}
                   />
 
-                  <AnimatedButton style={styles.btnOrange} onPress={handleRenewSubscription} disabled={loading}>
+                  <AnimatedButton style={styles.btnPrimary} onPress={handleRenewSubscription} disabled={loading}>
                     {loading ? (
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <Text style={styles.btnOrangeText}>
-                        Payer {selectedPlan.price.toLocaleString('fr-FR')} FCFA et continuer
+                      <Text style={styles.btnPrimaryText}>
+                        Payer {selectedPlan.price.toLocaleString('fr-FR')} F
                       </Text>
                     )}
                   </AnimatedButton>
                 </View>
               </FadeInView>
             ) : (
-            <FadeInView key={`${dashboardTab}-${activeViewRole}`} style={styles.mainWrapper}>
-              
-              {/* ONGLETS DE NAVIGATION SELON LE MODE ACTIF */}
-              <View style={styles.pillsContainerOuter}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScrollContent}>
-                  <AnimatedButton
-                    style={[styles.pillBtn, dashboardTab === 'home' && styles.pillBtnActive]}
-                    onPress={() => setDashboardTab('home')}
-                  >
-                    <Text style={[styles.pillText, dashboardTab === 'home' && styles.pillTextActive]}>Accueil</Text>
-                  </AnimatedButton>
-
-                  {activeViewRole === 'depot' && (
-                    <>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'vendor_live_orders' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('vendor_live_orders')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'vendor_live_orders' && styles.pillTextActive]}>
-                          Commandes ({availableOrdersForVendors.length})
-                        </Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'my_deliveries' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('my_deliveries')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'my_deliveries' && styles.pillTextActive]}>
-                          Livraisons ({myVendorDeliveries.length})
-                        </Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'vendor_drivers' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('vendor_drivers')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'vendor_drivers' && styles.pillTextActive]}>
-                          Livreurs ({independentDrivers.length})
-                        </Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'pricing' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('pricing')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Mes Prix</Text>
-                      </AnimatedButton>
-                    </>
-                  )}
-
-                  {activeViewRole === 'livreur' && (
-                    <>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'driver_available' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('driver_available')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'driver_available' && styles.pillTextActive]}>
-                          Courses dispo ({availableOrdersForDrivers.length})
-                        </Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'driver_active' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('driver_active')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'driver_active' && styles.pillTextActive]}>
-                          Mes courses ({myDriverActiveOrders.length})
-                        </Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'driver_history' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('driver_history')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'driver_history' && styles.pillTextActive]}>
-                          Livrées ({myDriverDeliveredOrders.length})
-                        </Text>
-                      </AnimatedButton>
-                    </>
-                  )}
-
-                  {activeViewRole === 'client' && (
-                    <>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'depots' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('depots')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'depots' && styles.pillTextActive]}>Dépôts proches</Text>
-                      </AnimatedButton>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'catalog' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('catalog')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'catalog' && styles.pillTextActive]}>Catalogue</Text>
-                      </AnimatedButton>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'order' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('order')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'order' && styles.pillTextActive]}>Commander</Text>
-                      </AnimatedButton>
-                      <AnimatedButton
-                        style={[styles.pillBtn, dashboardTab === 'orders_list' && styles.pillBtnActive]}
-                        onPress={() => setDashboardTab('orders_list')}
-                      >
-                        <Text style={[styles.pillText, dashboardTab === 'orders_list' && styles.pillTextActive]}>
-                          Suivis ({myClientOrders.length})
-                        </Text>
-                      </AnimatedButton>
-                    </>
-                  )}
-                </ScrollView>
-              </View>
-
-              {/* ACCUEIL */}
-              {dashboardTab === 'home' && (
-                <View style={styles.fullSection}>
-                  <View style={styles.userGreetingCard}>
-                    <View style={styles.avatarCircle}>
-                      <Text style={styles.avatarText}>{(user.nom || 'U').charAt(0).toUpperCase()}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Utilisateur'}</Text>
-                      <Text style={styles.greetingSubtitle}>
-                        {user.role === 'depot'
-                          ? (activeViewRole === 'depot' ? 'Compte Vendeur • Mode Dépôt' : 'Compte Vendeur • Mode Client')
-                          : user.role === 'livreur'
-                          ? `Livreur Indépendant • ${user.vehicule || 'Moto'}`
-                          : 'Compte Client'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* STATUT ABONNEMENT VENDEUR */}
-                  {user.role === 'depot' && (
-                    <View style={styles.subStatusCard}>
+              <FadeInView key={`${dashboardTab}-${activeViewRole}`} style={styles.mainWrapper}>
+                {/* ACCUEIL */}
+                {dashboardTab === 'home' && (
+                  <View style={{ gap: 12 }}>
+                    <View style={styles.profileCard}>
+                      <View style={styles.avatarCircle}>
+                        <Text style={styles.avatarText}>{(user.nom || 'U').charAt(0).toUpperCase()}</Text>
+                      </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.subStatusLabel}>ABONNEMENT VENDEUR</Text>
-                        <Text style={styles.subStatusDays}>
-                          {remainingSubDays} jour{remainingSubDays > 1 ? 's' : ''} restant{remainingSubDays > 1 ? 's' : ''}
+                        <Text style={styles.greetingTitle}>{user.nom}</Text>
+                        <Text style={styles.mutedText}>
+                          {user.role === 'depot'
+                            ? (activeViewRole === 'depot' ? 'Dépôt actif' : 'Achat personnel')
+                            : user.role === 'livreur'
+                            ? `${user.vehicule || 'Moto'} • ${user.adresse}`
+                            : user.adresse}
                         </Text>
                       </View>
-                      <AnimatedButton style={styles.simExpireBtn} onPress={handleSimulateExpiration}>
-                        <Text style={styles.simExpireBtnText}>Simuler expiration</Text>
-                      </AnimatedButton>
                     </View>
-                  )}
 
-                  <View style={styles.kpiGrid}>
+                    {user.role === 'depot' && (
+                      <View style={styles.subStrip}>
+                        <View>
+                          <Text style={styles.microLabel}>ABONNEMENT</Text>
+                          <Text style={styles.subStripValue}>{remainingSubDays} j restants</Text>
+                        </View>
+                        <AnimatedButton style={styles.ghostDangerBtn} onPress={handleSimulateExpiration}>
+                          <Text style={styles.ghostDangerText}>Simuler fin</Text>
+                        </AnimatedButton>
+                      </View>
+                    )}
+
+                    {/* INDICATEURS CLÉS */}
+                    <View style={styles.kpiGrid}>
+                      {activeViewRole === 'depot' && (
+                        <>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('vendor_live_orders')}>
+                            <Text style={styles.kpiNum}>{availableOrdersForVendors.length}</Text>
+                            <Text style={styles.kpiLabel}>En attente</Text>
+                          </Pressable>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('my_deliveries')}>
+                            <Text style={styles.kpiNum}>{myVendorDeliveries.length}</Text>
+                            <Text style={styles.kpiLabel}>En cours</Text>
+                          </Pressable>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('vendor_drivers')}>
+                            <Text style={styles.kpiNum}>{independentDrivers.length}</Text>
+                            <Text style={styles.kpiLabel}>Livreurs</Text>
+                          </Pressable>
+                        </>
+                      )}
+
+                      {activeViewRole === 'livreur' && (
+                        <>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('driver_available')}>
+                            <Text style={styles.kpiNum}>{availableOrdersForDrivers.length}</Text>
+                            <Text style={styles.kpiLabel}>Disponibles</Text>
+                          </Pressable>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('driver_active')}>
+                            <Text style={styles.kpiNum}>{myDriverActiveOrders.length}</Text>
+                            <Text style={styles.kpiLabel}>En cours</Text>
+                          </Pressable>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('driver_history')}>
+                            <Text style={styles.kpiNum}>{myDriverDeliveredOrders.length}</Text>
+                            <Text style={styles.kpiLabel}>Livrées</Text>
+                          </Pressable>
+                        </>
+                      )}
+
+                      {activeViewRole === 'client' && (
+                        <>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('depots')}>
+                            <Text style={styles.kpiNum}>{sortedAndFilteredDepots.length}</Text>
+                            <Text style={styles.kpiLabel}>Dépôts</Text>
+                          </Pressable>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('orders_list')}>
+                            <Text style={styles.kpiNum}>{myClientOrders.length}</Text>
+                            <Text style={styles.kpiLabel}>Commandes</Text>
+                          </Pressable>
+                        </>
+                      )}
+                    </View>
+
+                    {/* ACTIONS RAPIDES */}
                     {activeViewRole === 'depot' && (
-                      <>
-                        <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>COMMANDES DISPO</Text>
-                          <Text style={styles.kpiCardNum}>{availableOrdersForVendors.length}</Text>
-                        </View>
-                        <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>LIVRAISONS</Text>
-                          <Text style={styles.kpiCardNum}>{myVendorDeliveries.length}</Text>
-                        </View>
-                        <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>LIVREURS</Text>
-                          <Text style={styles.kpiCardNum}>{independentDrivers.length}</Text>
-                        </View>
-                      </>
+                      <View style={{ gap: 10 }}>
+                        <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('vendor_live_orders')}>
+                          <Text style={styles.btnPrimaryText}>Commandes ({availableOrdersForVendors.length})</Text>
+                        </AnimatedButton>
+                        <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('my_deliveries')}>
+                          <Text style={styles.btnSecondaryText}>Livraisons</Text>
+                        </AnimatedButton>
+                      </View>
                     )}
 
                     {activeViewRole === 'livreur' && (
-                      <>
-                        <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>COURSES DISPO</Text>
-                          <Text style={styles.kpiCardNum}>{availableOrdersForDrivers.length}</Text>
-                        </View>
-                        <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>EN COURS</Text>
-                          <Text style={styles.kpiCardNum}>{myDriverActiveOrders.length}</Text>
-                        </View>
-                        <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>LIVRÉES</Text>
-                          <Text style={styles.kpiCardNum}>{myDriverDeliveredOrders.length}</Text>
-                        </View>
-                      </>
+                      <View style={{ gap: 10 }}>
+                        <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('driver_available')}>
+                          <Text style={styles.btnPrimaryText}>Courses ({availableOrdersForDrivers.length})</Text>
+                        </AnimatedButton>
+                        <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('driver_active')}>
+                          <Text style={styles.btnSecondaryText}>Mes livraisons</Text>
+                        </AnimatedButton>
+                      </View>
                     )}
 
                     {activeViewRole === 'client' && (
-                      <>
-                        <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>DÉPÔTS PROCHES</Text>
-                          <Text style={styles.kpiCardNum}>{sortedAndFilteredDepots.length}</Text>
-                        </View>
-                        <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>MES COMMANDES</Text>
-                          <Text style={styles.kpiCardNum}>{myClientOrders.length}</Text>
-                        </View>
-                      </>
+                      <View style={{ gap: 10 }}>
+                        <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('order')}>
+                          <Text style={styles.btnPrimaryText}>Commander</Text>
+                        </AnimatedButton>
+                        <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('depots')}>
+                          <Text style={styles.btnSecondaryText}>Dépôts proches</Text>
+                        </AnimatedButton>
+                      </View>
                     )}
                   </View>
+                )}
 
-                  {activeViewRole === 'depot' && (
-                    <View style={{ gap: 10 }}>
-                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('vendor_live_orders')}>
-                        <Text style={styles.actionCardTitle}>Commandes en direct</Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('my_deliveries')}>
-                        <Text style={styles.actionCardTitleWhite}>Assigner un livreur</Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('pricing')}>
-                        <Text style={styles.actionCardTitleWhite}>Gérer mes prix</Text>
-                      </AnimatedButton>
-                    </View>
-                  )}
-
-                  {activeViewRole === 'livreur' && (
-                    <View style={{ gap: 10 }}>
-                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('driver_available')}>
-                        <Text style={styles.actionCardTitle}>Courses disponibles</Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('driver_active')}>
-                        <Text style={styles.actionCardTitleWhite}>Mes courses en cours</Text>
-                      </AnimatedButton>
-                    </View>
-                  )}
-
-                  {activeViewRole === 'client' && (
-                    <View style={{ gap: 10 }}>
-                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('depots')}>
-                        <Text style={styles.actionCardTitle}>Dépôts proches</Text>
-                      </AnimatedButton>
-
-                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('order')}>
-                        <Text style={styles.actionCardTitleWhite}>Nouvelle commande</Text>
-                      </AnimatedButton>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* === VUES VENDEUR (MODE DÉPÔT) === */}
-              {activeViewRole === 'depot' && dashboardTab === 'vendor_live_orders' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Commandes disponibles</Text>
-
-                  {availableOrdersForVendors.length === 0 ? (
-                    <View style={styles.emptyStateBox}>
-                      <Text style={styles.emptyStateText}>Aucune commande en attente.</Text>
-                    </View>
-                  ) : (
-                    availableOrdersForVendors.map((order) => (
-                      <View key={order.id} style={styles.liveOrderCard}>
-                        <View style={styles.liveOrderHeader}>
-                          <Text style={styles.liveOrderId}>{order.id} • {order.date}</Text>
-                          <Text style={styles.liveOrderBadge}>EN ATTENTE</Text>
-                        </View>
-                        <Text style={styles.liveOrderClient}>{order.clientNom} ({order.clientPhone})</Text>
-                        <Text style={styles.liveOrderArticle}>{order.qte}x {order.type} ({order.operation})</Text>
-                        <Text style={styles.liveOrderAddress}>Lieu : {order.adresse}</Text>
-                        <Text style={styles.liveOrderTotal}>Total : {order.total}</Text>
-
-                        <AnimatedButton style={styles.btnAcceptOrder} onPress={() => handleAcceptOrder(order.id)}>
-                          <Text style={styles.btnAcceptOrderText}>Accepter</Text>
-                        </AnimatedButton>
+                {/* VENDEUR : COMMANDES DISPONIBLES */}
+                {activeViewRole === 'depot' && dashboardTab === 'vendor_live_orders' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Commandes</Text>
+                    {availableOrdersForVendors.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucune commande</Text>
                       </View>
-                    ))
-                  )}
-                </View>
-              )}
+                    ) : (
+                      availableOrdersForVendors.map((order) => (
+                        <View key={order.id} style={styles.orderCard}>
+                          <View style={styles.rowBetween}>
+                            <Text style={styles.orderId}>{order.id}</Text>
+                            <Text style={styles.priceHighlight}>{order.total}</Text>
+                          </View>
+                          <Text style={styles.orderMainText}>{order.qte}× {order.type} • {order.operation}</Text>
+                          <Text style={styles.mutedText}>{order.clientNom} ({order.clientPhone})</Text>
+                          <Text style={styles.mutedText}>{order.adresse}</Text>
 
-              {activeViewRole === 'depot' && dashboardTab === 'my_deliveries' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Livraisons & Livreurs</Text>
-                  {myVendorDeliveries.length === 0 ? (
-                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune livraison en cours.</Text>
-                  ) : (
-                    myVendorDeliveries.map((order) => {
-                      const activeSelectedDriverId = selectedDriverByOrder[order.id] || independentDrivers[0]?.id;
+                          <AnimatedButton style={styles.btnSuccess} onPress={() => handleAcceptOrder(order.id)}>
+                            <Text style={styles.btnSuccessText}>Accepter</Text>
+                          </AnimatedButton>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                )}
+
+                {/* VENDEUR : LIVRAISONS & ASSIGNATION */}
+                {activeViewRole === 'depot' && dashboardTab === 'my_deliveries' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Livraisons</Text>
+                    {myVendorDeliveries.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucune livraison</Text>
+                      </View>
+                    ) : (
+                      myVendorDeliveries.map((order) => {
+                        const activeSelectedDriverId = selectedDriverByOrder[order.id] || independentDrivers[0]?.id;
+                        const isAssigned = order.status === 'in_delivery';
+
+                        return (
+                          <View key={order.id} style={styles.orderCard}>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.orderId}>{order.id}</Text>
+                              <View style={[styles.badgePill, { backgroundColor: isAssigned ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)' }]}>
+                                <Text style={[styles.badgePillText, { color: isAssigned ? '#38BDF8' : '#FBBF24' }]}>
+                                  {isAssigned ? 'En route' : 'À assigner'}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <Text style={styles.orderMainText}>{order.qte}× {order.type}</Text>
+                            <Text style={styles.mutedText}>{order.clientNom} • {order.adresse}</Text>
+                            <Text style={styles.priceHighlight}>{order.total}</Text>
+
+                            {!isAssigned ? (
+                              <View style={styles.dividerSection}>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                                    {independentDrivers.map((drv) => {
+                                      const isChosen = activeSelectedDriverId === drv.id;
+                                      return (
+                                        <AnimatedButton
+                                          key={drv.id}
+                                          style={[styles.chip, isChosen && styles.chipActive]}
+                                          onPress={() => setSelectedDriverByOrder(prev => ({ ...prev, [order.id]: drv.id }))}
+                                        >
+                                          <Text style={[styles.chipText, isChosen && styles.chipTextActive]}>
+                                            {drv.nom} ({drv.vehicule || 'Moto'})
+                                          </Text>
+                                        </AnimatedButton>
+                                      );
+                                    })}
+                                  </View>
+                                </ScrollView>
+
+                                <AnimatedButton style={styles.btnPrimary} onPress={() => handleAssignDriverToOrder(order.id)}>
+                                  <Text style={styles.btnPrimaryText}>Assigner</Text>
+                                </AnimatedButton>
+                              </View>
+                            ) : (
+                              <View style={styles.driverAssignedStrip}>
+                                <Text style={styles.driverAssignedText}>
+                                  {order.assignedDriverNom} • {order.assignedDriverPhone}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
+                )}
+
+                {/* VENDEUR : LIVREURS INDÉPENDANTS */}
+                {activeViewRole === 'depot' && dashboardTab === 'vendor_drivers' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Livreurs ({independentDrivers.length})</Text>
+
+                    <View style={styles.subCard}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Nom du livreur"
+                        placeholderTextColor="#64748B"
+                        value={newDriverName}
+                        onChangeText={setNewDriverName}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        keyboardType="phone-pad"
+                        placeholder="Téléphone"
+                        placeholderTextColor="#64748B"
+                        value={newDriverPhone}
+                        onChangeText={setNewDriverPhone}
+                      />
+                      <View style={styles.segmentedRow}>
+                        {VEHICLE_TYPES.map((v) => (
+                          <AnimatedButton
+                            key={v}
+                            style={[styles.segBtn, newDriverVehicle === v && styles.segBtnActive]}
+                            onPress={() => setNewDriverVehicle(v)}
+                          >
+                            <Text style={[styles.segBtnText, newDriverVehicle === v && styles.segBtnTextActive]}>{v}</Text>
+                          </AnimatedButton>
+                        ))}
+                      </View>
+                      <AnimatedButton style={styles.btnPrimary} onPress={handleAddDriverFromVendor}>
+                        <Text style={styles.btnPrimaryText}>Ajouter</Text>
+                      </AnimatedButton>
+                    </View>
+
+                    {independentDrivers.map((drv) => {
+                      const activeCount = allOrders.filter(
+                        o => o.assignedDriverId === drv.id && o.status === 'in_delivery'
+                      ).length;
 
                       return (
-                        <View key={order.id} style={[styles.liveOrderCard, { borderColor: order.status === 'in_delivery' ? '#38BDF8' : '#4ADE80' }]}>
-                          <View style={styles.liveOrderHeader}>
-                            <Text style={styles.liveOrderId}>{order.id}</Text>
-                            <Text style={[
-                              styles.liveOrderBadge,
-                              order.status === 'in_delivery'
-                                ? { backgroundColor: 'rgba(56, 189, 248, 0.2)', color: '#38BDF8' }
-                                : { backgroundColor: 'rgba(74, 222, 128, 0.2)', color: '#4ADE80' }
-                            ]}>
-                              {order.status === 'in_delivery' ? 'EN COURS DE LIVRAISON' : 'EN ATTENTE DE LIVREUR'}
+                        <View key={drv.id} style={styles.listRowCard}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.listRowTitle}>{drv.nom}</Text>
+                            <Text style={styles.mutedText}>{drv.telephone} • {drv.vehicule || 'Moto'}</Text>
+                          </View>
+                          <View style={[
+                            styles.badgePill,
+                            { backgroundColor: activeCount > 0 ? 'rgba(249, 115, 22, 0.15)' : 'rgba(74, 222, 128, 0.15)' }
+                          ]}>
+                            <Text style={[styles.badgePillText, { color: activeCount > 0 ? '#F97316' : '#4ADE80' }]}>
+                              {activeCount > 0 ? 'En course' : 'Libre'}
                             </Text>
                           </View>
-                          <Text style={styles.liveOrderClient}>Client : {order.clientNom} ({order.clientPhone})</Text>
-                          <Text style={styles.liveOrderArticle}>{order.qte}x {order.type}</Text>
-                          <Text style={styles.liveOrderAddress}>Adresse : {order.adresse}</Text>
-                          <Text style={styles.liveOrderTotal}>Total : {order.total}</Text>
-
-                          {order.status === 'accepted' ? (
-                            <View style={styles.assignDriverBox}>
-                              <Text style={styles.assignDriverLabel}>Choisir un livreur indépendant :</Text>
-                              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
-                                <View style={{ flexDirection: 'row', gap: 6 }}>
-                                  {independentDrivers.map((drv) => {
-                                    const isChosen = activeSelectedDriverId === drv.id;
-                                    return (
-                                      <AnimatedButton
-                                        key={drv.id}
-                                        style={[styles.driverChip, isChosen && styles.driverChipActive]}
-                                        onPress={() => setSelectedDriverByOrder(prev => ({ ...prev, [order.id]: drv.id }))}
-                                      >
-                                        <Text style={[styles.driverChipText, isChosen && { color: '#FFFFFF' }]}>
-                                          {drv.nom} ({drv.vehicule || 'Moto'})
-                                        </Text>
-                                      </AnimatedButton>
-                                    );
-                                  })}
-                                </View>
-                              </ScrollView>
-
-                              <AnimatedButton style={styles.btnAcceptOrder} onPress={() => handleAssignDriverToOrder(order.id)}>
-                                <Text style={styles.btnAcceptOrderText}>Assigner le livreur</Text>
-                              </AnimatedButton>
-                            </View>
-                          ) : (
-                            <View style={styles.assignedDriverBanner}>
-                              <Text style={styles.assignedDriverText}>
-                                Confiée à : <Text style={{ fontWeight: '900', color: '#38BDF8' }}>{order.assignedDriverNom}</Text> ({order.assignedDriverPhone})
-                              </Text>
-                              <Text style={{ color: '#94A3B8', fontSize: 11, marginTop: 4 }}>
-                                En attente de confirmation par le livreur chez le client.
-                              </Text>
-                            </View>
-                          )}
                         </View>
-                      );
-                    })
-                  )}
-                </View>
-              )}
-
-              {activeViewRole === 'depot' && dashboardTab === 'vendor_drivers' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Livreurs indépendants ({independentDrivers.length})</Text>
-
-                  <View style={styles.addDriverForm}>
-                    <Text style={styles.label}>Enregistrer un livreur indépendant</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Nom du livreur (Ex: Yao Paul)"
-                      placeholderTextColor="#64748B"
-                      value={newDriverName}
-                      onChangeText={setNewDriverName}
-                    />
-                    <TextInput
-                      style={styles.input}
-                      keyboardType="phone-pad"
-                      placeholder="Téléphone (Ex: 0701020304)"
-                      placeholderTextColor="#64748B"
-                      value={newDriverPhone}
-                      onChangeText={setNewDriverPhone}
-                    />
-                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-                      {VEHICLE_TYPES.map((v) => (
-                        <AnimatedButton
-                          key={v}
-                          style={[styles.opTypeBtn, newDriverVehicle === v && styles.opTypeBtnActive]}
-                          onPress={() => setNewDriverVehicle(v)}
-                        >
-                          <Text style={[styles.opTypeText, newDriverVehicle === v && styles.opTypeTextActive]}>{v}</Text>
-                        </AnimatedButton>
-                      ))}
-                    </View>
-                    <AnimatedButton style={styles.btnOrange} onPress={handleAddDriverFromVendor}>
-                      <Text style={styles.btnOrangeText}>Ajouter le livreur</Text>
-                    </AnimatedButton>
-                  </View>
-
-                  {independentDrivers.map((drv) => {
-                    const activeDeliveriesCount = allOrders.filter(
-                      o => o.assignedDriverId === drv.id && o.status === 'in_delivery'
-                    ).length;
-
-                    return (
-                      <View key={drv.id} style={styles.driverRowCard}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.depotTitle}>{drv.nom}</Text>
-                          <Text style={styles.depotSub}>{drv.telephone} • {drv.vehicule || 'Moto'} • Indépendant</Text>
-                        </View>
-                        <View style={[
-                          styles.driverStatusPill,
-                          activeDeliveriesCount > 0 ? { backgroundColor: 'rgba(249, 115, 22, 0.2)' } : { backgroundColor: 'rgba(34, 197, 94, 0.2)' }
-                        ]}>
-                          <Text style={[
-                            styles.driverStatusText,
-                            activeDeliveriesCount > 0 ? { color: '#F97316' } : { color: '#4ADE80' }
-                          ]}>
-                            {activeDeliveriesCount > 0 ? `En course (${activeDeliveriesCount})` : 'Disponible'}
-                          </Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-
-              {activeViewRole === 'depot' && dashboardTab === 'pricing' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Mes prix</Text>
-                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B6 (6 kg)</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Recharge (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, recharge: val } })} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Achat (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B6.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B6: { ...vendorPrices.B6, achat: val } })} />
-                    </View>
-                  </View>
-
-                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B12 (12.5 kg)</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Recharge (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, recharge: val } })} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Achat (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B12.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B12: { ...vendorPrices.B12, achat: val } })} />
-                    </View>
-                  </View>
-
-                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B28 (28 kg)</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Recharge (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, recharge: val } })} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Achat (F)</Text>
-                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, achat: val } })} />
-                    </View>
-                  </View>
-
-                  <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Tarifs mis à jour.')}>
-                    <Text style={styles.btnOrangeText}>Enregistrer</Text>
-                  </AnimatedButton>
-                </View>
-              )}
-
-              {/* === VUES EXCLUSIVES LIVREUR INDÉPENDANT === */}
-              {activeViewRole === 'livreur' && dashboardTab === 'driver_available' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Courses disponibles (Tous dépôts)</Text>
-
-                  {availableOrdersForDrivers.length === 0 ? (
-                    <View style={styles.emptyStateBox}>
-                      <Text style={styles.emptyStateText}>Aucune course prête au dépôt pour le moment.</Text>
-                    </View>
-                  ) : (
-                    availableOrdersForDrivers.map((order) => (
-                      <View key={order.id} style={styles.liveOrderCard}>
-                        <View style={styles.liveOrderHeader}>
-                          <Text style={styles.liveOrderId}>{order.id} • {order.date}</Text>
-                          <Text style={styles.liveOrderBadge}>À RÉCUPÉRER</Text>
-                        </View>
-                        <Text style={styles.liveOrderClient}>Dépôt : {order.assignedVendorNom}</Text>
-                        <Text style={styles.liveOrderArticle}>{order.qte}x {order.type} ({order.operation})</Text>
-                        <Text style={styles.liveOrderAddress}>Livrer à : {order.clientNom} • {order.adresse}</Text>
-                        <Text style={styles.liveOrderTotal}>Montant : {order.total}</Text>
-
-                        <AnimatedButton style={styles.btnAcceptOrder} onPress={() => handleDriverClaimOrder(order.id)}>
-                          <Text style={styles.btnAcceptOrderText}>Prendre la course</Text>
-                        </AnimatedButton>
-                      </View>
-                    ))
-                  )}
-                </View>
-              )}
-
-              {activeViewRole === 'livreur' && dashboardTab === 'driver_active' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Mes courses en cours</Text>
-
-                  {myDriverActiveOrders.length === 0 ? (
-                    <View style={styles.emptyStateBox}>
-                      <Text style={styles.emptyStateText}>Vous n'avez aucune livraison en cours.</Text>
-                    </View>
-                  ) : (
-                    myDriverActiveOrders.map((order) => (
-                      <View key={order.id} style={[styles.liveOrderCard, { borderColor: '#38BDF8' }]}>
-                        <View style={styles.liveOrderHeader}>
-                          <Text style={styles.liveOrderId}>{order.id}</Text>
-                          <Text style={[styles.liveOrderBadge, { backgroundColor: 'rgba(56, 189, 248, 0.2)', color: '#38BDF8' }]}>
-                            EN ROUTE
-                          </Text>
-                        </View>
-                        <Text style={styles.liveOrderClient}>Client : {order.clientNom} ({order.clientPhone})</Text>
-                        <Text style={styles.liveOrderArticle}>{order.qte}x {order.type} ({order.operation})</Text>
-                        <Text style={styles.liveOrderAddress}>Destination : {order.adresse}</Text>
-                        <Text style={styles.liveOrderAddress}>Dépôt : {order.assignedVendorNom}</Text>
-                        <Text style={styles.liveOrderTotal}>À encaisser : {order.total}</Text>
-
-                        <AnimatedButton style={[styles.btnAcceptOrder, { marginTop: 10 }]} onPress={() => handleDriverConfirmDelivery(order.id)}>
-                          <Text style={styles.btnAcceptOrderText}>Confirmer la livraison</Text>
-                        </AnimatedButton>
-                      </View>
-                    ))
-                  )}
-                </View>
-              )}
-
-              {activeViewRole === 'livreur' && dashboardTab === 'driver_history' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Courses livrées</Text>
-
-                  {myDriverDeliveredOrders.length === 0 ? (
-                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune livraison terminée.</Text>
-                  ) : (
-                    myDriverDeliveredOrders.map((cmd) => (
-                      <View key={cmd.id} style={styles.orderRow}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                          <Text style={styles.orderRowId}>{cmd.id} • {cmd.date}</Text>
-                          <Text style={[styles.orderRowStatus, { color: '#4ADE80' }]}>Livrée</Text>
-                        </View>
-                        <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type} • Client : {cmd.clientNom}</Text>
-                        <Text style={styles.orderRowTotal}>{cmd.total}</Text>
-                      </View>
-                    ))
-                  )}
-                </View>
-              )}
-
-              {/* === VUES CLIENT (COMPTE CLIENT OU VUE CLIENT DU VENDEUR) === */}
-              {activeViewRole === 'client' && dashboardTab === 'depots' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Dépôts proches</Text>
-
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Filtrer par quartier..."
-                    placeholderTextColor="#64748B"
-                    value={searchDepot}
-                    onChangeText={setSearchDepot}
-                  />
-
-                  {sortedAndFilteredDepots.map((depot, index) => (
-                    <View key={depot.id} style={styles.depotCardSorted}>
-                      <View style={styles.depotHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <View style={styles.rankBadge}>
-                            <Text style={styles.rankBadgeText}>#{index + 1}</Text>
-                          </View>
-                          <View>
-                            <Text style={styles.depotTitle}>{depot.nom}</Text>
-                            <Text style={styles.depotSub}>{depot.quartier}</Text>
-                          </View>
-                        </View>
-                        <Text style={styles.depotDistanceHighlight}>{depot.distance}</Text>
-                      </View>
-
-                      <AnimatedButton
-                        style={styles.btnDepotSelect}
-                        onPress={() => {
-                          setSelectedDepotTarget(depot);
-                          setAdresseLivraison(depot.quartier);
-                          setDashboardTab('order');
-                        }}
-                      >
-                        <Text style={styles.btnDepotSelectText}>Commander ici</Text>
-                      </AnimatedButton>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {activeViewRole === 'client' && (dashboardTab === 'catalog' || dashboardTab === 'order') && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>
-                    {dashboardTab === 'catalog' ? 'Catalogue' : 'Nouvelle commande'}
-                  </Text>
-
-                  {selectedDepotTarget && (
-                    <View style={styles.selectedDepotBanner}>
-                      <Text style={styles.selectedDepotText}>
-                        Dépôt : <Text style={{ fontWeight: '900', color: '#F97316' }}>{selectedDepotTarget.nom}</Text> ({selectedDepotTarget.distance})
-                      </Text>
-                    </View>
-                  )}
-
-                  <Text style={styles.label}>Opération *</Text>
-                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-                    <AnimatedButton
-                      style={[styles.opTypeBtn, operationType === 'recharge' && styles.opTypeBtnActive]}
-                      onPress={() => setOperationType('recharge')}
-                    >
-                      <Text style={[styles.opTypeText, operationType === 'recharge' && styles.opTypeTextActive]}>Recharge</Text>
-                    </AnimatedButton>
-                    <AnimatedButton
-                      style={[styles.opTypeBtn, operationType === 'achat' && styles.opTypeBtnActive]}
-                      onPress={() => setOperationType('achat')}
-                    >
-                      <Text style={[styles.opTypeText, operationType === 'achat' && styles.opTypeTextActive]}>Achat Neuf</Text>
-                    </AnimatedButton>
-                  </View>
-
-                  <Text style={styles.label}>Format *</Text>
-                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                    {CYLINDER_TYPES.map((cyl) => {
-                      const isSelected = selectedCylinder.id === cyl.id;
-                      const activePrice = operationType === 'recharge' 
-                        ? (parseInt(vendorPrices[cyl.id]?.recharge, 10) || cyl.priceRecharge)
-                        : (parseInt(vendorPrices[cyl.id]?.achat, 10) || cyl.priceAchat);
-
-                      return (
-                        <AnimatedButton
-                          key={cyl.id}
-                          style={[styles.smallCylBtn, isSelected && styles.smallCylBtnActive]}
-                          onPress={() => setSelectedCylinder(cyl)}
-                        >
-                          <Text style={[styles.smallCylText, isSelected && styles.smallCylTextActive]}>{cyl.id}</Text>
-                          <Text style={{ fontSize: 9, color: isSelected ? '#F97316' : '#94A3B8', marginTop: 2 }}>
-                            {activePrice.toLocaleString('fr-FR')} F
-                          </Text>
-                        </AnimatedButton>
                       );
                     })}
                   </View>
+                )}
 
-                  <Text style={styles.label}>Marque *</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      {MARQUES_GAZ.map((m) => {
-                        const isSelected = selectedMarque.id === m.id;
+                {/* VENDEUR : TARIFS */}
+                {activeViewRole === 'depot' && dashboardTab === 'pricing' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Tarifs (FCFA)</Text>
+
+                    {['B6', 'B12', 'B28'].map((fmt) => (
+                      <View key={fmt} style={{ marginBottom: 12 }}>
+                        <Text style={styles.microLabel}>FORMAT {fmt}</Text>
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.label}>Recharge</Text>
+                            <TextInput
+                              style={styles.input}
+                              keyboardType="numeric"
+                              value={vendorPrices[fmt].recharge}
+                              onChangeText={(val) =>
+                                setVendorPrices({ ...vendorPrices, [fmt]: { ...vendorPrices[fmt], recharge: val } })
+                              }
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.label}>Achat</Text>
+                            <TextInput
+                              style={styles.input}
+                              keyboardType="numeric"
+                              value={vendorPrices[fmt].achat}
+                              onChangeText={(val) =>
+                                setVendorPrices({ ...vendorPrices, [fmt]: { ...vendorPrices[fmt], achat: val } })
+                              }
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+
+                    <AnimatedButton style={styles.btnPrimary} onPress={() => Alert.alert('Enregistré', 'Tarifs mis à jour.')}>
+                      <Text style={styles.btnPrimaryText}>Enregistrer</Text>
+                    </AnimatedButton>
+                  </View>
+                )}
+
+                {/* LIVREUR : COURSES DISPONIBLES */}
+                {activeViewRole === 'livreur' && dashboardTab === 'driver_available' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Courses disponibles</Text>
+                    {availableOrdersForDrivers.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucune course</Text>
+                      </View>
+                    ) : (
+                      availableOrdersForDrivers.map((order) => (
+                        <View key={order.id} style={styles.orderCard}>
+                          <View style={styles.rowBetween}>
+                            <Text style={styles.orderId}>{order.id}</Text>
+                            <Text style={styles.priceHighlight}>{order.total}</Text>
+                          </View>
+                          <Text style={styles.orderMainText}>{order.qte}× {order.type}</Text>
+                          <Text style={styles.mutedText}>Retrait : {order.assignedVendorNom}</Text>
+                          <Text style={styles.mutedText}>Livraison : {order.adresse}</Text>
+
+                          <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverClaimOrder(order.id)}>
+                            <Text style={styles.btnSuccessText}>Prendre</Text>
+                          </AnimatedButton>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                )}
+
+                {/* LIVREUR : EN COURS */}
+                {activeViewRole === 'livreur' && dashboardTab === 'driver_active' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>En cours</Text>
+                    {myDriverActiveOrders.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucune course en cours</Text>
+                      </View>
+                    ) : (
+                      myDriverActiveOrders.map((order) => (
+                        <View key={order.id} style={styles.orderCard}>
+                          <View style={styles.rowBetween}>
+                            <Text style={styles.orderId}>{order.id}</Text>
+                            <Text style={styles.priceHighlight}>{order.total}</Text>
+                          </View>
+                          <Text style={styles.orderMainText}>{order.qte}× {order.type} ({order.operation})</Text>
+                          <Text style={styles.mutedText}>{order.clientNom} • {order.clientPhone}</Text>
+                          <Text style={styles.mutedText}>{order.adresse}</Text>
+
+                          <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverConfirmDelivery(order.id)}>
+                            <Text style={styles.btnSuccessText}>Livré</Text>
+                          </AnimatedButton>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                )}
+
+                {/* LIVREUR : HISTORIQUE */}
+                {activeViewRole === 'livreur' && dashboardTab === 'driver_history' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Livrées</Text>
+                    {myDriverDeliveredOrders.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucune livraison</Text>
+                      </View>
+                    ) : (
+                      myDriverDeliveredOrders.map((cmd) => (
+                        <View key={cmd.id} style={styles.listRowCard}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.listRowTitle}>{cmd.id} • {cmd.qte}× {cmd.type}</Text>
+                            <Text style={styles.mutedText}>{cmd.clientNom} • {cmd.date}</Text>
+                          </View>
+                          <Text style={styles.priceHighlight}>{cmd.total}</Text>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                )}
+
+                {/* CLIENT : DÉPÔTS PROCHES */}
+                {activeViewRole === 'client' && dashboardTab === 'depots' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Dépôts</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Rechercher un quartier..."
+                      placeholderTextColor="#64748B"
+                      value={searchDepot}
+                      onChangeText={setSearchDepot}
+                    />
+
+                    {sortedAndFilteredDepots.map((depot) => (
+                      <View key={depot.id} style={styles.listRowCard}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.listRowTitle}>{depot.nom}</Text>
+                          <Text style={styles.mutedText}>{depot.quartier} • {depot.distance}</Text>
+                        </View>
+                        <AnimatedButton
+                          style={styles.compactPrimaryBtn}
+                          onPress={() => {
+                            setSelectedDepotTarget(depot);
+                            setAdresseLivraison(depot.quartier);
+                            setDashboardTab('order');
+                          }}
+                        >
+                          <Text style={styles.compactPrimaryBtnText}>Choisir</Text>
+                        </AnimatedButton>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* CLIENT : COMMANDE UNIFIÉE */}
+                {activeViewRole === 'client' && dashboardTab === 'order' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Commander</Text>
+
+                    {selectedDepotTarget && (
+                      <View style={styles.targetDepotChip}>
+                        <Text style={styles.targetDepotText}>
+                          {selectedDepotTarget.nom} ({selectedDepotTarget.distance})
+                        </Text>
+                        <Pressable onPress={() => setSelectedDepotTarget(null)}>
+                          <Text style={{ color: '#F97316', fontWeight: '800', fontSize: 12 }}>✕</Text>
+                        </Pressable>
+                      </View>
+                    )}
+
+                    <Text style={styles.label}>Type</Text>
+                    <View style={styles.segmentedRow}>
+                      <AnimatedButton
+                        style={[styles.segBtn, operationType === 'recharge' && styles.segBtnActive]}
+                        onPress={() => setOperationType('recharge')}
+                      >
+                        <Text style={[styles.segBtnText, operationType === 'recharge' && styles.segBtnTextActive]}>
+                          Recharge
+                        </Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={[styles.segBtn, operationType === 'achat' && styles.segBtnActive]}
+                        onPress={() => setOperationType('achat')}
+                      >
+                        <Text style={[styles.segBtnText, operationType === 'achat' && styles.segBtnTextActive]}>
+                          Bouteille neuve
+                        </Text>
+                      </AnimatedButton>
+                    </View>
+
+                    <Text style={styles.label}>Format</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                      {CYLINDER_TYPES.map((cyl) => {
+                        const isSelected = selectedCylinder.id === cyl.id;
+                        const activePrice = operationType === 'recharge'
+                          ? (parseInt(vendorPrices[cyl.id]?.recharge, 10) || cyl.priceRecharge)
+                          : (parseInt(vendorPrices[cyl.id]?.achat, 10) || cyl.priceAchat);
+
                         return (
                           <AnimatedButton
-                            key={m.id}
-                            style={[styles.brandChip, isSelected && { backgroundColor: m.color, borderColor: m.color }]}
-                            onPress={() => {
-                              setSelectedMarque(m);
-                              if (dashboardTab === 'catalog') setDashboardTab('order');
-                            }}
+                            key={cyl.id}
+                            style={[styles.formatCard, isSelected && styles.formatCardActive]}
+                            onPress={() => setSelectedCylinder(cyl)}
                           >
-                            <Text style={[styles.brandChipText, isSelected && { color: '#FFFFFF', fontWeight: '800' }]}>
-                              {m.name}
-                            </Text>
+                            <Text style={[styles.formatTitle, isSelected && { color: '#F97316' }]}>{cyl.id}</Text>
+                            <Text style={styles.formatPrice}>{activePrice.toLocaleString('fr-FR')} F</Text>
                           </AnimatedButton>
                         );
                       })}
                     </View>
-                  </ScrollView>
 
-                  {dashboardTab === 'order' && (
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={styles.label}>Quantité</Text>
-                      <QuantityStepper value={quantite} onChange={setQuantite} />
+                    <Text style={styles.label}>Marque</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        {MARQUES_GAZ.map((m) => {
+                          const isSelected = selectedMarque.id === m.id;
+                          return (
+                            <AnimatedButton
+                              key={m.id}
+                              style={[styles.chip, isSelected && { backgroundColor: m.color, borderColor: m.color }]}
+                              onPress={() => setSelectedMarque(m)}
+                            >
+                              <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{m.name}</Text>
+                            </AnimatedButton>
+                          );
+                        })}
+                      </View>
+                    </ScrollView>
 
-                      <Text style={styles.label}>Adresse *</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Commune, quartier..."
-                        placeholderTextColor="#64748B"
-                        value={adresseLivraison}
-                        onChangeText={setAdresseLivraison}
-                      />
+                    <Text style={styles.label}>Quantité</Text>
+                    <QuantityStepper value={quantite} onChange={setQuantite} />
 
-                      <View style={styles.totalSummary}>
-                        <Text style={styles.totalSummaryLabel}>Total :</Text>
-                        <Text style={styles.totalSummaryValue}>
-                          {((parseInt(quantite, 10) || 1) * currentUnitPrice).toLocaleString('fr-FR')} FCFA
+                    <Text style={styles.label}>Adresse de livraison</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Quartier, repère..."
+                      placeholderTextColor="#64748B"
+                      value={adresseLivraison}
+                      onChangeText={setAdresseLivraison}
+                    />
+
+                    <AnimatedButton style={styles.btnPrimary} onPress={handleCreateOrder} disabled={loading}>
+                      {loading ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.btnPrimaryText}>
+                          Commander • {estimatedTotal.toLocaleString('fr-FR')} F
                         </Text>
+                      )}
+                    </AnimatedButton>
+                  </View>
+                )}
+
+                {/* CLIENT : SUIVI */}
+                {activeViewRole === 'client' && dashboardTab === 'orders_list' && (
+                  <View style={styles.cardBox}>
+                    <Text style={styles.cardBoxTitle}>Mes commandes</Text>
+
+                    {orderSuccessBanner !== '' && (
+                      <View style={styles.toastSuccess}>
+                        <Text style={styles.toastSuccessText}>{orderSuccessBanner}</Text>
                       </View>
+                    )}
 
-                      <AnimatedButton style={styles.btnOrange} onPress={handleCreateOrder} disabled={loading}>
-                        {loading ? (
-                          <ActivityIndicator color="#FFFFFF" />
-                        ) : (
-                          <Text style={styles.btnOrangeText}>Valider la commande</Text>
-                        )}
-                      </AnimatedButton>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {activeViewRole === 'client' && dashboardTab === 'orders_list' && (
-                <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Mes suivis</Text>
-
-                  {orderSuccessBanner !== '' && (
-                    <View style={styles.successBannerBox}>
-                      <Text style={styles.successBannerText}>{orderSuccessBanner}</Text>
-                    </View>
-                  )}
-
-                  {myClientOrders.length === 0 ? (
-                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune commande.</Text>
-                  ) : (
-                    myClientOrders.map((cmd) => (
-                      <View key={cmd.id} style={styles.orderRow}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                          <Text style={styles.orderRowId}>{cmd.id} • {cmd.date}</Text>
-                          <Text style={[
-                            styles.orderRowStatus,
-                            cmd.status === 'delivered'
-                              ? { color: '#4ADE80' }
-                              : cmd.status === 'in_delivery'
-                              ? { color: '#38BDF8' }
-                              : cmd.status === 'accepted'
-                              ? { color: '#FBBF24' }
-                              : { color: '#F97316' }
-                          ]}>
-                            {getClientStatusLabel(cmd)}
-                          </Text>
-                        </View>
-                        <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type} ({cmd.operation})</Text>
-                        <Text style={styles.orderRowTotal}>{cmd.total}</Text>
+                    {myClientOrders.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucune commande</Text>
                       </View>
-                    ))
-                  )}
-                </View>
-              )}
-
-            </FadeInView>
+                    ) : (
+                      myClientOrders.map((cmd) => {
+                        const meta = getStatusMeta(cmd);
+                        return (
+                          <View key={cmd.id} style={styles.orderCard}>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.orderId}>{cmd.id}</Text>
+                              <View style={[styles.badgePill, { backgroundColor: meta.bg }]}>
+                                <Text style={[styles.badgePillText, { color: meta.color }]}>{meta.label}</Text>
+                              </View>
+                            </View>
+                            <Text style={styles.orderMainText}>{cmd.qte}× {cmd.type} ({cmd.operation})</Text>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.mutedText}>{cmd.date}</Text>
+                              <Text style={styles.priceHighlight}>{cmd.total}</Text>
+                            </View>
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
+                )}
+              </FadeInView>
             )
           ) : (
-            /* AUTHENTIFICATION */
+            /* ACCUEIL & AUTHENTIFICATION */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
               {currentScreen === 'welcome' && (
                 <View style={styles.welcomeContainer}>
-                  <FadeInView delay={40}>
-                    <View style={styles.heroSection}>
-                      <PulsingBadge>
-                        <View style={styles.heroBadge}>
-                          <Text style={styles.heroBadgeText}>RAPIDE & SÉCURISÉ</Text>
-                        </View>
-                      </PulsingBadge>
-                      <Text style={styles.heroTitle}>Livraison & Gestion de Gaz</Text>
-                    </View>
-                  </FadeInView>
-
-                  <View style={styles.cardsWrapper}>
-                    <FadeInView delay={100}>
-                      <AnimatedButton style={styles.welcomeCardDark} onPress={() => setCurrentScreen('register_client')}>
-                        <Text style={styles.welcomeCardTitleLight}>Espace Client</Text>
-                        <Text style={styles.welcomeCardSubLight}>Commandes de gaz</Text>
-                      </AnimatedButton>
-                    </FadeInView>
-
-                    <FadeInView delay={160}>
-                      <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
-                        <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
-                        <Text style={styles.welcomeCardSubDark}>Gérer mon dépôt et commander</Text>
-                      </AnimatedButton>
-                    </FadeInView>
-
-                    <FadeInView delay={220}>
-                      <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_livreur')}>
-                        <Text style={styles.welcomeCardTitleDark}>Espace Livreur</Text>
-                        <Text style={styles.welcomeCardSubDark}>Livraisons indépendantes</Text>
-                      </AnimatedButton>
-                    </FadeInView>
+                  <View style={styles.heroSection}>
+                    <Text style={styles.heroTitle}>Distribution & Livraison de Gaz</Text>
+                    <Text style={styles.heroSub}>Créez un profil ou connectez-vous.</Text>
                   </View>
 
-                  <FadeInView delay={280}>
-                    <AnimatedButton style={styles.btnNavyOutline} onPress={() => setCurrentScreen('login')}>
-                      <Text style={styles.btnNavyOutlineText}>Se connecter</Text>
+                  <View style={{ gap: 10 }}>
+                    <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_client')}>
+                      <View>
+                        <Text style={styles.roleSelectTitle}>Client</Text>
+                        <Text style={styles.roleSelectSub}>Commander du gaz</Text>
+                      </View>
+                      <Text style={styles.chevron}>›</Text>
                     </AnimatedButton>
-                  </FadeInView>
+
+                    <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_depot')}>
+                      <View>
+                        <Text style={styles.roleSelectTitle}>Vendeur</Text>
+                        <Text style={styles.roleSelectSub}>Gérer un dépôt</Text>
+                      </View>
+                      <Text style={styles.chevron}>›</Text>
+                    </AnimatedButton>
+
+                    <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_livreur')}>
+                      <View>
+                        <Text style={styles.roleSelectTitle}>Livreur</Text>
+                        <Text style={styles.roleSelectSub}>Livrer des commandes</Text>
+                      </View>
+                      <Text style={styles.chevron}>›</Text>
+                    </AnimatedButton>
+                  </View>
+
+                  <AnimatedButton style={styles.btnPrimary} onPress={() => setCurrentScreen('login')}>
+                    <Text style={styles.btnPrimaryText}>Connexion</Text>
+                  </AnimatedButton>
                 </View>
               )}
 
               {(currentScreen === 'register_client' || currentScreen === 'register_depot' || currentScreen === 'register_livreur') && (
                 <View style={styles.cardBox}>
-                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
-                    <Text style={styles.backBtnInlineText}>Retour</Text>
-                  </AnimatedButton>
-                  
+                  <Pressable onPress={() => setCurrentScreen('welcome')} style={styles.backRow}>
+                    <Text style={styles.backText}>‹ Retour</Text>
+                  </Pressable>
+
                   <Text style={styles.cardBoxTitle}>
                     {currentScreen === 'register_depot'
-                      ? 'Inscription Vendeur'
+                      ? 'Compte Vendeur'
                       : currentScreen === 'register_livreur'
-                      ? 'Inscription Livreur Indépendant'
-                      : 'Inscription Client'}
+                      ? 'Compte Livreur'
+                      : 'Compte Client'}
                   </Text>
 
                   <Text style={styles.label}>
-                    {currentScreen === 'register_depot' ? 'Nom du Dépôt / Responsable *' : 'Nom complet *'}
+                    {currentScreen === 'register_depot' ? 'Nom du dépôt' : 'Nom complet'}
                   </Text>
-                  <TextInput style={styles.input} placeholder="Ex: Koné Moussa" placeholderTextColor="#64748B" value={nom} onChangeText={setNom} />
+                  <TextInput style={styles.input} placeholder="Koné Moussa" placeholderTextColor="#64748B" value={nom} onChangeText={setNom} />
 
-                  <Text style={styles.label}>Téléphone *</Text>
+                  <Text style={styles.label}>Téléphone</Text>
                   <TextInput style={styles.input} keyboardType="phone-pad" placeholder="0700000000" placeholderTextColor="#64748B" value={telephone} onChangeText={setTelephone} />
 
                   <Text style={styles.label}>
-                    {currentScreen === 'register_livreur' ? 'Zone d’activité *' : 'Adresse *'}
+                    {currentScreen === 'register_livreur' ? 'Zone' : 'Adresse'}
                   </Text>
-                  <TextInput style={styles.input} placeholder="Quartier, commune..." placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
+                  <TextInput style={styles.input} placeholder="Cocody Angré" placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
 
                   {currentScreen === 'register_livreur' && (
                     <>
-                      <Text style={styles.label}>Véhicule *</Text>
-                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                      <Text style={styles.label}>Véhicule</Text>
+                      <View style={styles.segmentedRow}>
                         {VEHICLE_TYPES.map((v) => (
                           <AnimatedButton
                             key={v}
-                            style={[styles.opTypeBtn, vehicule === v && styles.opTypeBtnActive]}
+                            style={[styles.segBtn, vehicule === v && styles.segBtnActive]}
                             onPress={() => setVehicule(v)}
                           >
-                            <Text style={[styles.opTypeText, vehicule === v && styles.opTypeTextActive]}>{v}</Text>
+                            <Text style={[styles.segBtnText, vehicule === v && styles.segBtnTextActive]}>{v}</Text>
                           </AnimatedButton>
                         ))}
                       </View>
                     </>
                   )}
 
-                  <Text style={styles.label}>Email *</Text>
-                  <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#64748B" value={email} onChangeText={setEmail} />
+                  <Text style={styles.label}>Email</Text>
+                  <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@monan.ci" placeholderTextColor="#64748B" value={email} onChangeText={setEmail} />
 
-                  <Text style={styles.label}>Mot de passe *</Text>
+                  <Text style={styles.label}>Mot de passe</Text>
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" placeholderTextColor="#64748B" value={password} onChangeText={setPassword} />
 
                   <AnimatedButton
-                    style={styles.btnOrange}
+                    style={styles.btnPrimary}
                     onPress={() =>
                       handleRegister(
                         currentScreen === 'register_depot'
@@ -1846,32 +1605,31 @@ export default function App() {
                     }
                     disabled={loading}
                   >
-                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>S'inscrire</Text>}
+                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnPrimaryText}>Créer le compte</Text>}
                   </AnimatedButton>
                 </View>
               )}
 
-              {/* ÉCRAN DE CONNEXION UNIFIÉ */}
               {currentScreen === 'login' && (
                 <View style={styles.cardBox}>
-                  <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
-                    <Text style={styles.backBtnInlineText}>Retour</Text>
-                  </AnimatedButton>
-                  
+                  <Pressable onPress={() => setCurrentScreen('welcome')} style={styles.backRow}>
+                    <Text style={styles.backText}>‹ Retour</Text>
+                  </Pressable>
+
                   <Text style={styles.cardBoxTitle}>Connexion</Text>
 
-                  <Text style={styles.label}>Email *</Text>
+                  <Text style={styles.label}>Email</Text>
                   <TextInput
                     style={styles.input}
                     autoCapitalize="none"
                     keyboardType="email-address"
-                    placeholder="exemple@monan.ci"
+                    placeholder="email@monan.ci"
                     placeholderTextColor="#64748B"
                     value={email}
                     onChangeText={setEmail}
                   />
 
-                  <Text style={styles.label}>Mot de passe *</Text>
+                  <Text style={styles.label}>Mot de passe</Text>
                   <TextInput
                     style={styles.input}
                     secureTextEntry
@@ -1881,201 +1639,221 @@ export default function App() {
                     onChangeText={setPassword}
                   />
 
-                  <AnimatedButton style={styles.btnOrange} onPress={handleLogin} disabled={loading}>
-                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>Se connecter</Text>}
+                  <AnimatedButton style={styles.btnPrimary} onPress={handleLogin} disabled={loading}>
+                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnPrimaryText}>Connexion</Text>}
                   </AnimatedButton>
                 </View>
               )}
             </FadeInView>
           )}
-
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* BARRE DE NAVIGATION BASSE FIXE */}
+      {user && !isVendorSubscriptionExpired && (
+        <View style={styles.bottomTabBar}>
+          {getBottomNavItems().map((tab) => {
+            const isActive = dashboardTab === tab.id;
+            return (
+              <Pressable
+                key={tab.id}
+                style={styles.bottomTabItem}
+                onPress={() => setDashboardTab(tab.id)}
+              >
+                <View style={[styles.bottomTabIndicator, isActive && styles.bottomTabIndicatorActive]} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={[styles.bottomTabLabel, isActive && styles.bottomTabLabelActive]}>
+                    {tab.label}
+                  </Text>
+                  {tab.badge > 0 && (
+                    <View style={styles.tabBadge}>
+                      <Text style={styles.tabBadgeText}>{tab.badge}</Text>
+                    </View>
+                  )}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1A365D' },
+  container: { flex: 1, backgroundColor: '#0B1220' },
   splashContainer: { flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center' },
-  splashLogo: { width: 90, height: 90, marginBottom: 14 },
-  splashTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '900', letterSpacing: 1 },
-  splashSubTitle: { color: '#94A3B8', fontSize: 10, fontWeight: '700', letterSpacing: 2, marginTop: 4 },
-  
+  splashLogo: { width: 84, height: 84, marginBottom: 12 },
+  splashTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', letterSpacing: 2 },
+
   onboardingContainer: { flex: 1, backgroundColor: '#0F172A', paddingHorizontal: 20, justifyContent: 'space-between' },
   onboardingHeader: { alignItems: 'flex-end', paddingTop: 16 },
   skipBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#1E293B' },
   skipBtnText: { color: '#94A3B8', fontSize: 12, fontWeight: '700' },
-  onboardingSlideWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
-  onboardingImageContainer: { marginBottom: 30, alignItems: 'center' },
-  onboardingBadgeBox: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#F97316' },
-  onboardingLogo: { width: 60, height: 60 },
-  onboardingTextContainer: { alignItems: 'center', paddingHorizontal: 10 },
-  onboardingTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', textAlign: 'center', marginBottom: 10 },
-  onboardingSub: { color: '#94A3B8', fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  onboardingSlideWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12 },
+  onboardingBadgeBox: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#F97316', marginBottom: 24 },
+  onboardingLogo: { width: 52, height: 52 },
+  heroBadge: { backgroundColor: 'rgba(249, 115, 22, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginBottom: 10 },
+  heroBadgeText: { color: '#F97316', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  onboardingTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', textAlign: 'center', marginBottom: 8 },
+  onboardingSub: { color: '#94A3B8', fontSize: 14, textAlign: 'center', lineHeight: 20 },
   onboardingFooter: { paddingBottom: 24 },
-  paginationDotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginBottom: 20 },
-  dot: { height: 8, borderRadius: 4 },
-  dotActive: { width: 24, backgroundColor: '#F97316' },
-  dotInactive: { width: 8, backgroundColor: '#334155' },
-  onboardingBtnRow: { flexDirection: 'row', alignItems: 'center' },
-  onboardingBackBtn: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
-  onboardingBackText: { color: '#CBD5E1', fontWeight: '800', fontSize: 13 },
+  paginationDotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginBottom: 18 },
+  dot: { height: 6, borderRadius: 3 },
+  dotActive: { width: 22, backgroundColor: '#F97316' },
+  dotInactive: { width: 6, backgroundColor: '#334155' },
+  onboardingBtnRow: { flexDirection: 'row', gap: 10 },
 
-  appBar: { backgroundColor: '#0F172A', paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 3, borderBottomColor: '#F97316' },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brandBadge: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
-  brandLogoImage: { width: 22, height: 22 },
-  brandTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  brandSub: { color: '#94A3B8', fontSize: 9, fontWeight: '700' },
-  
-  roleToggleBtn: { backgroundColor: '#F97316', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  roleToggleBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
-  logoutBtn: { backgroundColor: 'rgba(239, 68, 68, 0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
+  appBar: {
+    backgroundColor: '#0F172A',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B'
+  },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandBadge: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center' },
+  brandLogoImage: { width: 20, height: 20 },
+  brandTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },
+  brandSub: { color: '#94A3B8', fontSize: 11, fontWeight: '600' },
+
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  segmentedSwitch: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 8, padding: 2, borderWidth: 1, borderColor: '#334155' },
+  segmentItem: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
+  segmentItemActive: { backgroundColor: '#F97316' },
+  segmentText: { color: '#94A3B8', fontSize: 11, fontWeight: '700' },
+  segmentTextActive: { color: '#FFFFFF', fontWeight: '800' },
+
+  logoutBtn: { backgroundColor: '#1E293B', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#334155' },
   logoutBtnText: { color: '#F87171', fontSize: 11, fontWeight: '700' },
-  
+
   scrollContent: { flexGrow: 1, padding: 16 },
   mainWrapper: { flex: 1, justifyContent: 'space-between' },
 
-  lockCardBox: { backgroundColor: '#0F172A', borderRadius: 16, padding: 18, borderWidth: 1.5, borderColor: '#EF4444' },
-  lockBadge: { backgroundColor: 'rgba(239, 68, 68, 0.2)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginBottom: 10 },
-  lockBadgeText: { color: '#F87171', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  lockTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900', marginBottom: 6 },
-  lockSubtitle: { color: '#94A3B8', fontSize: 12, lineHeight: 18, marginBottom: 12 },
-  promoBannerBox: { backgroundColor: 'rgba(34, 197, 94, 0.15)', borderWidth: 1, borderColor: '#22C55E', borderRadius: 8, padding: 10, marginBottom: 14 },
-  promoBannerText: { color: '#4ADE80', fontSize: 11, fontWeight: '900', textAlign: 'center', letterSpacing: 0.5 },
-  planOptionCard: { backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#334155', borderRadius: 10, padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  planOptionCardActive: { borderColor: '#F97316', backgroundColor: '#273549' },
-  planOptionTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  planOptionSub: { color: '#4ADE80', fontSize: 10, fontWeight: '800', marginTop: 2 },
-  planOriginalPrice: { color: '#94A3B8', fontSize: 11, textDecorationLine: 'line-through', fontWeight: '700' },
-  planOptionPrice: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
-  paymentMethodChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
-  paymentMethodChipActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
-  paymentMethodText: { color: '#CBD5E1', fontSize: 11, fontWeight: '800' },
-
-  subStatusCard: { backgroundColor: '#0F172A', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#334155', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  subStatusLabel: { color: '#94A3B8', fontSize: 9, fontWeight: '800' },
-  subStatusDays: { color: '#4ADE80', fontSize: 14, fontWeight: '900', marginTop: 2 },
-  simExpireBtn: { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: '#EF4444', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  simExpireBtnText: { color: '#F87171', fontSize: 10, fontWeight: '800' },
-  
-  pillsContainerOuter: { backgroundColor: '#0F172A', borderRadius: 12, padding: 3, marginBottom: 14 },
-  pillsScrollContent: { flexDirection: 'row', gap: 4, alignItems: 'center' },
-  pillBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center' },
-  pillBtnActive: { backgroundColor: '#F97316' },
-  pillText: { fontSize: 12, fontWeight: '700', color: '#94A3B8' },
-  pillTextActive: { color: '#FFFFFF', fontWeight: '800' },
-  
-  userGreetingCard: { backgroundColor: '#0F172A', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12, borderWidth: 1, borderColor: '#1E293B' },
-  avatarCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center' },
+  profileCard: { backgroundColor: '#0F172A', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#1E293B' },
+  avatarCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
   greetingTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  greetingSubtitle: { color: '#94A3B8', fontSize: 11, marginTop: 2 },
-  
-  kpiGrid: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  kpiCard: { flex: 1, backgroundColor: '#0F172A', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#1E293B' },
-  kpiCardTag: { fontSize: 9, fontWeight: '800', color: '#94A3B8' },
-  kpiCardNum: { fontSize: 17, fontWeight: '900', color: '#F97316', marginTop: 2 },
-  
-  actionCardOrange: { backgroundColor: '#FFF7ED', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 14, alignItems: 'center' },
-  actionCardTitle: { fontSize: 14, fontWeight: '800', color: '#C2410C' },
-  actionCardNavy: { backgroundColor: '#0F172A', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#1E293B', alignItems: 'center' },
-  actionCardTitleWhite: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
-  
+  mutedText: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
+
+  subStrip: { backgroundColor: '#0F172A', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#1E293B', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  microLabel: { color: '#64748B', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  subStripValue: { color: '#4ADE80', fontSize: 14, fontWeight: '800', marginTop: 1 },
+  ghostDangerBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: 'rgba(239, 68, 68, 0.12)' },
+  ghostDangerText: { color: '#F87171', fontSize: 11, fontWeight: '700' },
+
+  kpiGrid: { flexDirection: 'row', gap: 8 },
+  kpiCard: { flex: 1, backgroundColor: '#0F172A', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#1E293B', alignItems: 'center' },
+  kpiNum: { fontSize: 20, fontWeight: '900', color: '#F97316' },
+  kpiLabel: { fontSize: 11, fontWeight: '600', color: '#94A3B8', marginTop: 2 },
+
   cardBox: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#1E293B' },
-  cardBoxTitle: { fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 12 },
-  backBtnInline: { marginBottom: 10 },
-  backBtnInlineText: { color: '#F97316', fontWeight: '800', fontSize: 12 },
+  cardBoxTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF', marginBottom: 14 },
+  subCard: { backgroundColor: '#1E293B', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#334155' },
 
-  successBannerBox: { backgroundColor: 'rgba(34, 197, 94, 0.15)', borderWidth: 1.5, borderColor: '#22C55E', padding: 12, borderRadius: 10, marginBottom: 14 },
-  successBannerText: { color: '#4ADE80', fontWeight: '800', fontSize: 12, textAlign: 'center' },
+  orderCard: { backgroundColor: '#1E293B', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#334155', gap: 4 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  orderId: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
+  orderMainText: { color: '#E2E8F0', fontSize: 13, fontWeight: '600', marginTop: 2 },
+  priceHighlight: { color: '#F97316', fontWeight: '900', fontSize: 14 },
 
-  depotCardSorted: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 12, padding: 12, marginBottom: 10 },
-  depotHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  rankBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center' },
-  rankBadgeText: { color: '#FFFFFF', fontWeight: '900', fontSize: 11 },
-  depotTitle: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
-  depotSub: { fontSize: 11, color: '#94A3B8' },
-  depotDistanceHighlight: { color: '#4ADE80', fontWeight: '900', fontSize: 13 },
-  btnDepotSelect: { backgroundColor: '#F97316', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  btnDepotSelectText: { color: '#FFFFFF', fontWeight: '700', fontSize: 11 },
-  selectedDepotBanner: { backgroundColor: '#1E293B', padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#F97316' },
-  selectedDepotText: { color: '#FFFFFF', fontSize: 12 },
+  badgePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badgePillText: { fontSize: 11, fontWeight: '800' },
 
-  liveOrderCard: { backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#F97316', borderRadius: 12, padding: 12, marginBottom: 10 },
-  liveOrderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  liveOrderId: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
-  liveOrderBadge: { backgroundColor: 'rgba(249, 115, 22, 0.2)', color: '#F97316', fontWeight: '800', fontSize: 9, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  liveOrderClient: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
-  liveOrderArticle: { color: '#CBD5E1', fontSize: 12, marginVertical: 2 },
-  liveOrderAddress: { color: '#94A3B8', fontSize: 11 },
-  liveOrderTotal: { color: '#F97316', fontWeight: '900', fontSize: 14, marginTop: 4 },
-  btnAcceptOrder: { backgroundColor: '#22C55E', paddingVertical: 8, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-  btnAcceptOrderText: { color: '#FFFFFF', fontWeight: '900', fontSize: 13 },
+  dividerSection: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#334155' },
+  driverAssignedStrip: { marginTop: 8, padding: 10, borderRadius: 8, backgroundColor: '#0F172A' },
+  driverAssignedText: { color: '#38BDF8', fontSize: 12, fontWeight: '700' },
 
-  assignDriverBox: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#334155' },
-  assignDriverLabel: { color: '#CBD5E1', fontSize: 11, fontWeight: '800' },
-  driverChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#0F172A', borderWidth: 1, borderColor: '#334155' },
-  driverChipActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
-  driverChipText: { color: '#CBD5E1', fontSize: 11, fontWeight: '700' },
-  assignedDriverBanner: { marginTop: 10, padding: 10, borderRadius: 8, backgroundColor: '#0F172A', borderWidth: 1, borderColor: '#38BDF8' },
-  assignedDriverText: { color: '#FFFFFF', fontSize: 12 },
+  listRowCard: { backgroundColor: '#1E293B', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#334155', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  listRowTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 
-  addDriverForm: { backgroundColor: '#1E293B', padding: 12, borderRadius: 12, marginBottom: 14, borderWidth: 1, borderColor: '#334155' },
-  driverRowCard: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  driverStatusPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  driverStatusText: { fontSize: 10, fontWeight: '800' },
+  targetDepotChip: { backgroundColor: '#1E293B', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginBottom: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#F97316' },
+  targetDepotText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 
-  emptyStateBox: { backgroundColor: '#1E293B', padding: 20, borderRadius: 12, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#334155' },
-  emptyStateText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13, textAlign: 'center' },
+  segmentedRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  segBtn: { flex: 1, height: 42, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  segBtnActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
+  segBtnText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
+  segBtnTextActive: { color: '#FFFFFF', fontWeight: '800' },
 
-  opTypeBtn: { flex: 1, paddingVertical: 9, borderRadius: 8, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
-  opTypeBtnActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
-  opTypeText: { fontSize: 11, fontWeight: '700', color: '#CBD5E1' },
-  opTypeTextActive: { color: '#FFFFFF' },
+  formatCard: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1.5, borderColor: '#334155' },
+  formatCardActive: { borderColor: '#F97316', backgroundColor: '#263347' },
+  formatTitle: { fontSize: 13, fontWeight: '800', color: '#FFFFFF' },
+  formatPrice: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginTop: 2 },
 
-  stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#334155', borderRadius: 10, padding: 3, width: 130, justifyContent: 'space-between', marginBottom: 14 },
-  stepperBtn: { width: 32, height: 32, backgroundColor: '#F97316', borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
+  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
+  chipActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
+  chipText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
+  chipTextActive: { color: '#FFFFFF', fontWeight: '800' },
+
+  stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 4, width: 132, justifyContent: 'space-between', marginBottom: 14 },
+  stepperBtn: { width: 34, height: 34, backgroundColor: '#F97316', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   stepperBtnDisabled: { backgroundColor: '#334155' },
   stepperBtnText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
   stepperValueBox: { flex: 1, alignItems: 'center' },
   stepperValueText: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
-  
-  label: { fontSize: 12, fontWeight: '700', color: '#CBD5E1', marginBottom: 4 },
-  input: { backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#334155', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#FFFFFF', marginBottom: 12 },
-  totalSummary: { backgroundColor: '#1E293B', padding: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#334155' },
-  totalSummaryLabel: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
-  totalSummaryValue: { color: '#F97316', fontSize: 16, fontWeight: '900' },
-  btnOrange: { backgroundColor: '#F97316', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginTop: 4 },
-  btnOrangeText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
-  
-  smallCylBtn: { flex: 1, paddingVertical: 7, borderRadius: 8, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
-  smallCylBtnActive: { backgroundColor: '#334155', borderColor: '#F97316' },
-  smallCylText: { fontSize: 11, fontWeight: '700', color: '#CBD5E1' },
-  smallCylTextActive: { color: '#F97316', fontWeight: '800' },
 
-  brandChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
-  brandChipText: { fontSize: 11, fontWeight: '700', color: '#CBD5E1' },
+  label: { fontSize: 12, fontWeight: '700', color: '#94A3B8', marginBottom: 6 },
+  input: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, paddingHorizontal: 12, height: 46, fontSize: 14, color: '#FFFFFF', marginBottom: 12 },
 
-  orderRow: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 10, marginBottom: 8 },
-  orderRowId: { fontWeight: '800', color: '#FFFFFF', fontSize: 12 },
-  orderRowStatus: { fontWeight: '800', fontSize: 11 },
-  orderRowBody: { fontSize: 12, color: '#CBD5E1', marginVertical: 2 },
-  orderRowTotal: { color: '#F97316', fontWeight: '800', fontSize: 12 },
-  
-  welcomeContainer: { flex: 1, justifyContent: 'space-between' },
-  heroSection: { marginVertical: 10 },
-  heroBadge: { backgroundColor: '#FFF7ED', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginBottom: 8 },
-  heroBadgeText: { color: '#C2410C', fontSize: 10, fontWeight: '800' },
-  heroTitle: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', lineHeight: 30 },
-  cardsWrapper: { gap: 10, marginVertical: 10 },
-  welcomeCardDark: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#1E293B' },
-  welcomeCardWhite: { backgroundColor: '#1E293B', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#334155' },
-  welcomeCardTitleLight: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  welcomeCardSubLight: { color: '#94A3B8', fontSize: 11, marginTop: 2 },
-  welcomeCardTitleDark: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  welcomeCardSubDark: { color: '#94A3B8', fontSize: 11, marginTop: 2 },
-  btnNavyOutline: { borderWidth: 1.5, borderColor: '#F97316', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 6 },
-  btnNavyOutlineText: { color: '#F97316', fontWeight: '800', fontSize: 13 }
+  btnPrimary: { backgroundColor: '#F97316', height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+  btnPrimaryText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
+  btnSecondary: { backgroundColor: '#1E293B', height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16, borderWidth: 1, borderColor: '#334155' },
+  btnSecondaryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  btnSuccess: { backgroundColor: '#16A34A', height: 42, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  btnSuccessText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
+  compactPrimaryBtn: { backgroundColor: '#F97316', paddingHorizontal: 14, height: 36, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  compactPrimaryBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
+
+  statusPillDanger: { backgroundColor: 'rgba(239, 68, 68, 0.15)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 8 },
+  statusPillDangerText: { color: '#F87171', fontSize: 10, fontWeight: '800' },
+  selectRowCard: { backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#334155', borderRadius: 12, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  selectRowCardActive: { borderColor: '#F97316', backgroundColor: '#263347' },
+  selectRowTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  discountBadge: { backgroundColor: 'rgba(74, 222, 128, 0.15)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  discountBadgeText: { color: '#4ADE80', fontSize: 10, fontWeight: '800' },
+  strikePrice: { color: '#64748B', fontSize: 11, textDecorationLine: 'line-through' },
+  selectRowPrice: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+
+  toastSuccess: { backgroundColor: 'rgba(74, 222, 128, 0.14)', borderRadius: 10, padding: 10, marginBottom: 12 },
+  toastSuccessText: { color: '#4ADE80', fontWeight: '700', fontSize: 12, textAlign: 'center' },
+
+  emptyStateBox: { paddingVertical: 28, alignItems: 'center' },
+  emptyStateText: { color: '#64748B', fontWeight: '600', fontSize: 13 },
+
+  welcomeContainer: { flex: 1, justifyContent: 'space-between', paddingVertical: 8 },
+  heroSection: { marginTop: 8 },
+  heroTitle: { fontSize: 26, fontWeight: '900', color: '#FFFFFF', lineHeight: 32 },
+  heroSub: { fontSize: 14, color: '#94A3B8', marginTop: 6 },
+  roleSelectCard: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#1E293B', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  roleSelectTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  roleSelectSub: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
+  chevron: { color: '#F97316', fontSize: 22, fontWeight: '700' },
+
+  backRow: { marginBottom: 12 },
+  backText: { color: '#F97316', fontWeight: '700', fontSize: 14 },
+
+  bottomTabBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#0F172A',
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+    flexDirection: 'row',
+    height: 62,
+    paddingBottom: 6
+  },
+  bottomTabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  bottomTabIndicator: { width: 20, height: 3, borderRadius: 2, backgroundColor: 'transparent', marginBottom: 6 },
+  bottomTabIndicatorActive: { backgroundColor: '#F97316' },
+  bottomTabLabel: { color: '#64748B', fontSize: 11, fontWeight: '700' },
+  bottomTabLabelActive: { color: '#FFFFFF', fontWeight: '800' },
+  tabBadge: { backgroundColor: '#F97316', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 },
+  tabBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' }
 });
