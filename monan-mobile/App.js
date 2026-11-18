@@ -25,11 +25,32 @@ const getDaysLeftInTrial = (createdAtDate) => {
   if (!createdAtDate) return 30;
   const created = new Date(createdAtDate);
   const now = new Date();
-  const diffTime = Math.abs(now - created);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const diffTime = now - created;
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   const remaining = 30 - diffDays;
   return remaining > 0 ? remaining : 0;
 };
+
+const getRemainingSubscriptionDays = (userObj) => {
+  if (!userObj) return 0;
+  if (userObj.subscriptionExpiresAt) {
+    const expires = new Date(userObj.subscriptionExpiresAt);
+    const now = new Date();
+    const diffTime = expires.getTime() - now.getTime();
+    if (diffTime <= 0) return 0;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  }
+  return getDaysLeftInTrial(userObj.createdAt);
+};
+
+const SUBSCRIPTION_PLANS = [
+  { id: '1m', label: '1 Mois', days: 30, price: 2000, originalPrice: null, badge: 'TARIF DE BASE' },
+  { id: '3m', label: '3 Mois', days: 90, price: 4500, originalPrice: 6000, badge: '-25% DE RÉDUCTION' },
+  { id: '6m', label: '6 Mois', days: 180, price: 9000, originalPrice: 12000, badge: '-25% DE RÉDUCTION' },
+  { id: '1y', label: '1 An', days: 365, price: 18000, originalPrice: 24000, badge: '-25% DE RÉDUCTION' },
+];
+
+const PAYMENT_METHODS = ['Wave', 'Orange Money', 'MTN MoMo', 'Moov Money'];
 
 const ONBOARDING_SLIDES = [
   {
@@ -177,9 +198,29 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
+  const [selectedPlan, setSelectedPlan] = useState(SUBSCRIPTION_PLANS[1]);
+  const [paymentMethod, setPaymentMethod] = useState('Wave');
+  const [paymentPhone, setPaymentPhone] = useState('');
+
   const [registeredUsers, setRegisteredUsers] = useState([
-    { email: 'vendeur@monan.ci', role: 'depot', nom: 'Dépôt Angré', telephone: '0707070707' },
-    { email: 'client@monan.ci', role: 'client', nom: 'Kouassi Yves', telephone: '0505050505' }
+    {
+      id: 'DEP-DEFAULT',
+      email: 'vendeur@monan.ci',
+      role: 'depot',
+      nom: 'Dépôt Angré',
+      telephone: '0707070707',
+      createdAt: new Date().toISOString(),
+      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      isSubscribed: true
+    },
+    {
+      id: 'CLI-DEFAULT',
+      email: 'client@monan.ci',
+      role: 'client',
+      nom: 'Kouassi Yves',
+      telephone: '0505050505',
+      createdAt: new Date().toISOString()
+    }
   ]);
 
   const [vendorPrices, setVendorPrices] = useState({
@@ -308,17 +349,80 @@ export default function App() {
     };
   }, [hasSeenOnboarding, onboardingStep, user, currentScreen, dashboardTab]);
 
+  const remainingSubDays = user?.role === 'depot' ? getRemainingSubscriptionDays(user) : null;
+  const isVendorSubscriptionExpired = user?.role === 'depot' && remainingSubDays <= 0;
+
   const activeFormatPrices = vendorPrices[selectedCylinder.id] || { recharge: selectedCylinder.priceRecharge, achat: selectedCylinder.priceAchat };
   const currentUnitPrice = operationType === 'recharge' 
     ? (parseInt(activeFormatPrices.recharge, 10) || selectedCylinder.priceRecharge)
     : (parseInt(activeFormatPrices.achat, 10) || selectedCylinder.priceAchat);
 
   const handleToggleRoleMode = () => {
+    if (isVendorSubscriptionExpired) return;
     if (user && user.role === 'depot') {
       const newMode = activeRoleMode === 'depot' ? 'client' : 'depot';
       setActiveRoleMode(newMode);
       setDashboardTab('home');
     }
+  };
+
+  const persistUserUpdate = async (updatedUserObj) => {
+    setUser(updatedUserObj);
+    const updatedList = registeredUsers.map(u =>
+      u.email === updatedUserObj.email ? { ...u, ...updatedUserObj } : u
+    );
+    const exists = updatedList.some(u => u.email === updatedUserObj.email);
+    const finalList = exists ? updatedList : [...updatedList, updatedUserObj];
+    setRegisteredUsers(finalList);
+    try {
+      await AsyncStorage.setItem('@registered_users', JSON.stringify(finalList));
+    } catch (e) {
+      console.log('Erreur sauvegarde utilisateur:', e);
+    }
+  };
+
+  const handleRenewSubscription = async () => {
+    const phoneToUse = (paymentPhone || user?.telephone || '').trim();
+    if (!phoneToUse || phoneToUse.length < 8) {
+      Alert.alert('Numéro requis', 'Veuillez entrer un numéro Mobile Money valide pour le paiement.');
+      return;
+    }
+
+    setLoading(true);
+    const nowMs = Date.now();
+    const currentExpiryMs = user?.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt).getTime() : 0;
+    const baseTime = Math.max(nowMs, currentExpiryMs);
+    const newExpiryIso = new Date(baseTime + selectedPlan.days * 24 * 60 * 60 * 1000).toISOString();
+
+    const updatedUser = {
+      ...user,
+      isSubscribed: true,
+      subscriptionExpiresAt: newExpiryIso,
+      lastPlan: selectedPlan.label
+    };
+
+    await persistUserUpdate(updatedUser);
+    setActiveRoleMode('depot');
+    setDashboardTab('home');
+    setLoading(false);
+
+    Alert.alert(
+      'Abonnement activé',
+      `Paiement de ${selectedPlan.price.toLocaleString('fr-FR')} FCFA (${selectedPlan.label}) via ${paymentMethod} confirmé. Votre espace vendeur est actif pour ${selectedPlan.days} jours.`
+    );
+  };
+
+  const handleSimulateExpiration = async () => {
+    if (!user || user.role !== 'depot') return;
+    const expiredDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const expiredUser = {
+      ...user,
+      isSubscribed: false,
+      subscriptionExpiresAt: expiredDate
+    };
+    await persistUserUpdate(expiredUser);
+    setActiveRoleMode('depot');
+    setDashboardTab('home');
   };
 
   const handleRegister = async (type) => {
@@ -329,6 +433,9 @@ export default function App() {
 
     setLoading(true);
     const cleanEmail = email.trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+    const trialExpiryIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
     const newUser = {
       id: `USR-${Math.floor(1000 + Math.random() * 9000)}`,
       nom: nom.trim(),
@@ -336,11 +443,12 @@ export default function App() {
       telephone: telephone.trim(),
       adresse: adresse.trim() || 'Abidjan',
       role: type,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso,
+      subscriptionExpiresAt: type === 'depot' ? trialExpiryIso : null,
       isSubscribed: false
     };
 
-    const updatedUsers = [...registeredUsers, newUser];
+    const updatedUsers = [...registeredUsers.filter(u => u.email !== cleanEmail), newUser];
     setRegisteredUsers(updatedUsers);
 
     try {
@@ -362,6 +470,7 @@ export default function App() {
     }
 
     setUser(newUser);
+    setPaymentPhone(telephone.trim());
     setActiveRoleMode(type);
     setAdresseLivraison(adresse.trim());
     setDashboardTab('home');
@@ -390,27 +499,33 @@ export default function App() {
 
     const foundUser = storedUsers.find(u => u.email === cleanEmail);
 
-    let userRole = 'client';
-    let userName = cleanEmail.split('@')[0];
-
+    let userData;
     if (foundUser) {
-      userRole = foundUser.role;
-      userName = foundUser.nom;
-    } else if (cleanEmail.includes('depot') || cleanEmail.includes('vendeur') || cleanEmail.includes('pro')) {
-      userRole = 'depot';
+      userData = {
+        ...foundUser,
+        subscriptionExpiresAt:
+          foundUser.subscriptionExpiresAt ||
+          (foundUser.role === 'depot'
+            ? new Date(new Date(foundUser.createdAt || Date.now()).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
+            : null)
+      };
+    } else {
+      const inferredRole = (cleanEmail.includes('depot') || cleanEmail.includes('vendeur') || cleanEmail.includes('pro')) ? 'depot' : 'client';
+      userData = {
+        id: inferredRole === 'depot' ? 'DEP-CURRENT' : 'CLI-CURRENT',
+        email: cleanEmail,
+        nom: cleanEmail.split('@')[0],
+        telephone: '',
+        role: inferredRole,
+        createdAt: new Date().toISOString(),
+        subscriptionExpiresAt: inferredRole === 'depot' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
+        isSubscribed: false
+      };
     }
 
-    const userData = {
-      id: userRole === 'depot' ? 'DEP-CURRENT' : 'CLI-CURRENT',
-      email: cleanEmail,
-      nom: userName,
-      role: userRole,
-      createdAt: new Date().toISOString(),
-      isSubscribed: false
-    };
-
     setUser(userData);
-    setActiveRoleMode(userRole);
+    setPaymentPhone(userData.telephone || '');
+    setActiveRoleMode(userData.role);
     setDashboardTab('home');
     setLoading(false);
   };
@@ -447,6 +562,7 @@ export default function App() {
   };
 
   const handleAcceptOrder = (orderId) => {
+    if (isVendorSubscriptionExpired) return;
     setAllOrders(prevOrders =>
       prevOrders.map(order => {
         if (order.id === orderId) {
@@ -465,6 +581,7 @@ export default function App() {
   };
 
   const handleMarkAsDelivered = (orderId) => {
+    if (isVendorSubscriptionExpired) return;
     setAllOrders(prevOrders =>
       prevOrders.map(order => {
         if (order.id === orderId) {
@@ -585,7 +702,7 @@ export default function App() {
 
         {user && (
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-            {user.role === 'depot' && (
+            {user.role === 'depot' && !isVendorSubscriptionExpired && (
               <AnimatedButton style={styles.roleToggleBtn} onPress={handleToggleRoleMode}>
                 <Text style={styles.roleToggleBtnText}>
                   {activeRoleMode === 'depot' ? 'Vue Client' : 'Vue Vendeur'}
@@ -604,6 +721,98 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
           {user ? (
+            isVendorSubscriptionExpired ? (
+              /* ÉCRAN DE BLOCAGE OBLIGATOIRE QUAND L'ABONNEMENT VENDEUR EST EXPIRÉ */
+              <FadeInView key="subscription-lock" style={styles.mainWrapper}>
+                <View style={styles.lockCardBox}>
+                  <View style={styles.lockBadge}>
+                    <Text style={styles.lockBadgeText}>ABONNEMENT EXPIRÉ</Text>
+                  </View>
+
+                  <Text style={styles.lockTitle}>Renouvellement obligatoire</Text>
+                  <Text style={styles.lockSubtitle}>
+                    Bonjour <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>{user.nom}</Text>, votre abonnement vendeur est arrivé à terme. Souscrivez à une nouvelle offre pour continuer à recevoir des commandes et gérer votre dépôt.
+                  </Text>
+
+                  <View style={styles.promoBannerBox}>
+                    <Text style={styles.promoBannerText}>
+                      OFFRE SPÉCIALE : 25 % DE RÉDUCTION À PARTIR DE 3 MOIS
+                    </Text>
+                  </View>
+
+                  <Text style={styles.label}>1. Choisissez votre formule *</Text>
+                  <View style={{ gap: 8, marginBottom: 14 }}>
+                    {SUBSCRIPTION_PLANS.map((plan) => {
+                      const isSelected = selectedPlan.id === plan.id;
+                      return (
+                        <AnimatedButton
+                          key={plan.id}
+                          style={[styles.planOptionCard, isSelected && styles.planOptionCardActive]}
+                          onPress={() => setSelectedPlan(plan)}
+                        >
+                          <View>
+                            <Text style={[styles.planOptionTitle, isSelected && { color: '#F97316' }]}>
+                              {plan.label} ({plan.days} jours)
+                            </Text>
+                            <Text style={[styles.planOptionSub, !plan.originalPrice && { color: '#94A3B8' }]}>
+                              {plan.badge}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            {plan.originalPrice && (
+                              <Text style={styles.planOriginalPrice}>
+                                {plan.originalPrice.toLocaleString('fr-FR')} F
+                              </Text>
+                            )}
+                            <Text style={styles.planOptionPrice}>
+                              {plan.price.toLocaleString('fr-FR')} FCFA
+                            </Text>
+                          </View>
+                        </AnimatedButton>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={styles.label}>2. Moyen de paiement Mobile Money *</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                    {PAYMENT_METHODS.map((method) => {
+                      const isSelected = paymentMethod === method;
+                      return (
+                        <AnimatedButton
+                          key={method}
+                          style={[styles.paymentMethodChip, isSelected && styles.paymentMethodChipActive]}
+                          onPress={() => setPaymentMethod(method)}
+                        >
+                          <Text style={[styles.paymentMethodText, isSelected && { color: '#FFFFFF' }]}>
+                            {method}
+                          </Text>
+                        </AnimatedButton>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={styles.label}>3. Numéro {paymentMethod} *</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="phone-pad"
+                    placeholder="Ex: 0707070707"
+                    placeholderTextColor="#64748B"
+                    value={paymentPhone}
+                    onChangeText={setPaymentPhone}
+                  />
+
+                  <AnimatedButton style={styles.btnOrange} onPress={handleRenewSubscription} disabled={loading}>
+                    {loading ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.btnOrangeText}>
+                        Payer {selectedPlan.price.toLocaleString('fr-FR')} FCFA et continuer
+                      </Text>
+                    )}
+                  </AnimatedButton>
+                </View>
+              </FadeInView>
+            ) : (
             <FadeInView key={`${dashboardTab}-${activeRoleMode}`} style={styles.mainWrapper}>
               
               {/* ONGLETS NAVIGATION */}
@@ -690,6 +899,21 @@ export default function App() {
                       </Text>
                     </View>
                   </View>
+
+                  {/* STATUT ABONNEMENT VENDEUR */}
+                  {user.role === 'depot' && (
+                    <View style={styles.subStatusCard}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.subStatusLabel}>ABONNEMENT VENDEUR</Text>
+                        <Text style={styles.subStatusDays}>
+                          {remainingSubDays} jour{remainingSubDays > 1 ? 's' : ''} restant{remainingSubDays > 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                      <AnimatedButton style={styles.simExpireBtn} onPress={handleSimulateExpiration}>
+                        <Text style={styles.simExpireBtnText}>Simuler expiration</Text>
+                      </AnimatedButton>
+                    </View>
+                  )}
 
                   <View style={styles.kpiGrid}>
                     {activeRoleMode === 'depot' ? (
@@ -1021,6 +1245,7 @@ export default function App() {
               )}
 
             </FadeInView>
+            )
           ) : (
             /* AUTHENTIFICATION */
             <FadeInView key={currentScreen} style={styles.mainWrapper}>
@@ -1161,6 +1386,29 @@ const styles = StyleSheet.create({
   
   scrollContent: { flexGrow: 1, padding: 16 },
   mainWrapper: { flex: 1, justifyContent: 'space-between' },
+
+  lockCardBox: { backgroundColor: '#0F172A', borderRadius: 16, padding: 18, borderWidth: 1.5, borderColor: '#EF4444' },
+  lockBadge: { backgroundColor: 'rgba(239, 68, 68, 0.2)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginBottom: 10 },
+  lockBadgeText: { color: '#F87171', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  lockTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900', marginBottom: 6 },
+  lockSubtitle: { color: '#94A3B8', fontSize: 12, lineHeight: 18, marginBottom: 12 },
+  promoBannerBox: { backgroundColor: 'rgba(34, 197, 94, 0.15)', borderWidth: 1, borderColor: '#22C55E', borderRadius: 8, padding: 10, marginBottom: 14 },
+  promoBannerText: { color: '#4ADE80', fontSize: 11, fontWeight: '900', textAlign: 'center', letterSpacing: 0.5 },
+  planOptionCard: { backgroundColor: '#1E293B', borderWidth: 1.5, borderColor: '#334155', borderRadius: 10, padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  planOptionCardActive: { borderColor: '#F97316', backgroundColor: '#273549' },
+  planOptionTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  planOptionSub: { color: '#4ADE80', fontSize: 10, fontWeight: '800', marginTop: 2 },
+  planOriginalPrice: { color: '#94A3B8', fontSize: 11, textDecorationLine: 'line-through', fontWeight: '700' },
+  planOptionPrice: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  paymentMethodChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
+  paymentMethodChipActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
+  paymentMethodText: { color: '#CBD5E1', fontSize: 11, fontWeight: '800' },
+
+  subStatusCard: { backgroundColor: '#0F172A', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#334155', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  subStatusLabel: { color: '#94A3B8', fontSize: 9, fontWeight: '800' },
+  subStatusDays: { color: '#4ADE80', fontSize: 14, fontWeight: '900', marginTop: 2 },
+  simExpireBtn: { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: '#EF4444', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  simExpireBtnText: { color: '#F87171', fontSize: 10, fontWeight: '800' },
   
   pillsContainerOuter: { backgroundColor: '#0F172A', borderRadius: 12, padding: 3, marginBottom: 14 },
   pillsScrollContent: { flexDirection: 'row', gap: 4, alignItems: 'center' },
