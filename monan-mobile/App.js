@@ -19,11 +19,17 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const APP_GAS_COMMISSION_RATE = 0.05; // 5 % commission plateforme sur le gaz
-const APP_DELIVERY_COMMISSION_RATE = 0.20; // 20 % commission plateforme sur la livraison (100 F / 500 F)
-const STANDARD_DELIVERY_FEE = 500; // Frais de livraison client en FCFA
+// URL de votre backend hébergé sur Render pour la synchronisation multi-appareils
+const API_BASE_URL = 'https://monan-service-pro.onrender.com/api';
+const STORAGE_USERS_KEY = '@monan_users_v6';
+const STORAGE_ORDERS_KEY = '@monan_orders_v6';
 
-const CITIES = ['Abidjan', 'Bouaké', 'Odienné', 'Yamoussoukro', 'Korhogo', 'San-Pédro'];
+const APP_GAS_COMMISSION_RATE = 0.05; // 5 % commission plateforme sur le gaz
+const APP_DELIVERY_COMMISSION_RATE = 0.20; // 20 % commission plateforme sur la livraison
+const BASE_DELIVERY_FEE = 300; // Prise en charge de base (FCFA)
+const FREE_BASE_KM = 1.5; // Kilomètres inclus dans la prise en charge
+const PER_KM_RATE = 100; // Tarif par km supplémentaire (FCFA)
+const MIN_DELIVERY_FEE = 400; // Minimum de course (FCFA)
 
 const DEFAULT_VENDOR_PRICES = {
   B6: { recharge: '2000', achat: '13000' },
@@ -31,23 +37,138 @@ const DEFAULT_VENDOR_PRICES = {
   B28: { recharge: '13000', achat: '45000' },
 };
 
-const calculateOrderFinancials = (unitPrice, quantity, deliveryMode) => {
+// Normalisation insensible aux accents, majuscules et espaces ("Bouaké" === "bouake")
+const normalizeText = (value) =>
+  (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+// Coordonnées de référence des communes et localités en Côte d'Ivoire
+const LOCALITY_COORDS = {
+  // Grand Abidjan
+  anyama: { lat: 5.4946, lon: -4.0518 },
+  yopougon: { lat: 5.3364, lon: -4.0833 },
+  abobo: { lat: 5.4161, lon: -4.0159 },
+  cocody: { lat: 5.3484, lon: -3.9881 },
+  angre: { lat: 5.3912, lon: -3.9835 },
+  riviera: { lat: 5.3567, lon: -3.9512 },
+  adjame: { lat: 5.3514, lon: -4.0236 },
+  plateau: { lat: 5.3235, lon: -4.0205 },
+  marcory: { lat: 5.3022, lon: -3.9828 },
+  koumassi: { lat: 5.2951, lon: -3.9494 },
+  treichville: { lat: 5.2989, lon: -4.0017 },
+  'port-bouet': { lat: 5.2581, lon: -3.9261 },
+  'port bouet': { lat: 5.2581, lon: -3.9261 },
+  bingerville: { lat: 5.3558, lon: -3.8854 },
+  songon: { lat: 5.3189, lon: -4.2492 },
+  abidjan: { lat: 5.3453, lon: -4.0244 },
+  // Autres villes
+  bouake: { lat: 7.6939, lon: -5.0303 },
+  'air france': { lat: 7.6845, lon: -5.0211 },
+  odienne: { lat: 9.5051, lon: -7.5643 },
+  yamoussoukro: { lat: 6.8276, lon: -5.2893 },
+  korhogo: { lat: 9.4580, lon: -5.6296 },
+  'san-pedro': { lat: 4.7485, lon: -6.6363 },
+  'san pedro': { lat: 4.7485, lon: -6.6363 },
+  daloa: { lat: 6.8774, lon: -6.4502 },
+  man: { lat: 7.4125, lon: -7.5538 },
+  gagnoa: { lat: 6.1319, lon: -5.9506 },
+};
+
+const findCoordinatesForLocation = (localityText, cityText) => {
+  const normLoc = normalizeText(localityText);
+  const normCity = normalizeText(cityText);
+
+  for (const key of Object.keys(LOCALITY_COORDS)) {
+    if (normLoc.includes(key)) return LOCALITY_COORDS[key];
+  }
+  for (const key of Object.keys(LOCALITY_COORDS)) {
+    if (normCity.includes(key)) return LOCALITY_COORDS[key];
+  }
+  return null;
+};
+
+// Calcul de distance routière (Haversine * 1.3) entre vendeur et client
+const estimateRoadDistanceKm = (vendor, clientLocality, clientCity) => {
+  const normVendorLoc = normalizeText(vendor?.adresse || '');
+  const normClientLoc = normalizeText(clientLocality || '');
+
+  if (normVendorLoc && normClientLoc && normVendorLoc === normClientLoc) {
+    return 1.2; // Même quartier exact
+  }
+
+  const vendorCoords = findCoordinatesForLocation(vendor?.adresse, vendor?.ville);
+  const clientCoords = findCoordinatesForLocation(clientLocality, clientCity);
+
+  if (vendorCoords && clientCoords) {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(clientCoords.lat - vendorCoords.lat);
+    const dLon = toRad(clientCoords.lon - vendorCoords.lon);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(vendorCoords.lat)) *
+        Math.cos(toRad(clientCoords.lat)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const straightKm = R * c;
+
+    if (straightKm < 0.3) {
+      // Quartiers différents dans une ville sans sous-coordonnées précises
+      const hashDiff = Math.abs(normVendorLoc.length - normClientLoc.length) + 2.4;
+      return Number(hashDiff.toFixed(1));
+    }
+    return Number((straightKm * 1.3).toFixed(1));
+  }
+
+  // Estimation déterministe si la localité n'est pas dans le référentiel
+  const seed = Math.abs((normVendorLoc + normClientLoc).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
+  const fallbackKm = 2.0 + (seed % 90) / 10;
+  return Number(fallbackKm.toFixed(1));
+};
+
+// Calcul dynamique des frais de livraison (style Yango / Glovo)
+const calculateDeliveryQuote = (vendor, clientLocality, clientCity) => {
+  const distanceKm = estimateRoadDistanceKm(vendor, clientLocality, clientCity);
+  const extraKm = Math.max(0, distanceKm - FREE_BASE_KM);
+  const rawFee = BASE_DELIVERY_FEE + extraKm * PER_KM_RATE;
+  const roundedFee = Math.max(MIN_DELIVERY_FEE, Math.round(rawFee / 50) * 50);
+
+  const appDeliveryCommission = Math.round(roundedFee * APP_DELIVERY_COMMISSION_RATE);
+  const driverNet = roundedFee - appDeliveryCommission;
+
+  return {
+    distanceKm,
+    deliveryFee: roundedFee,
+    appDeliveryCommission,
+    driverNet,
+  };
+};
+
+const calculateOrderFinancials = (unitPrice, quantity, deliveryMode, deliveryQuote) => {
   const qty = Math.max(1, parseInt(quantity, 10) || 1);
   const gasSubtotal = unitPrice * qty;
-  const deliveryFee = deliveryMode === 'livraison' ? STANDARD_DELIVERY_FEE : 0;
+
+  const isDelivery = deliveryMode === 'livraison';
+  const distanceKm = isDelivery ? deliveryQuote.distanceKm : 0;
+  const deliveryFee = isDelivery ? deliveryQuote.deliveryFee : 0;
+  const appDeliveryCommission = isDelivery ? deliveryQuote.appDeliveryCommission : 0;
+  const driverNet = isDelivery ? deliveryQuote.driverNet : 0;
+
   const totalClient = gasSubtotal + deliveryFee;
-
   const appGasCommission = Math.round(gasSubtotal * APP_GAS_COMMISSION_RATE);
-  const appDeliveryCommission = Math.round(deliveryFee * APP_DELIVERY_COMMISSION_RATE);
   const appTotalCommission = appGasCommission + appDeliveryCommission;
-
   const vendorNet = gasSubtotal - appGasCommission;
-  const driverNet = deliveryFee - appDeliveryCommission;
 
   return {
     qty,
     unitPrice,
     gasSubtotal,
+    distanceKm,
     deliveryFee,
     totalClient,
     appGasCommission,
@@ -107,21 +228,21 @@ const ONBOARDING_SLIDES = [
     id: '2',
     badge: 'CLIENT',
     title: 'Offres locales en direct',
-    subtitle: 'Choisissez le meilleur tarif près de chez vous, avec ou sans livraison.',
+    subtitle: 'Choisissez votre vendeur et visualisez le tarif de livraison selon la distance.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '3',
     badge: 'VENDEUR',
     title: 'Tarifs personnalisés',
-    subtitle: 'Fixez vos prix par bouteille et gérez vos commandes.',
+    subtitle: 'Fixez vos prix par bouteille et publiez vos offres dans votre ville.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '4',
     badge: 'LIVREUR',
-    title: 'Courses rémunérées',
-    subtitle: 'Recevez directement votre part sur chaque livraison effectuée.',
+    title: 'Courses rémunérées au km',
+    subtitle: 'Votre gain s’ajuste automatiquement selon la distance parcourue.',
     icon: require('./assets/splash-icon.png')
   }
 ];
@@ -228,7 +349,6 @@ const DEFAULT_USERS = [
     telephone: '0707070707',
     ville: 'Abidjan',
     adresse: 'Cocody Angré',
-    distanceKm: 0.3,
     createdAt: new Date().toISOString(),
     subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     isSubscribed: true,
@@ -239,57 +359,20 @@ const DEFAULT_USERS = [
     }
   },
   {
-    id: 'DEP-02',
-    email: 'saintjean@monan.ci',
+    id: 'DEP-ANYAMA',
+    email: 'anyama@monan.ci',
     role: 'depot',
-    nom: 'Dépôt Saint-Jean',
+    nom: 'Dépôt Gaz Anyama Gare',
     telephone: '0708020304',
     ville: 'Abidjan',
-    adresse: 'Cocody Centre',
-    distanceKm: 1.2,
-    createdAt: new Date().toISOString(),
-    subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    isSubscribed: true,
-    prices: {
-      B6: { recharge: '2100', achat: '13500' },
-      B12: { recharge: '5400', achat: '24500' },
-      B28: { recharge: '12800', achat: '44500' },
-    }
-  },
-  {
-    id: 'DEP-03',
-    email: 'riviera@monan.ci',
-    role: 'depot',
-    nom: 'Dépôt Riviera 2',
-    telephone: '0709030405',
-    ville: 'Abidjan',
-    adresse: 'Cocody Riviera 2',
-    distanceKm: 2.5,
+    adresse: 'Anyama',
     createdAt: new Date().toISOString(),
     subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     isSubscribed: true,
     prices: {
       B6: { recharge: '1950', achat: '12800' },
-      B12: { recharge: '5600', achat: '25000' },
-      B28: { recharge: '13200', achat: '45500' },
-    }
-  },
-  {
-    id: 'DEP-04',
-    email: 'bouake@monan.ci',
-    role: 'depot',
-    nom: 'Dépôt Air France Bouaké',
-    telephone: '0501020304',
-    ville: 'Bouaké',
-    adresse: 'Air France 1',
-    distanceKm: 0.8,
-    createdAt: new Date().toISOString(),
-    subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    isSubscribed: true,
-    prices: {
-      B6: { recharge: '2050', achat: '13200' },
-      B12: { recharge: '5650', achat: '25500' },
-      B28: { recharge: '13500', achat: '46000' },
+      B12: { recharge: '5400', achat: '24500' },
+      B28: { recharge: '12800', achat: '44500' },
     }
   },
   {
@@ -299,7 +382,7 @@ const DEFAULT_USERS = [
     nom: 'Kouassi Yves',
     telephone: '0505050505',
     ville: 'Abidjan',
-    adresse: 'Angré Star 10',
+    adresse: 'Yopougon',
     createdAt: new Date().toISOString()
   },
   {
@@ -309,7 +392,7 @@ const DEFAULT_USERS = [
     nom: 'Koné Moussa',
     telephone: '0102030405',
     ville: 'Abidjan',
-    adresse: 'Cocody / Angré',
+    adresse: 'Cocody / Yopougon',
     vehicule: 'Tricycle',
     createdAt: new Date().toISOString()
   }
@@ -324,6 +407,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [vendorViewMode, setVendorViewMode] = useState('depot');
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
   const [selectedPlan, setSelectedPlan] = useState(SUBSCRIPTION_PLANS[1]);
@@ -335,12 +419,12 @@ export default function App() {
   // Formulaire de tarification du vendeur connecté
   const [vendorPricesForm, setVendorPricesForm] = useState(DEFAULT_VENDOR_PRICES);
 
-  // Champs d'inscription / connexion
+  // Champs d'inscription / connexion (Ville en saisie libre)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
   const [telephone, setTelephone] = useState('');
-  const [ville, setVille] = useState('Abidjan');
+  const [ville, setVille] = useState('');
   const [adresse, setAdresse] = useState('');
   const [vehicule, setVehicule] = useState('Moto');
 
@@ -352,9 +436,9 @@ export default function App() {
 
   // Paramètres de commande client
   const [selectedMarque, setSelectedMarque] = useState(MARQUES_GAZ[0]);
-  const [selectedCylinder, setSelectedCylinder] = useState(CYLINDER_TYPES[1]);
+  const [selectedCylinder, setSelectedCylinder] = useState(CYLINDER_TYPES[0]); // B6 par défaut
   const [operationType, setOperationType] = useState('recharge');
-  const [deliveryMode, setDeliveryMode] = useState('livraison'); // 'livraison' | 'retrait'
+  const [deliveryMode, setDeliveryMode] = useState('livraison');
   const [quantite, setQuantite] = useState('1');
   const [adresseLivraison, setAdresseLivraison] = useState('');
   const [selectedVendorId, setSelectedVendorId] = useState(null);
@@ -362,84 +446,82 @@ export default function App() {
   const [searchDepot, setSearchDepot] = useState('');
   const [orderSuccessBanner, setOrderSuccessBanner] = useState('');
 
-  const [allOrders, setAllOrders] = useState([
-    {
-      id: 'CMD-801',
-      date: new Date().toLocaleDateString('fr-FR'),
-      clientId: 'CLI-DEFAULT',
-      clientNom: 'Kouassi Yves',
-      clientPhone: '0505050505',
-      ville: 'Abidjan',
-      type: 'TotalEnergies B12 (12.5 kg)',
-      operation: 'Recharge',
-      deliveryMode: 'livraison',
-      qte: 1,
-      gasSubtotal: 5500,
-      deliveryFee: 500,
-      appCommission: 375,
-      vendorNet: 5225,
-      driverNet: 400,
-      total: '6 000 FCFA',
-      adresse: 'Angré Star 10',
-      targetVendorId: 'DEP-DEFAULT',
-      targetVendorNom: 'Dépôt Angré 8e Tranche',
-      status: 'available',
-      assignedVendorId: null,
-      assignedVendorNom: null,
-      assignedDriverId: null,
-      assignedDriverNom: null,
-      assignedDriverPhone: null,
-    },
-    {
-      id: 'CMD-802',
-      date: new Date().toLocaleDateString('fr-FR'),
-      clientId: 'CLI-OTHER',
-      clientNom: 'Mme Traoré',
-      clientPhone: '0506070809',
-      ville: 'Abidjan',
-      type: 'Shell Gas B6 (6 kg)',
-      operation: 'Achat Neuf',
-      deliveryMode: 'retrait',
-      qte: 1,
-      gasSubtotal: 13000,
-      deliveryFee: 0,
-      appCommission: 650,
-      vendorNet: 12350,
-      driverNet: 0,
-      total: '13 000 FCFA',
-      adresse: 'Retrait au dépôt',
-      targetVendorId: 'DEP-DEFAULT',
-      targetVendorNom: 'Dépôt Angré 8e Tranche',
-      status: 'available',
-      assignedVendorId: null,
-      assignedVendorNom: null,
-      assignedDriverId: null,
-      assignedDriverNom: null,
-      assignedDriverPhone: null,
-    }
-  ]);
+  const [allOrders, setAllOrders] = useState([]);
 
   useEffect(() => {
-    checkFirstLaunchStatus();
-    loadStoredUsers();
-    const timer = setTimeout(() => setIsAppReady(true), 600);
+    initAppData();
+    const timer = setTimeout(() => setIsAppReady(true), 500);
     return () => clearTimeout(timer);
   }, []);
 
-  const loadStoredUsers = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('@registered_users_v5');
-      if (stored) setRegisteredUsers(JSON.parse(stored));
-    } catch (e) {}
+  // Fusionne les utilisateurs locaux et distants sans écraser les comptes existants
+  const mergeUsersLists = (baseList, incomingList) => {
+    const map = new Map();
+    baseList.forEach(u => {
+      if (u?.email) map.set(u.email.toLowerCase(), u);
+    });
+    incomingList.forEach(u => {
+      if (u?.email) {
+        const key = u.email.toLowerCase();
+        const existing = map.get(key);
+        map.set(key, existing ? { ...existing, ...u } : u);
+      }
+    });
+    return Array.from(map.values());
   };
 
-  const checkFirstLaunchStatus = async () => {
+  // Synchronisation avec le serveur Render + repli AsyncStorage local
+  const syncAppState = async (localUsersOverride = null, localOrdersOverride = null) => {
+    setSyncing(true);
+    try {
+      const storedUsersRaw = await AsyncStorage.getItem(STORAGE_USERS_KEY);
+      const storedOrdersRaw = await AsyncStorage.getItem(STORAGE_ORDERS_KEY);
+
+      let mergedUsers = localUsersOverride || (storedUsersRaw ? JSON.parse(storedUsersRaw) : DEFAULT_USERS);
+      let mergedOrders = localOrdersOverride || (storedOrdersRaw ? JSON.parse(storedOrdersRaw) : []);
+
+      // Tentative de synchronisation réseau avec le backend Render (multi-appareils)
+      try {
+        const response = await fetch(`${API_BASE_URL}/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ users: mergedUsers, orders: mergedOrders }),
+        });
+        if (response.ok) {
+          const remoteData = await response.json();
+          if (Array.isArray(remoteData.users)) {
+            mergedUsers = mergeUsersLists(mergedUsers, remoteData.users);
+          }
+          if (Array.isArray(remoteData.orders)) {
+            const orderMap = new Map();
+            [...mergedOrders, ...remoteData.orders].forEach(o => orderMap.set(o.id, o));
+            mergedOrders = Array.from(orderMap.values());
+          }
+        }
+      } catch (networkErr) {
+        // Hors-ligne ou endpoint /api/sync non encore déployé : conservation locale intacte
+      }
+
+      setRegisteredUsers(mergedUsers);
+      setAllOrders(mergedOrders);
+      await AsyncStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(mergedUsers));
+      await AsyncStorage.setItem(STORAGE_ORDERS_KEY, JSON.stringify(mergedOrders));
+      return { users: mergedUsers, orders: mergedOrders };
+    } catch (e) {
+      return { users: registeredUsers, orders: allOrders };
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const initAppData = async () => {
     try {
       const value = await AsyncStorage.getItem('@has_seen_onboarding');
       setHasSeenOnboarding(value !== null);
     } catch (e) {
       setHasSeenOnboarding(false);
     }
+    await syncAppState();
   };
 
   const handleFinishOnboarding = async () => {
@@ -482,14 +564,14 @@ export default function App() {
     ? (vendorViewMode === 'client' ? 'client' : 'depot')
     : user.role;
 
-  const userCity = (user?.ville || 'Abidjan').trim();
+  const userCity = (user?.ville || '').trim();
+  const normalizedUserCity = normalizeText(userCity);
 
   const remainingSubDays = user?.role === 'depot' ? getRemainingSubscriptionDays(user) : null;
   const isVendorSubscriptionExpired = user?.role === 'depot' && remainingSubDays <= 0;
 
-  // Extraction du prix configuré par un vendeur pour un format et un type d'opération donnés
   const getVendorUnitPrice = (vendorObj, cylinderId, opType) => {
-    const cylMeta = CYLINDER_TYPES.find(c => c.id === cylinderId) || CYLINDER_TYPES[1];
+    const cylMeta = CYLINDER_TYPES.find(c => c.id === cylinderId) || CYLINDER_TYPES[0];
     const customPrices = vendorObj?.prices?.[cylinderId];
     if (customPrices) {
       const parsed = parseInt(opType === 'recharge' ? customPrices.recharge : customPrices.achat, 10);
@@ -498,22 +580,26 @@ export default function App() {
     return opType === 'recharge' ? cylMeta.defaultRecharge : cylMeta.defaultAchat;
   };
 
-  // Liste des vendeurs actifs situés STRICTEMENT dans la même ville que le client
+  // Offres de TOUS les vendeurs actifs situés dans la même ville que le client
+  const clientDeliveryLocality = (adresseLivraison || user?.adresse || userCity).trim();
+
   const localCityVendors = registeredUsers
     .filter(
       (u) =>
         u.role === 'depot' &&
-        (u.ville || '').trim().toLowerCase() === userCity.toLowerCase() &&
+        normalizeText(u.ville) === normalizedUserCity &&
         getRemainingSubscriptionDays(u) > 0
     )
-    .map((v) => ({
-      ...v,
-      distanceLabel: v.distanceKm ? `${v.distanceKm} km` : 'Proche',
-      currentOfferPrice: getVendorUnitPrice(v, selectedCylinder.id, operationType),
-    }))
+    .map((v) => {
+      const quote = calculateDeliveryQuote(v, clientDeliveryLocality, userCity);
+      return {
+        ...v,
+        currentOfferPrice: getVendorUnitPrice(v, selectedCylinder.id, operationType),
+        deliveryQuote: quote,
+      };
+    })
     .sort((a, b) => a.currentOfferPrice - b.currentOfferPrice);
 
-  // Vendeur sélectionné par le client (par défaut l'offre la moins chère de sa ville)
   const activeOfferVendor =
     localCityVendors.find((v) => v.id === selectedVendorId) || localCityVendors[0] || null;
 
@@ -523,7 +609,16 @@ export default function App() {
     ? selectedCylinder.defaultRecharge
     : selectedCylinder.defaultAchat;
 
-  const currentFinancials = calculateOrderFinancials(activeUnitPrice, quantite, deliveryMode);
+  const activeDeliveryQuote = activeOfferVendor
+    ? activeOfferVendor.deliveryQuote
+    : { distanceKm: 1.5, deliveryFee: MIN_DELIVERY_FEE, appDeliveryCommission: 80, driverNet: 320 };
+
+  const currentFinancials = calculateOrderFinancials(
+    activeUnitPrice,
+    quantite,
+    deliveryMode,
+    activeDeliveryQuote
+  );
 
   const switchVendorMode = (targetMode) => {
     if (!user || user.role !== 'depot' || isVendorSubscriptionExpired || vendorViewMode === targetMode) return;
@@ -533,16 +628,10 @@ export default function App() {
 
   const persistUserUpdate = async (updatedUserObj) => {
     setUser(updatedUserObj);
-    const updatedList = registeredUsers.map(u =>
-      u.email === updatedUserObj.email ? { ...u, ...updatedUserObj } : u
-    );
-    const finalList = updatedList.some(u => u.email === updatedUserObj.email)
-      ? updatedList
-      : [...updatedList, updatedUserObj];
-    setRegisteredUsers(finalList);
-    try {
-      await AsyncStorage.setItem('@registered_users_v5', JSON.stringify(finalList));
-    } catch (e) {}
+    const storedRaw = await AsyncStorage.getItem(STORAGE_USERS_KEY);
+    const latestUsers = storedRaw ? JSON.parse(storedRaw) : registeredUsers;
+    const updatedList = mergeUsersLists(latestUsers, [updatedUserObj]);
+    await syncAppState(updatedList, null);
   };
 
   const handleSaveVendorPrices = async () => {
@@ -563,7 +652,7 @@ export default function App() {
     };
     setVendorPricesForm(sanitizedPrices);
     await persistUserUpdate({ ...user, prices: sanitizedPrices });
-    Alert.alert('Tarifs enregistrés', `Vos offres pour ${user.ville} sont maintenant visibles par les clients.`);
+    Alert.alert('Offres publiées', `Vos tarifs sont visibles par tous les clients de ${user.ville}.`);
   };
 
   const handleRenewSubscription = async () => {
@@ -604,74 +693,68 @@ export default function App() {
   };
 
   const handleRegister = async (type) => {
-    if (!nom || !telephone || !email || !password || !ville.trim()) {
-      Alert.alert('Champs requis', 'Complétez les informations obligatoires dont votre ville.');
-      return;
-    }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const existingAccount = registeredUsers.find(u => u.email === cleanEmail);
-    if (existingAccount) {
-      Alert.alert('Email utilisé', `Déjà associé à un compte ${ROLE_LABELS[existingAccount.role]}.`);
+    if (!nom.trim() || !telephone.trim() || !email.trim() || !password.trim() || !ville.trim()) {
+      Alert.alert('Champs requis', 'Complétez tous les champs obligatoires, y compris votre ville.');
       return;
     }
 
     setLoading(true);
+    const { users: latestUsers } = await syncAppState();
+    const cleanEmail = email.trim().toLowerCase();
+
+    const existingAccount = latestUsers.find(u => u.email.toLowerCase() === cleanEmail);
+    if (existingAccount) {
+      setLoading(false);
+      Alert.alert('Email utilisé', `Déjà associé à un compte ${ROLE_LABELS[existingAccount.role]}.`);
+      return;
+    }
+
     const nowIso = new Date().toISOString();
     const cleanCity = ville.trim();
+    const cleanLocality = adresse.trim() || cleanCity;
+
     const newUser = {
-      id: `${type === 'depot' ? 'DEP' : type === 'livreur' ? 'LIV' : 'CLI'}-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: `${type === 'depot' ? 'DEP' : type === 'livreur' ? 'LIV' : 'CLI'}-${Date.now().toString().slice(-5)}`,
       nom: type === 'depot' && !nom.trim().toLowerCase().startsWith('dépôt') ? `Dépôt ${nom.trim()}` : nom.trim(),
       email: cleanEmail,
       telephone: telephone.trim(),
       ville: cleanCity,
-      adresse: adresse.trim() || cleanCity,
-      distanceKm: 0.5,
+      adresse: cleanLocality,
       role: type,
       vehicule: type === 'livreur' ? vehicule : null,
       createdAt: nowIso,
       subscriptionExpiresAt: type === 'depot' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
-      isSubscribed: false,
-      prices: type === 'depot' ? DEFAULT_VENDOR_PRICES : null,
+      isSubscribed: type === 'depot',
+      prices: type === 'depot' ? { ...DEFAULT_VENDOR_PRICES } : null,
     };
 
-    const updatedUsers = [...registeredUsers, newUser];
-    setRegisteredUsers(updatedUsers);
-    try {
-      await AsyncStorage.setItem('@registered_users_v5', JSON.stringify(updatedUsers));
-    } catch (e) {}
+    const updatedUsers = mergeUsersLists(latestUsers, [newUser]);
+    await syncAppState(updatedUsers, null);
 
     if (type === 'depot') {
       setVendorViewMode('depot');
-      setVendorPricesForm(DEFAULT_VENDOR_PRICES);
+      setVendorPricesForm({ ...DEFAULT_VENDOR_PRICES });
     }
 
     setUser(newUser);
     setSelectedVendorId(null);
     setPaymentPhone(telephone.trim());
-    if (type === 'client' || type === 'depot') setAdresseLivraison(adresse.trim());
+    setAdresseLivraison(cleanLocality);
     setDashboardTab('home');
     setLoading(false);
   };
 
   const handleLogin = async () => {
-    if (!email || !password) {
+    if (!email.trim() || !password.trim()) {
       Alert.alert('Champs requis', 'Entrez votre email et mot de passe.');
       return;
     }
 
     setLoading(true);
+    const { users: latestUsers } = await syncAppState();
     const cleanEmail = email.trim().toLowerCase();
-    let storedUsers = registeredUsers;
-    try {
-      const stored = await AsyncStorage.getItem('@registered_users_v5');
-      if (stored) {
-        storedUsers = JSON.parse(stored);
-        setRegisteredUsers(storedUsers);
-      }
-    } catch (e) {}
 
-    const foundUser = storedUsers.find(u => u.email === cleanEmail);
+    const foundUser = latestUsers.find(u => u.email.toLowerCase() === cleanEmail);
     if (!foundUser) {
       setLoading(false);
       Alert.alert('Compte introuvable', 'Vérifiez votre email ou créez un compte.');
@@ -680,8 +763,8 @@ export default function App() {
 
     const userData = {
       ...foundUser,
-      ville: foundUser.ville || 'Abidjan',
-      prices: foundUser.prices || DEFAULT_VENDOR_PRICES,
+      ville: (foundUser.ville || '').trim(),
+      prices: foundUser.prices || { ...DEFAULT_VENDOR_PRICES },
       subscriptionExpiresAt:
         foundUser.subscriptionExpiresAt ||
         (foundUser.role === 'depot'
@@ -694,11 +777,9 @@ export default function App() {
     setPaymentPhone(userData.telephone || '');
     if (userData.role === 'depot') {
       setVendorViewMode('depot');
-      setVendorPricesForm(userData.prices || DEFAULT_VENDOR_PRICES);
+      setVendorPricesForm(userData.prices || { ...DEFAULT_VENDOR_PRICES });
     }
-    if (userData.adresse && (userData.role === 'client' || userData.role === 'depot')) {
-      setAdresseLivraison(userData.adresse);
-    }
+    setAdresseLivraison(userData.adresse || userData.ville || '');
     setDashboardTab('home');
     setLoading(false);
   };
@@ -710,43 +791,41 @@ export default function App() {
       return;
     }
 
+    const { users: latestUsers } = await syncAppState();
     const driverEmail = `${newDriverPhone.trim()}@livreur.monan.ci`;
-    if (registeredUsers.some(u => u.email === driverEmail)) {
+    if (latestUsers.some(u => u.email.toLowerCase() === driverEmail)) {
       Alert.alert('Déjà inscrit', 'Ce numéro est déjà enregistré.');
       return;
     }
 
     const driverObj = {
-      id: `LIV-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: `LIV-${Date.now().toString().slice(-5)}`,
       nom: newDriverName.trim(),
       telephone: newDriverPhone.trim(),
       email: driverEmail,
-      ville: user?.ville || 'Abidjan',
-      adresse: user?.adresse || user?.ville || 'Abidjan',
+      ville: user?.ville || '',
+      adresse: user?.adresse || user?.ville || '',
       role: 'livreur',
       vehicule: newDriverVehicle,
       createdAt: new Date().toISOString()
     };
 
-    const updatedUsers = [...registeredUsers, driverObj];
-    setRegisteredUsers(updatedUsers);
-    try {
-      await AsyncStorage.setItem('@registered_users_v5', JSON.stringify(updatedUsers));
-    } catch (e) {}
+    const updatedUsers = mergeUsersLists(latestUsers, [driverObj]);
+    await syncAppState(updatedUsers, null);
 
     setNewDriverName('');
     setNewDriverPhone('');
     Alert.alert('Livreur ajouté', `${driverObj.nom} est disponible à ${driverObj.ville}.`);
   };
 
-  const handleCreateOrder = () => {
+  const handleCreateOrder = async () => {
     if (activeViewRole !== 'client') return;
     if (!activeOfferVendor) {
       Alert.alert('Aucun vendeur', `Aucun dépôt actif disponible à ${userCity}.`);
       return;
     }
     if (deliveryMode === 'livraison' && !adresseLivraison.trim()) {
-      Alert.alert('Adresse requise', 'Indiquez votre quartier ou point de repère pour la livraison.');
+      Alert.alert('Lieu requis', 'Indiquez votre quartier ou commune pour calculer la livraison.');
       return;
     }
 
@@ -764,6 +843,7 @@ export default function App() {
       type: `${selectedMarque.name} ${selectedCylinder.name}`,
       operation: operationType === 'recharge' ? 'Recharge' : 'Achat Neuf',
       deliveryMode,
+      distanceKm: fin.distanceKm,
       qte: fin.qty,
       gasSubtotal: fin.gasSubtotal,
       deliveryFee: fin.deliveryFee,
@@ -782,32 +862,34 @@ export default function App() {
       assignedDriverPhone: null,
     };
 
-    setAllOrders(prev => [newCmd, ...prev]);
+    const updatedOrders = [newCmd, ...allOrders];
+    await syncAppState(null, updatedOrders);
+
     setOrderSuccessBanner(`Commande ${newCmdId} envoyée à ${activeOfferVendor.nom}.`);
     setDashboardTab('orders_list');
     setLoading(false);
   };
 
-  const handleAcceptOrder = (orderId) => {
+  const handleAcceptOrder = async (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
-    setAllOrders(prev =>
-      prev.map(o =>
-        o.id === orderId
-          ? { ...o, status: 'accepted', assignedVendorId: user.id, assignedVendorNom: user.nom || 'Dépôt' }
-          : o
-      )
+    const updatedOrders = allOrders.map(o =>
+      o.id === orderId
+        ? { ...o, status: 'accepted', assignedVendorId: user.id, assignedVendorNom: user.nom || 'Dépôt' }
+        : o
     );
+    await syncAppState(null, updatedOrders);
     setDashboardTab('my_deliveries');
   };
 
-  const handleCompletePickupOrder = (orderId) => {
+  const handleCompletePickupOrder = async (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
-    setAllOrders(prev =>
-      prev.map(o => (o.id === orderId && o.assignedVendorId === user.id ? { ...o, status: 'delivered' } : o))
+    const updatedOrders = allOrders.map(o =>
+      o.id === orderId && o.assignedVendorId === user.id ? { ...o, status: 'delivered' } : o
     );
+    await syncAppState(null, updatedOrders);
   };
 
-  const handleAssignDriverToOrder = (orderId) => {
+  const handleAssignDriverToOrder = async (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
     if (cityDrivers.length === 0) {
       Alert.alert('Aucun livreur', `Ajoutez un livreur dans votre ville (${userCity}).`);
@@ -817,44 +899,43 @@ export default function App() {
     const chosenDriverId = selectedDriverByOrder[orderId] || cityDrivers[0].id;
     const driver = cityDrivers.find(d => d.id === chosenDriverId) || cityDrivers[0];
 
-    setAllOrders(prev =>
-      prev.map(o =>
-        o.id === orderId
-          ? {
-              ...o,
-              status: 'in_delivery',
-              assignedDriverId: driver.id,
-              assignedDriverNom: driver.nom,
-              assignedDriverPhone: driver.telephone
-            }
-          : o
-      )
+    const updatedOrders = allOrders.map(o =>
+      o.id === orderId
+        ? {
+            ...o,
+            status: 'in_delivery',
+            assignedDriverId: driver.id,
+            assignedDriverNom: driver.nom,
+            assignedDriverPhone: driver.telephone
+          }
+        : o
     );
+    await syncAppState(null, updatedOrders);
   };
 
-  const handleDriverClaimOrder = (orderId) => {
+  const handleDriverClaimOrder = async (orderId) => {
     if (user?.role !== 'livreur' || activeViewRole !== 'livreur') return;
-    setAllOrders(prev =>
-      prev.map(o =>
-        o.id === orderId
-          ? {
-              ...o,
-              status: 'in_delivery',
-              assignedDriverId: user.id,
-              assignedDriverNom: user.nom || 'Livreur',
-              assignedDriverPhone: user.telephone || ''
-            }
-          : o
-      )
+    const updatedOrders = allOrders.map(o =>
+      o.id === orderId
+        ? {
+            ...o,
+            status: 'in_delivery',
+            assignedDriverId: user.id,
+            assignedDriverNom: user.nom || 'Livreur',
+            assignedDriverPhone: user.telephone || ''
+          }
+        : o
     );
+    await syncAppState(null, updatedOrders);
     setDashboardTab('driver_active');
   };
 
-  const handleDriverConfirmDelivery = (orderId) => {
+  const handleDriverConfirmDelivery = async (orderId) => {
     if (user?.role !== 'livreur' || activeViewRole !== 'livreur') return;
-    setAllOrders(prev =>
-      prev.map(o => (o.id === orderId && o.assignedDriverId === user.id ? { ...o, status: 'delivered' } : o))
+    const updatedOrders = allOrders.map(o =>
+      o.id === orderId && o.assignedDriverId === user.id ? { ...o, status: 'delivered' } : o
     );
+    await syncAppState(null, updatedOrders);
   };
 
   const handleLogout = () => {
@@ -873,14 +954,14 @@ export default function App() {
   );
 
   const cityDrivers = registeredUsers.filter(
-    u => u.role === 'livreur' && (u.ville || '').trim().toLowerCase() === userCity.toLowerCase()
+    u => u.role === 'livreur' && normalizeText(u.ville) === normalizedUserCity
   );
 
   const availableOrdersForVendors = activeViewRole === 'depot'
     ? allOrders.filter(
         c =>
           c.status === 'available' &&
-          (c.ville || '').trim().toLowerCase() === userCity.toLowerCase() &&
+          normalizeText(c.ville) === normalizedUserCity &&
           (!c.targetVendorId || c.targetVendorId === user?.id)
       )
     : [];
@@ -895,7 +976,7 @@ export default function App() {
           c.status === 'accepted' &&
           c.deliveryMode === 'livraison' &&
           !c.assignedDriverId &&
-          (c.ville || '').trim().toLowerCase() === userCity.toLowerCase()
+          normalizeText(c.ville) === normalizedUserCity
       )
     : [];
 
@@ -963,7 +1044,7 @@ export default function App() {
     }
     return [
       { id: 'home', label: 'Accueil', badge: 0 },
-      { id: 'depots', label: 'Offres', badge: localCityVendors.length },
+      { id: 'depots', label: 'Vendeurs', badge: localCityVendors.length },
       { id: 'order', label: 'Commander', badge: 0 },
       { id: 'orders_list', label: 'Suivi', badge: myClientOrders.filter(o => o.status !== 'delivered').length },
     ];
@@ -1048,6 +1129,10 @@ export default function App() {
 
         {user && (
           <View style={styles.headerActions}>
+            <AnimatedButton style={styles.syncBtn} onPress={() => syncAppState()} disabled={syncing}>
+              <Text style={styles.syncBtnText}>{syncing ? '...' : '↻'}</Text>
+            </AnimatedButton>
+
             {user.role === 'depot' && !isVendorSubscriptionExpired && (
               <View style={styles.segmentedSwitch}>
                 <Pressable
@@ -1236,7 +1321,7 @@ export default function App() {
                         <>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('depots')}>
                             <Text style={styles.kpiNum}>{localCityVendors.length}</Text>
-                            <Text style={styles.kpiLabel}>Dépôts à {userCity}</Text>
+                            <Text style={styles.kpiLabel}>Vendeurs à {userCity}</Text>
                           </Pressable>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('orders_list')}>
                             <Text style={styles.kpiNum}>{myClientOrders.length}</Text>
@@ -1245,6 +1330,59 @@ export default function App() {
                         </>
                       )}
                     </View>
+
+                    {/* CLIENT : APERÇU DIRECT DES OFFRES DES VENDEURS DE SA VILLE */}
+                    {activeViewRole === 'client' && (
+                      <View style={styles.cardBox}>
+                        <View style={styles.rowBetween}>
+                          <Text style={styles.cardBoxTitle}>Offres disponibles à {userCity}</Text>
+                          <View style={styles.cityPill}>
+                            <Text style={styles.cityPillText}>{localCityVendors.length} dépôt(s)</Text>
+                          </View>
+                        </View>
+
+                        {localCityVendors.length === 0 ? (
+                          <View style={styles.emptyStateBox}>
+                            <Text style={styles.emptyStateText}>Aucun vendeur enregistré à {userCity}</Text>
+                          </View>
+                        ) : (
+                          localCityVendors.map((vendor) => (
+                            <View key={vendor.id} style={styles.orderCard}>
+                              <View style={styles.rowBetween}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.listRowTitle}>{vendor.nom}</Text>
+                                  <Text style={styles.mutedText}>
+                                    {vendor.adresse} • {vendor.deliveryQuote.distanceKm} km (Livraison : {vendor.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} F)
+                                  </Text>
+                                </View>
+                                <AnimatedButton
+                                  style={styles.compactPrimaryBtn}
+                                  onPress={() => {
+                                    setSelectedVendorId(vendor.id);
+                                    setDashboardTab('order');
+                                  }}
+                                >
+                                  <Text style={styles.compactPrimaryBtnText}>Choisir</Text>
+                                </AnimatedButton>
+                              </View>
+
+                              <View style={styles.vendorPriceBadgesRow}>
+                                <View style={styles.miniPriceTag}>
+                                  <Text style={styles.miniPriceTagText}>
+                                    B6 Rech : {getVendorUnitPrice(vendor, 'B6', 'recharge').toLocaleString('fr-FR')} F
+                                  </Text>
+                                </View>
+                                <View style={styles.miniPriceTag}>
+                                  <Text style={styles.miniPriceTagText}>
+                                    B12 Rech : {getVendorUnitPrice(vendor, 'B12', 'recharge').toLocaleString('fr-FR')} F
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                          ))
+                        )}
+                      </View>
+                    )}
 
                     {/* ACTIONS RAPIDES */}
                     {activeViewRole === 'depot' && (
@@ -1270,14 +1408,9 @@ export default function App() {
                     )}
 
                     {activeViewRole === 'client' && (
-                      <View style={{ gap: 10 }}>
-                        <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.btnPrimaryText}>Commander du gaz</Text>
-                        </AnimatedButton>
-                        <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('depots')}>
-                          <Text style={styles.btnSecondaryText}>Comparer les offres ({userCity})</Text>
-                        </AnimatedButton>
-                      </View>
+                      <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('order')}>
+                        <Text style={styles.btnPrimaryText}>Commander du gaz</Text>
+                      </AnimatedButton>
                     )}
                   </View>
                 )}
@@ -1303,7 +1436,9 @@ export default function App() {
                                 styles.badgePillText,
                                 { color: order.deliveryMode === 'livraison' ? '#38BDF8' : '#FBBF24' }
                               ]}>
-                                {order.deliveryMode === 'livraison' ? 'Livraison' : 'Retrait dépôt'}
+                                {order.deliveryMode === 'livraison'
+                                  ? `Livraison (${order.distanceKm || 1.5} km)`
+                                  : 'Retrait dépôt'}
                               </Text>
                             </View>
                           </View>
@@ -1311,7 +1446,7 @@ export default function App() {
                           <Text style={styles.mutedText}>{order.clientNom} ({order.clientPhone})</Text>
                           <Text style={styles.mutedText}>{order.adresse}</Text>
 
-                          {/* VENTILATION FINANCIÈRE VENDEUR */}
+                          {/* VENTILATION FINANCIÈRE */}
                           <View style={styles.financeSplitBox}>
                             <View style={styles.rowBetween}>
                               <Text style={styles.financeLabel}>Total client</Text>
@@ -1325,7 +1460,7 @@ export default function App() {
                             </View>
                             {order.deliveryMode === 'livraison' && (
                               <View style={styles.rowBetween}>
-                                <Text style={styles.financeLabel}>Part livreur</Text>
+                                <Text style={styles.financeLabel}>Part livreur ({order.distanceKm || 1.5} km)</Text>
                                 <Text style={[styles.financeValue, { color: '#38BDF8' }]}>
                                   {(order.driverNet || 0).toLocaleString('fr-FR')} FCFA
                                 </Text>
@@ -1392,7 +1527,7 @@ export default function App() {
                             ) : !isAssigned ? (
                               <View style={styles.dividerSection}>
                                 <Text style={styles.microLabel}>
-                                  CHOISIR UN LIVREUR À {userCity.toUpperCase()} (GAIN : {(order.driverNet || 400).toLocaleString('fr-FR')} F)
+                                  LIVREUR À {userCity.toUpperCase()} • GAIN COURSE ({order.distanceKm || 1.5} KM) : {(order.driverNet || 0).toLocaleString('fr-FR')} F
                                 </Text>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6, marginBottom: 10 }}>
                                   <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -1420,7 +1555,7 @@ export default function App() {
                             ) : (
                               <View style={styles.driverAssignedStrip}>
                                 <Text style={styles.driverAssignedText}>
-                                  Livreur : {order.assignedDriverNom} ({order.assignedDriverPhone}) • Part : {(order.driverNet || 400).toLocaleString('fr-FR')} F
+                                  Livreur : {order.assignedDriverNom} ({order.assignedDriverPhone}) • Gain : {(order.driverNet || 0).toLocaleString('fr-FR')} F
                                 </Text>
                               </View>
                             )}
@@ -1558,10 +1693,10 @@ export default function App() {
                       availableOrdersForDrivers.map((order) => (
                         <View key={order.id} style={styles.orderCard}>
                           <View style={styles.rowBetween}>
-                            <Text style={styles.orderId}>{order.id}</Text>
+                            <Text style={styles.orderId}>{order.id} • {order.distanceKm || 1.5} km</Text>
                             <View style={[styles.badgePill, { backgroundColor: 'rgba(74, 222, 128, 0.15)' }]}>
                               <Text style={[styles.badgePillText, { color: '#4ADE80' }]}>
-                                Gain : {(order.driverNet || 400).toLocaleString('fr-FR')} F
+                                Gain : {(order.driverNet || 0).toLocaleString('fr-FR')} F
                               </Text>
                             </View>
                           </View>
@@ -1591,9 +1726,9 @@ export default function App() {
                       myDriverActiveOrders.map((order) => (
                         <View key={order.id} style={styles.orderCard}>
                           <View style={styles.rowBetween}>
-                            <Text style={styles.orderId}>{order.id}</Text>
+                            <Text style={styles.orderId}>{order.id} • {order.distanceKm || 1.5} km</Text>
                             <Text style={[styles.priceHighlight, { color: '#4ADE80' }]}>
-                              Votre part : {(order.driverNet || 400).toLocaleString('fr-FR')} F
+                              Votre part : {(order.driverNet || 0).toLocaleString('fr-FR')} F
                             </Text>
                           </View>
                           <Text style={styles.orderMainText}>{order.qte}× {order.type} ({order.operation})</Text>
@@ -1623,10 +1758,10 @@ export default function App() {
                         <View key={cmd.id} style={styles.listRowCard}>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.listRowTitle}>{cmd.id} • {cmd.qte}× {cmd.type}</Text>
-                            <Text style={styles.mutedText}>{cmd.clientNom} • {cmd.date}</Text>
+                            <Text style={styles.mutedText}>{cmd.clientNom} • {cmd.distanceKm || 1.5} km • {cmd.date}</Text>
                           </View>
                           <Text style={[styles.priceHighlight, { color: '#4ADE80' }]}>
-                            +{(cmd.driverNet || 400).toLocaleString('fr-FR')} F
+                            +{(cmd.driverNet || 0).toLocaleString('fr-FR')} F
                           </Text>
                         </View>
                       ))
@@ -1634,19 +1769,19 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CLIENT : OFFRES DES DÉPÔTS DE SA VILLE */}
+                {/* CLIENT : LISTE COMPLÈTE DES VENDEURS DE SA VILLE */}
                 {activeViewRole === 'client' && dashboardTab === 'depots' && (
                   <View style={styles.cardBox}>
                     <View style={styles.rowBetween}>
-                      <Text style={styles.cardBoxTitle}>Dépôts à {userCity}</Text>
+                      <Text style={styles.cardBoxTitle}>Vendeurs à {userCity}</Text>
                       <View style={styles.cityPill}>
-                        <Text style={styles.cityPillText}>{userCity}</Text>
+                        <Text style={styles.cityPillText}>{filteredDepotsList.length} trouvé(s)</Text>
                       </View>
                     </View>
 
                     <TextInput
                       style={styles.input}
-                      placeholder="Filtrer par quartier ou nom de dépôt..."
+                      placeholder="Rechercher par quartier ou nom de dépôt..."
                       placeholderTextColor="#64748B"
                       value={searchDepot}
                       onChangeText={setSearchDepot}
@@ -1659,13 +1794,16 @@ export default function App() {
                     ) : (
                       filteredDepotsList.map((depot) => {
                         const b6Rech = getVendorUnitPrice(depot, 'B6', 'recharge');
+                        const b6Achat = getVendorUnitPrice(depot, 'B6', 'achat');
                         const b12Rech = getVendorUnitPrice(depot, 'B12', 'recharge');
                         return (
                           <View key={depot.id} style={styles.orderCard}>
                             <View style={styles.rowBetween}>
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.listRowTitle}>{depot.nom}</Text>
-                                <Text style={styles.mutedText}>{depot.adresse} • {depot.distanceLabel}</Text>
+                                <Text style={styles.mutedText}>
+                                  {depot.adresse} • {depot.deliveryQuote.distanceKm} km • Livraison : {depot.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} F
+                                </Text>
                               </View>
                               <AnimatedButton
                                 style={styles.compactPrimaryBtn}
@@ -1683,6 +1821,9 @@ export default function App() {
                                 <Text style={styles.miniPriceTagText}>B6 Rech: {b6Rech.toLocaleString('fr-FR')} F</Text>
                               </View>
                               <View style={styles.miniPriceTag}>
+                                <Text style={styles.miniPriceTagText}>B6 Neuf: {b6Achat.toLocaleString('fr-FR')} F</Text>
+                              </View>
+                              <View style={styles.miniPriceTag}>
                                 <Text style={styles.miniPriceTagText}>B12 Rech: {b12Rech.toLocaleString('fr-FR')} F</Text>
                               </View>
                             </View>
@@ -1693,7 +1834,7 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CLIENT : COMMANDE AVEC COMPARATEUR D'OFFRES VENDEURS & LIVRAISON */}
+                {/* CLIENT : COMMANDE AVEC COMPARATEUR D'OFFRES VENDEURS & CALCUL LIVRAISON AU KM */}
                 {activeViewRole === 'client' && dashboardTab === 'order' && (
                   <View style={styles.cardBox}>
                     <View style={styles.rowBetween}>
@@ -1760,11 +1901,20 @@ export default function App() {
                       </View>
                     </ScrollView>
 
+                    <Text style={styles.label}>3. Votre lieu de livraison ({userCity})</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ex : Yopougon, Cocody Angré, Air France..."
+                      placeholderTextColor="#64748B"
+                      value={adresseLivraison}
+                      onChangeText={setAdresseLivraison}
+                    />
+
                     {/* OFFRES DES VENDEURS DE LA VILLE DU CLIENT */}
-                    <Text style={styles.label}>3. Offres des vendeurs à {userCity}</Text>
+                    <Text style={styles.label}>4. Choisissez votre vendeur à {userCity} ({localCityVendors.length})</Text>
                     {localCityVendors.length === 0 ? (
                       <View style={styles.emptyStateBox}>
-                        <Text style={styles.emptyStateText}>Aucun vendeur actif à {userCity}</Text>
+                        <Text style={styles.emptyStateText}>Aucun vendeur actif enregistré à {userCity}</Text>
                       </View>
                     ) : (
                       <View style={{ gap: 8, marginBottom: 14 }}>
@@ -1781,14 +1931,17 @@ export default function App() {
                                   {vendor.nom}
                                 </Text>
                                 <Text style={styles.mutedText}>
-                                  {vendor.adresse} • {vendor.distanceLabel}
+                                  Localité : {vendor.adresse} • Distance : {vendor.deliveryQuote.distanceKm} km
+                                </Text>
+                                <Text style={styles.deliveryEstimateTag}>
+                                  Livraison estimée : {vendor.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} FCFA
                                 </Text>
                               </View>
                               <View style={{ alignItems: 'flex-end' }}>
                                 <Text style={styles.selectRowPrice}>
                                   {vendor.currentOfferPrice.toLocaleString('fr-FR')} F
                                 </Text>
-                                <Text style={styles.microLabel}>/ unité</Text>
+                                <Text style={styles.microLabel}>/ bouteille</Text>
                               </View>
                             </AnimatedButton>
                           );
@@ -1796,7 +1949,7 @@ export default function App() {
                       </View>
                     )}
 
-                    <Text style={styles.label}>4. Quantité & Mode de réception</Text>
+                    <Text style={styles.label}>5. Quantité & Mode de réception</Text>
                     <QuantityStepper value={quantite} onChange={setQuantite} />
 
                     <View style={styles.segmentedRow}>
@@ -1806,7 +1959,7 @@ export default function App() {
                         onPress={() => setDeliveryMode('livraison')}
                       >
                         <Text style={[styles.segBtnText, deliveryMode === 'livraison' && styles.segBtnTextActive]}>
-                          Livraison (+{STANDARD_DELIVERY_FEE} F)
+                          Livraison (+{activeDeliveryQuote.deliveryFee.toLocaleString('fr-FR')} F)
                         </Text>
                       </AnimatedButton>
                       <AnimatedButton
@@ -1820,20 +1973,7 @@ export default function App() {
                       </AnimatedButton>
                     </View>
 
-                    {deliveryMode === 'livraison' && (
-                      <>
-                        <Text style={styles.label}>Adresse de livraison ({userCity})</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="Quartier, rue, repère..."
-                          placeholderTextColor="#64748B"
-                          value={adresseLivraison}
-                          onChangeText={setAdresseLivraison}
-                        />
-                      </>
-                    )}
-
-                    {/* RÉCAPITULATIF CHIFFRÉ & VENTILATION */}
+                    {/* RÉCAPITULATIF CHIFFRÉ & VENTILATION AUTOMATIQUE */}
                     <View style={styles.financeSplitBox}>
                       <View style={styles.rowBetween}>
                         <Text style={styles.financeLabel}>
@@ -1844,10 +1984,14 @@ export default function App() {
                         </Text>
                       </View>
                       <View style={styles.rowBetween}>
-                        <Text style={styles.financeLabel}>Frais de livraison</Text>
+                        <Text style={styles.financeLabel}>
+                          {deliveryMode === 'livraison'
+                            ? `Livraison (${activeOfferVendor?.adresse || ''} → ${clientDeliveryLocality}, ${currentFinancials.distanceKm} km)`
+                            : 'Retrait au dépôt'}
+                        </Text>
                         <Text style={styles.financeValue}>
                           {currentFinancials.deliveryFee === 0
-                            ? 'Gratuit (Retrait)'
+                            ? '0 FCFA'
                             : `${currentFinancials.deliveryFee.toLocaleString('fr-FR')} FCFA`}
                         </Text>
                       </View>
@@ -1858,7 +2002,7 @@ export default function App() {
                         </Text>
                       </View>
                       <Text style={styles.financeNote}>
-                        Répartition : Vendeur {currentFinancials.vendorNet.toLocaleString('fr-FR')} F
+                        Ventilation : Vendeur {currentFinancials.vendorNet.toLocaleString('fr-FR')} F
                         {deliveryMode === 'livraison'
                           ? ` • Livreur ${currentFinancials.driverNet.toLocaleString('fr-FR')} F`
                           : ''}
@@ -1910,7 +2054,8 @@ export default function App() {
                             </View>
                             <Text style={styles.orderMainText}>{cmd.qte}× {cmd.type} ({cmd.operation})</Text>
                             <Text style={styles.mutedText}>
-                              Dépôt : {cmd.assignedVendorNom || cmd.targetVendorNom} • {cmd.deliveryMode === 'livraison' ? 'Livraison' : 'Retrait'}
+                              Dépôt : {cmd.assignedVendorNom || cmd.targetVendorNom} •{' '}
+                              {cmd.deliveryMode === 'livraison' ? `Livraison (${cmd.distanceKm || 1.5} km)` : 'Retrait'}
                             </Text>
                             <View style={styles.rowBetween}>
                               <Text style={styles.mutedText}>{cmd.date}</Text>
@@ -1938,7 +2083,7 @@ export default function App() {
                     <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_client')}>
                       <View>
                         <Text style={styles.roleSelectTitle}>Client</Text>
-                        <Text style={styles.roleSelectSub}>Comparer les prix et commander</Text>
+                        <Text style={styles.roleSelectSub}>Comparer les offres et commander</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
                     </AnimatedButton>
@@ -1988,28 +2133,25 @@ export default function App() {
                   <Text style={styles.label}>Téléphone</Text>
                   <TextInput style={styles.input} keyboardType="phone-pad" placeholder="0700000000" placeholderTextColor="#64748B" value={telephone} onChangeText={setTelephone} />
 
-                  <Text style={styles.label}>Ville</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      {CITIES.map((c) => {
-                        const isSelected = ville.toLowerCase() === c.toLowerCase();
-                        return (
-                          <AnimatedButton
-                            key={c}
-                            style={[styles.chip, isSelected && styles.chipActive]}
-                            onPress={() => setVille(c)}
-                          >
-                            <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{c}</Text>
-                          </AnimatedButton>
-                        );
-                      })}
-                    </View>
-                  </ScrollView>
+                  <Text style={styles.label}>Ville (Saisie libre)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ex : Abidjan, Bouaké, Odienné, Daloa..."
+                    placeholderTextColor="#64748B"
+                    value={ville}
+                    onChangeText={setVille}
+                  />
 
                   <Text style={styles.label}>
-                    {currentScreen === 'register_livreur' ? 'Zone d’activité' : 'Quartier / Adresse'}
+                    {currentScreen === 'register_livreur' ? 'Zone / Commune d’activité' : 'Commune / Quartier'}
                   </Text>
-                  <TextInput style={styles.input} placeholder="Ex : Angré 8e Tranche" placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ex : Anyama, Yopougon, Cocody Angré..."
+                    placeholderTextColor="#64748B"
+                    value={adresse}
+                    onChangeText={setAdresse}
+                  />
 
                   {currentScreen === 'register_livreur' && (
                     <>
@@ -2163,7 +2305,9 @@ const styles = StyleSheet.create({
   brandTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },
   brandSub: { color: '#94A3B8', fontSize: 11, fontWeight: '600' },
 
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  syncBtn: { backgroundColor: '#1E293B', paddingHorizontal: 9, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#334155' },
+  syncBtnText: { color: '#38BDF8', fontSize: 12, fontWeight: '900' },
   segmentedSwitch: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 8, padding: 2, borderWidth: 1, borderColor: '#334155' },
   segmentItem: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
   segmentItemActive: { backgroundColor: '#F97316' },
@@ -2194,7 +2338,7 @@ const styles = StyleSheet.create({
   kpiLabel: { fontSize: 11, fontWeight: '600', color: '#94A3B8', marginTop: 2, textAlign: 'center' },
 
   cardBox: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#1E293B' },
-  cardBoxTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF', marginBottom: 14 },
+  cardBoxTitle: { fontSize: 17, fontWeight: '800', color: '#FFFFFF', marginBottom: 14 },
   subCard: { backgroundColor: '#1E293B', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#334155' },
 
   cityPill: { backgroundColor: 'rgba(249, 115, 22, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 14 },
@@ -2205,8 +2349,9 @@ const styles = StyleSheet.create({
   orderId: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
   orderMainText: { color: '#E2E8F0', fontSize: 13, fontWeight: '600', marginTop: 2 },
   priceHighlight: { color: '#F97316', fontWeight: '900', fontSize: 14 },
+  deliveryEstimateTag: { color: '#38BDF8', fontSize: 11, fontWeight: '700', marginTop: 3 },
 
-  vendorPriceBadgesRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  vendorPriceBadgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   miniPriceTag: { backgroundColor: '#0F172A', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#334155' },
   miniPriceTagText: { color: '#CBD5E1', fontSize: 11, fontWeight: '700' },
 
@@ -2236,7 +2381,7 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     gap: 5,
   },
-  financeLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600' },
+  financeLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600', flex: 1, paddingRight: 8 },
   financeValue: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   financeMuted: { color: '#64748B', fontSize: 11, fontWeight: '700' },
   financeTotalRow: { borderTopWidth: 1, borderTopColor: '#1E293B', paddingTop: 6, marginTop: 2 },
