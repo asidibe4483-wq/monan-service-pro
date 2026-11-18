@@ -70,11 +70,6 @@ const PAYMENT_OPERATORS = [
   },
 ];
 
-const PAYMENT_OPERATOR_ROWS = [
-  PAYMENT_OPERATORS.slice(0, 2),
-  PAYMENT_OPERATORS.slice(2, 4),
-];
-
 const VEHICLE_TYPES = ['Moto', 'Tricycle'];
 
 const ONBOARDING_SLIDES = [
@@ -889,7 +884,7 @@ export default function App() {
         >
           {user ? (
             isVendorSubscriptionExpired ? (
-              /* BLOCAGE ABONNEMENT EXPIRÉ — TUILES OPÉRATEURS STYLE 1XBET */
+              /* BLOCAGE ABONNEMENT EXPIRÉ — MINI-TUILES OPÉRATEURS */
               <FadeInView key="subscription-lock" style={styles.mainWrapper}>
                 <View style={styles.cardBox}>
                   <View style={styles.statusPillDanger}>
@@ -931,36 +926,25 @@ export default function App() {
                   </View>
 
                   <Text style={styles.label}>Moyen de paiement</Text>
-                  <View style={styles.operatorGrid}>
-                    {PAYMENT_OPERATOR_ROWS.map((row, rowIndex) => (
-                      <View key={`op-row-${rowIndex}`} style={styles.operatorRow}>
-                        {row.map((op) => {
-                          const isSelected = paymentMethod === op.name;
-                          return (
-                            <AnimatedButton
-                              key={op.id}
-                              containerStyle={{ flex: 1 }}
-                              style={[styles.operatorTile, isSelected && styles.operatorTileActive]}
-                              onPress={() => setPaymentMethod(op.name)}
-                            >
-                              {isSelected && (
-                                <View style={styles.operatorCheckBadge}>
-                                  <Text style={styles.operatorCheckText}>✓</Text>
-                                </View>
-                              )}
-                              <View style={styles.operatorImageArea}>
-                                <Image source={op.logo} style={styles.operatorTileLogo} resizeMode="contain" />
-                              </View>
-                              <View style={[styles.operatorTileFooter, isSelected && styles.operatorTileFooterActive]}>
-                                <Text style={[styles.operatorTileLabel, isSelected && styles.operatorTileLabelActive]}>
-                                  {op.name}
-                                </Text>
-                              </View>
-                            </AnimatedButton>
-                          );
-                        })}
-                      </View>
-                    ))}
+                  <View style={styles.operatorRow}>
+                    {PAYMENT_OPERATORS.map((op) => {
+                      const isSelected = paymentMethod === op.name;
+                      return (
+                        <AnimatedButton
+                          key={op.id}
+                          containerStyle={{ flex: 1 }}
+                          style={[styles.operatorTile, isSelected && styles.operatorTileActive]}
+                          onPress={() => setPaymentMethod(op.name)}
+                        >
+                          {isSelected && (
+                            <View style={styles.operatorCheckBadge}>
+                              <Text style={styles.operatorCheckText}>✓</Text>
+                            </View>
+                          )}
+                          <Image source={op.logo} style={styles.operatorTileLogo} resizeMode="contain" />
+                        </AnimatedButton>
+                      );
+                    })}
                   </View>
 
                   <Text style={styles.label}>Numéro {paymentMethod}</Text>
@@ -1844,22 +1828,22 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
   chipTextActive: { color: '#FFFFFF', fontWeight: '800' },
 
-  // GRILLE 2x2 OPÉRATEURS MOBILE MONEY
-  operatorGrid: {
-    gap: 10,
-    marginBottom: 16,
-  },
+  // MINI-TUILES OPÉRATEURS MOBILE MONEY
   operatorRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    marginBottom: 16,
   },
   operatorTile: {
-    width: '100%',
+    height: 48,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: '#334155',
-    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 6,
     position: 'relative',
   },
   operatorTileActive: {
@@ -1867,53 +1851,24 @@ const styles = StyleSheet.create({
   },
   operatorCheckBadge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: 3,
+    right: 3,
     zIndex: 2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: '#F97316',
     justifyContent: 'center',
     alignItems: 'center',
   },
   operatorCheckText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '900',
-  },
-  operatorImageArea: {
-    width: '100%',
-    height: 64,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
   },
   operatorTileLogo: {
     width: '85%',
-    height: 48,
-  },
-  operatorTileFooter: {
-    width: '100%',
-    paddingVertical: 6,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  operatorTileFooterActive: {
-    backgroundColor: '#F97316',
-    borderTopColor: '#F97316',
-  },
-  operatorTileLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  operatorTileLabelActive: {
-    color: '#FFFFFF',
+    height: 30,
   },
 
   stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 4, width: 132, justifyContent: 'space-between', marginBottom: 14 },
