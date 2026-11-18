@@ -47,7 +47,33 @@ const SUBSCRIPTION_PLANS = [
   { id: '1y', label: '1 An', days: 365, price: 18000, originalPrice: 24000, badge: '-25%' },
 ];
 
-const PAYMENT_METHODS = ['Wave', 'Orange Money', 'MTN MoMo', 'Moov Money'];
+const PAYMENT_OPERATORS = [
+  {
+    id: 'wave',
+    name: 'Wave',
+    shortLabel: 'Wave',
+    logo: require('./assets/wave.jpeg'),
+  },
+  {
+    id: 'orange',
+    name: 'Orange Money',
+    shortLabel: 'Orange',
+    logo: require('./assets/Orange.jpeg'),
+  },
+  {
+    id: 'mtn',
+    name: 'MTN MoMo',
+    shortLabel: 'MTN MoMo',
+    logo: require('./assets/MTN.jpeg'),
+  },
+  {
+    id: 'moov',
+    name: 'Moov Money',
+    shortLabel: 'Moov',
+    logo: require('./assets/Moov.jpeg'),
+  },
+];
+
 const VEHICLE_TYPES = ['Moto', 'Tricycle'];
 
 const ONBOARDING_SLIDES = [
@@ -820,7 +846,6 @@ export default function App() {
 
         {user && (
           <View style={styles.headerActions}>
-            {/* SÉLECTEUR SEGMENTÉ EXCLUSIF VENDEUR */}
             {user.role === 'depot' && !isVendorSubscriptionExpired && (
               <View style={styles.segmentedSwitch}>
                 <Pressable
@@ -856,7 +881,7 @@ export default function App() {
         >
           {user ? (
             isVendorSubscriptionExpired ? (
-              /* BLOCAGE ABONNEMENT EXPIRÉ */
+              /* BLOCAGE ABONNEMENT EXPIRÉ AVEC LOGOS OPÉRATEURS (.jpeg) */
               <FadeInView key="subscription-lock" style={styles.mainWrapper}>
                 <View style={styles.cardBox}>
                   <View style={styles.statusPillDanger}>
@@ -897,17 +922,30 @@ export default function App() {
                     })}
                   </View>
 
-                  <Text style={styles.label}>Paiement</Text>
-                  <View style={styles.chipRow}>
-                    {PAYMENT_METHODS.map((method) => {
-                      const isSelected = paymentMethod === method;
+                  <Text style={styles.label}>Opérateur Mobile Money</Text>
+                  <View style={styles.operatorGrid}>
+                    {PAYMENT_OPERATORS.map((op) => {
+                      const isSelected = paymentMethod === op.name;
                       return (
                         <AnimatedButton
-                          key={method}
-                          style={[styles.chip, isSelected && styles.chipActive]}
-                          onPress={() => setPaymentMethod(method)}
+                          key={op.id}
+                          style={[styles.operatorCard, isSelected && styles.operatorCardActive]}
+                          onPress={() => setPaymentMethod(op.name)}
                         >
-                          <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{method}</Text>
+                          <View style={styles.operatorLogoWrapper}>
+                            <Image source={op.logo} style={styles.operatorLogoImg} resizeMode="cover" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              numberOfLines={1}
+                              style={[styles.operatorName, isSelected && { color: '#FFFFFF' }]}
+                            >
+                              {op.shortLabel}
+                            </Text>
+                          </View>
+                          <View style={[styles.radioOuter, isSelected && styles.radioOuterActive]}>
+                            {isSelected && <View style={styles.radioInner} />}
+                          </View>
                         </AnimatedButton>
                       );
                     })}
@@ -1784,11 +1822,69 @@ const styles = StyleSheet.create({
   formatTitle: { fontSize: 13, fontWeight: '800', color: '#FFFFFF' },
   formatPrice: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginTop: 2 },
 
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
   chipActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
   chipText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
   chipTextActive: { color: '#FFFFFF', fontWeight: '800' },
+
+  operatorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 14,
+  },
+  operatorCard: {
+    width: '48.5%',
+    backgroundColor: '#1E293B',
+    borderWidth: 1.5,
+    borderColor: '#334155',
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  operatorCardActive: {
+    borderColor: '#F97316',
+    backgroundColor: '#263347',
+  },
+  operatorLogoWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  operatorLogoImg: {
+    width: '100%',
+    height: '100%',
+  },
+  operatorName: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  radioOuter: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#475569',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioOuterActive: {
+    borderColor: '#F97316',
+  },
+  radioInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#F97316',
+  },
 
   stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 4, width: 132, justifyContent: 'space-between', marginBottom: 14 },
   stepperBtn: { width: 34, height: 34, backgroundColor: '#F97316', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
