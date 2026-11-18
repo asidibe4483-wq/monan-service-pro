@@ -70,6 +70,11 @@ const PAYMENT_OPERATORS = [
   },
 ];
 
+const PAYMENT_OPERATOR_ROWS = [
+  PAYMENT_OPERATORS.slice(0, 2),
+  PAYMENT_OPERATORS.slice(2, 4),
+];
+
 const VEHICLE_TYPES = ['Moto', 'Tricycle'];
 
 const ONBOARDING_SLIDES = [
@@ -133,7 +138,7 @@ const FadeInView = ({ children, style, delay = 0 }) => {
   );
 };
 
-const AnimatedButton = ({ onPress, style, children, disabled }) => {
+const AnimatedButton = ({ onPress, style, containerStyle, children, disabled }) => {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -145,7 +150,13 @@ const AnimatedButton = ({ onPress, style, children, disabled }) => {
   };
 
   return (
-    <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={onPress} disabled={disabled}>
+    <Pressable
+      style={containerStyle}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={onPress}
+      disabled={disabled}
+    >
       <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   );
@@ -813,7 +824,8 @@ export default function App() {
               </AnimatedButton>
             )}
             <AnimatedButton
-              style={[styles.btnPrimary, { flex: 1 }]}
+              containerStyle={{ flex: 1 }}
+              style={styles.btnPrimary}
               onPress={() => (isLastSlide ? handleFinishOnboarding() : setOnboardingStep(prev => prev + 1))}
             >
               <Text style={styles.btnPrimaryText}>{isLastSlide ? 'Démarrer' : 'Suivant'}</Text>
@@ -920,30 +932,35 @@ export default function App() {
 
                   <Text style={styles.label}>Moyen de paiement</Text>
                   <View style={styles.operatorGrid}>
-                    {PAYMENT_OPERATORS.map((op) => {
-                      const isSelected = paymentMethod === op.name;
-                      return (
-                        <AnimatedButton
-                          key={op.id}
-                          style={[styles.operatorTile, isSelected && styles.operatorTileActive]}
-                          onPress={() => setPaymentMethod(op.name)}
-                        >
-                          {isSelected && (
-                            <View style={styles.operatorCheckBadge}>
-                              <Text style={styles.operatorCheckText}>✓</Text>
-                            </View>
-                          )}
-                          <View style={styles.operatorImageArea}>
-                            <Image source={op.logo} style={styles.operatorTileLogo} resizeMode="contain" />
-                          </View>
-                          <View style={[styles.operatorTileFooter, isSelected && styles.operatorTileFooterActive]}>
-                            <Text style={[styles.operatorTileLabel, isSelected && styles.operatorTileLabelActive]}>
-                              {op.name}
-                            </Text>
-                          </View>
-                        </AnimatedButton>
-                      );
-                    })}
+                    {PAYMENT_OPERATOR_ROWS.map((row, rowIndex) => (
+                      <View key={`op-row-${rowIndex}`} style={styles.operatorRow}>
+                        {row.map((op) => {
+                          const isSelected = paymentMethod === op.name;
+                          return (
+                            <AnimatedButton
+                              key={op.id}
+                              containerStyle={{ flex: 1 }}
+                              style={[styles.operatorTile, isSelected && styles.operatorTileActive]}
+                              onPress={() => setPaymentMethod(op.name)}
+                            >
+                              {isSelected && (
+                                <View style={styles.operatorCheckBadge}>
+                                  <Text style={styles.operatorCheckText}>✓</Text>
+                                </View>
+                              )}
+                              <View style={styles.operatorImageArea}>
+                                <Image source={op.logo} style={styles.operatorTileLogo} resizeMode="contain" />
+                              </View>
+                              <View style={[styles.operatorTileFooter, isSelected && styles.operatorTileFooterActive]}>
+                                <Text style={[styles.operatorTileLabel, isSelected && styles.operatorTileLabelActive]}>
+                                  {op.name}
+                                </Text>
+                              </View>
+                            </AnimatedButton>
+                          );
+                        })}
+                      </View>
+                    ))}
                   </View>
 
                   <Text style={styles.label}>Numéro {paymentMethod}</Text>
@@ -1206,6 +1223,7 @@ export default function App() {
                         {VEHICLE_TYPES.map((v) => (
                           <AnimatedButton
                             key={v}
+                            containerStyle={{ flex: 1 }}
                             style={[styles.segBtn, newDriverVehicle === v && styles.segBtnActive]}
                             onPress={() => setNewDriverVehicle(v)}
                           >
@@ -1414,6 +1432,7 @@ export default function App() {
                     <Text style={styles.label}>Type</Text>
                     <View style={styles.segmentedRow}>
                       <AnimatedButton
+                        containerStyle={{ flex: 1 }}
                         style={[styles.segBtn, operationType === 'recharge' && styles.segBtnActive]}
                         onPress={() => setOperationType('recharge')}
                       >
@@ -1422,6 +1441,7 @@ export default function App() {
                         </Text>
                       </AnimatedButton>
                       <AnimatedButton
+                        containerStyle={{ flex: 1 }}
                         style={[styles.segBtn, operationType === 'achat' && styles.segBtnActive]}
                         onPress={() => setOperationType('achat')}
                       >
@@ -1442,6 +1462,7 @@ export default function App() {
                         return (
                           <AnimatedButton
                             key={cyl.id}
+                            containerStyle={{ flex: 1 }}
                             style={[styles.formatCard, isSelected && styles.formatCardActive]}
                             onPress={() => setSelectedCylinder(cyl)}
                           >
@@ -1609,6 +1630,7 @@ export default function App() {
                         {VEHICLE_TYPES.map((v) => (
                           <AnimatedButton
                             key={v}
+                            containerStyle={{ flex: 1 }}
                             style={[styles.segBtn, vehicule === v && styles.segBtnActive]}
                             onPress={() => setVehicule(v)}
                           >
@@ -1807,12 +1829,12 @@ const styles = StyleSheet.create({
   targetDepotText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 
   segmentedRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  segBtn: { flex: 1, height: 42, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  segBtn: { height: 42, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
   segBtnActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
   segBtnText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
   segBtnTextActive: { color: '#FFFFFF', fontWeight: '800' },
 
-  formatCard: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1.5, borderColor: '#334155' },
+  formatCard: { paddingVertical: 10, borderRadius: 10, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1.5, borderColor: '#334155' },
   formatCardActive: { borderColor: '#F97316', backgroundColor: '#263347' },
   formatTitle: { fontSize: 13, fontWeight: '800', color: '#FFFFFF' },
   formatPrice: { fontSize: 11, fontWeight: '700', color: '#94A3B8', marginTop: 2 },
@@ -1822,16 +1844,17 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
   chipTextActive: { color: '#FFFFFF', fontWeight: '800' },
 
-  // TUILES OPÉRATEURS STYLE 1XBET
+  // GRILLE 2x2 OPÉRATEURS MOBILE MONEY
   operatorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
     gap: 10,
     marginBottom: 16,
   },
+  operatorRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   operatorTile: {
-    width: '48.2%',
+    width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 2,
@@ -1861,16 +1884,16 @@ const styles = StyleSheet.create({
   },
   operatorImageArea: {
     width: '100%',
-    height: 54,
+    height: 64,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   operatorTileLogo: {
-    width: '100%',
-    height: '100%',
+    width: '85%',
+    height: 48,
   },
   operatorTileFooter: {
     width: '100%',
