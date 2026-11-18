@@ -19,6 +19,45 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const APP_GAS_COMMISSION_RATE = 0.05; // 5 % commission plateforme sur le gaz
+const APP_DELIVERY_COMMISSION_RATE = 0.20; // 20 % commission plateforme sur la livraison (100 F / 500 F)
+const STANDARD_DELIVERY_FEE = 500; // Frais de livraison client en FCFA
+
+const CITIES = ['Abidjan', 'Bouaké', 'Odienné', 'Yamoussoukro', 'Korhogo', 'San-Pédro'];
+
+const DEFAULT_VENDOR_PRICES = {
+  B6: { recharge: '2000', achat: '13000' },
+  B12: { recharge: '5500', achat: '25000' },
+  B28: { recharge: '13000', achat: '45000' },
+};
+
+const calculateOrderFinancials = (unitPrice, quantity, deliveryMode) => {
+  const qty = Math.max(1, parseInt(quantity, 10) || 1);
+  const gasSubtotal = unitPrice * qty;
+  const deliveryFee = deliveryMode === 'livraison' ? STANDARD_DELIVERY_FEE : 0;
+  const totalClient = gasSubtotal + deliveryFee;
+
+  const appGasCommission = Math.round(gasSubtotal * APP_GAS_COMMISSION_RATE);
+  const appDeliveryCommission = Math.round(deliveryFee * APP_DELIVERY_COMMISSION_RATE);
+  const appTotalCommission = appGasCommission + appDeliveryCommission;
+
+  const vendorNet = gasSubtotal - appGasCommission;
+  const driverNet = deliveryFee - appDeliveryCommission;
+
+  return {
+    qty,
+    unitPrice,
+    gasSubtotal,
+    deliveryFee,
+    totalClient,
+    appGasCommission,
+    appDeliveryCommission,
+    appTotalCommission,
+    vendorNet,
+    driverNet,
+  };
+};
+
 const getDaysLeftInTrial = (createdAtDate) => {
   if (!createdAtDate) return 30;
   const diffDays = Math.floor((Date.now() - new Date(createdAtDate)) / (1000 * 60 * 60 * 24));
@@ -48,26 +87,10 @@ const SUBSCRIPTION_PLANS = [
 ];
 
 const PAYMENT_OPERATORS = [
-  {
-    id: 'wave',
-    name: 'Wave',
-    logo: require('./assets/wave.jpeg'),
-  },
-  {
-    id: 'orange',
-    name: 'Orange Money',
-    logo: require('./assets/Orange.jpeg'),
-  },
-  {
-    id: 'mtn',
-    name: 'MTN MoMo',
-    logo: require('./assets/MTN.jpeg'),
-  },
-  {
-    id: 'moov',
-    name: 'Moov Money',
-    logo: require('./assets/Moov.jpeg'),
-  },
+  { id: 'wave', name: 'Wave', logo: require('./assets/wave.jpeg') },
+  { id: 'orange', name: 'Orange Money', logo: require('./assets/Orange.jpeg') },
+  { id: 'mtn', name: 'MTN MoMo', logo: require('./assets/MTN.jpeg') },
+  { id: 'moov', name: 'Moov Money', logo: require('./assets/Moov.jpeg') },
 ];
 
 const VEHICLE_TYPES = ['Moto', 'Tricycle'];
@@ -77,28 +100,28 @@ const ONBOARDING_SLIDES = [
     id: '1',
     badge: 'MONAN SERVICE',
     title: 'Le gaz livré chez vous',
-    subtitle: 'Commandez, gérez votre dépôt ou livrez en toute simplicité.',
+    subtitle: 'Comparez les offres des dépôts de votre ville et commandez.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '2',
     badge: 'CLIENT',
-    title: 'Commande rapide',
-    subtitle: 'Choisissez votre bouteille et suivez le livreur en direct.',
+    title: 'Offres locales en direct',
+    subtitle: 'Choisissez le meilleur tarif près de chez vous, avec ou sans livraison.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '3',
     badge: 'VENDEUR',
-    title: 'Gestion de dépôt',
-    subtitle: 'Acceptez les commandes et pilotez vos livraisons.',
+    title: 'Tarifs personnalisés',
+    subtitle: 'Fixez vos prix par bouteille et gérez vos commandes.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '4',
     badge: 'LIVREUR',
-    title: 'Courses libres',
-    subtitle: 'Prenez les livraisons disponibles autour de vous.',
+    title: 'Courses rémunérées',
+    subtitle: 'Recevez directement votre part sur chaque livraison effectuée.',
     icon: require('./assets/splash-icon.png')
   }
 ];
@@ -191,16 +214,9 @@ const MARQUES_GAZ = [
 ];
 
 const CYLINDER_TYPES = [
-  { id: 'B6', name: 'B6 (6 kg)', priceRecharge: 2000, priceAchat: 13000 },
-  { id: 'B12', name: 'B12 (12.5 kg)', priceRecharge: 5500, priceAchat: 25000 },
-  { id: 'B28', name: 'B28 (28 kg)', priceRecharge: 13000, priceAchat: 45000 },
-];
-
-const INITIAL_DEPOTS = [
-  { id: 'DEP-DEFAULT', nom: 'Dépôt Angré 8e Tranche', distanceKm: 0.3, distance: '0.3 km', quartier: 'Cocody Angré', telephone: '0707070707' },
-  { id: 'DEP-02', nom: 'Dépôt Saint-Jean', distanceKm: 1.2, distance: '1.2 km', quartier: 'Cocody Centre', telephone: '0708020304' },
-  { id: 'DEP-03', nom: 'Dépôt Riviera 2', distanceKm: 2.5, distance: '2.5 km', quartier: 'Cocody Riviera', telephone: '0709030405' },
-  { id: 'DEP-04', nom: 'Dépôt Yopougon Maroc', distanceKm: 5.8, distance: '5.8 km', quartier: 'Yopougon', telephone: '0501020304' },
+  { id: 'B6', name: 'B6 (6 kg)', defaultRecharge: 2000, defaultAchat: 13000 },
+  { id: 'B12', name: 'B12 (12.5 kg)', defaultRecharge: 5500, defaultAchat: 25000 },
+  { id: 'B28', name: 'B28 (28 kg)', defaultRecharge: 13000, defaultAchat: 45000 },
 ];
 
 const DEFAULT_USERS = [
@@ -208,12 +224,73 @@ const DEFAULT_USERS = [
     id: 'DEP-DEFAULT',
     email: 'vendeur@monan.ci',
     role: 'depot',
-    nom: 'Dépôt Angré',
+    nom: 'Dépôt Angré 8e Tranche',
     telephone: '0707070707',
+    ville: 'Abidjan',
     adresse: 'Cocody Angré',
+    distanceKm: 0.3,
     createdAt: new Date().toISOString(),
     subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    isSubscribed: true
+    isSubscribed: true,
+    prices: {
+      B6: { recharge: '2000', achat: '13000' },
+      B12: { recharge: '5500', achat: '25000' },
+      B28: { recharge: '13000', achat: '45000' },
+    }
+  },
+  {
+    id: 'DEP-02',
+    email: 'saintjean@monan.ci',
+    role: 'depot',
+    nom: 'Dépôt Saint-Jean',
+    telephone: '0708020304',
+    ville: 'Abidjan',
+    adresse: 'Cocody Centre',
+    distanceKm: 1.2,
+    createdAt: new Date().toISOString(),
+    subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    isSubscribed: true,
+    prices: {
+      B6: { recharge: '2100', achat: '13500' },
+      B12: { recharge: '5400', achat: '24500' },
+      B28: { recharge: '12800', achat: '44500' },
+    }
+  },
+  {
+    id: 'DEP-03',
+    email: 'riviera@monan.ci',
+    role: 'depot',
+    nom: 'Dépôt Riviera 2',
+    telephone: '0709030405',
+    ville: 'Abidjan',
+    adresse: 'Cocody Riviera 2',
+    distanceKm: 2.5,
+    createdAt: new Date().toISOString(),
+    subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    isSubscribed: true,
+    prices: {
+      B6: { recharge: '1950', achat: '12800' },
+      B12: { recharge: '5600', achat: '25000' },
+      B28: { recharge: '13200', achat: '45500' },
+    }
+  },
+  {
+    id: 'DEP-04',
+    email: 'bouake@monan.ci',
+    role: 'depot',
+    nom: 'Dépôt Air France Bouaké',
+    telephone: '0501020304',
+    ville: 'Bouaké',
+    adresse: 'Air France 1',
+    distanceKm: 0.8,
+    createdAt: new Date().toISOString(),
+    subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    isSubscribed: true,
+    prices: {
+      B6: { recharge: '2050', achat: '13200' },
+      B12: { recharge: '5650', achat: '25500' },
+      B28: { recharge: '13500', achat: '46000' },
+    }
   },
   {
     id: 'CLI-DEFAULT',
@@ -221,6 +298,7 @@ const DEFAULT_USERS = [
     role: 'client',
     nom: 'Kouassi Yves',
     telephone: '0505050505',
+    ville: 'Abidjan',
     adresse: 'Angré Star 10',
     createdAt: new Date().toISOString()
   },
@@ -230,6 +308,7 @@ const DEFAULT_USERS = [
     role: 'livreur',
     nom: 'Koné Moussa',
     telephone: '0102030405',
+    ville: 'Abidjan',
     adresse: 'Cocody / Angré',
     vehicule: 'Tricycle',
     createdAt: new Date().toISOString()
@@ -253,33 +332,34 @@ export default function App() {
 
   const [registeredUsers, setRegisteredUsers] = useState(DEFAULT_USERS);
 
-  const [vendorPrices, setVendorPrices] = useState({
-    B6: { recharge: '2000', achat: '13000' },
-    B12: { recharge: '5500', achat: '25000' },
-    B28: { recharge: '13000', achat: '45000' },
-  });
+  // Formulaire de tarification du vendeur connecté
+  const [vendorPricesForm, setVendorPricesForm] = useState(DEFAULT_VENDOR_PRICES);
 
+  // Champs d'inscription / connexion
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
   const [telephone, setTelephone] = useState('');
+  const [ville, setVille] = useState('Abidjan');
   const [adresse, setAdresse] = useState('');
   const [vehicule, setVehicule] = useState('Moto');
 
+  // Ajout livreur par vendeur
   const [newDriverName, setNewDriverName] = useState('');
   const [newDriverPhone, setNewDriverPhone] = useState('');
   const [newDriverVehicle, setNewDriverVehicle] = useState('Moto');
   const [selectedDriverByOrder, setSelectedDriverByOrder] = useState({});
 
+  // Paramètres de commande client
   const [selectedMarque, setSelectedMarque] = useState(MARQUES_GAZ[0]);
   const [selectedCylinder, setSelectedCylinder] = useState(CYLINDER_TYPES[1]);
   const [operationType, setOperationType] = useState('recharge');
+  const [deliveryMode, setDeliveryMode] = useState('livraison'); // 'livraison' | 'retrait'
   const [quantite, setQuantite] = useState('1');
   const [adresseLivraison, setAdresseLivraison] = useState('');
-  const [selectedDepotTarget, setSelectedDepotTarget] = useState(null);
+  const [selectedVendorId, setSelectedVendorId] = useState(null);
 
   const [searchDepot, setSearchDepot] = useState('');
-  const [depotsList, setDepotsList] = useState(INITIAL_DEPOTS);
   const [orderSuccessBanner, setOrderSuccessBanner] = useState('');
 
   const [allOrders, setAllOrders] = useState([
@@ -289,11 +369,20 @@ export default function App() {
       clientId: 'CLI-DEFAULT',
       clientNom: 'Kouassi Yves',
       clientPhone: '0505050505',
+      ville: 'Abidjan',
       type: 'TotalEnergies B12 (12.5 kg)',
       operation: 'Recharge',
+      deliveryMode: 'livraison',
       qte: 1,
-      total: '5 500 FCFA',
+      gasSubtotal: 5500,
+      deliveryFee: 500,
+      appCommission: 375,
+      vendorNet: 5225,
+      driverNet: 400,
+      total: '6 000 FCFA',
       adresse: 'Angré Star 10',
+      targetVendorId: 'DEP-DEFAULT',
+      targetVendorNom: 'Dépôt Angré 8e Tranche',
       status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
@@ -307,11 +396,20 @@ export default function App() {
       clientId: 'CLI-OTHER',
       clientNom: 'Mme Traoré',
       clientPhone: '0506070809',
+      ville: 'Abidjan',
       type: 'Shell Gas B6 (6 kg)',
       operation: 'Achat Neuf',
-      qte: 2,
-      total: '26 000 FCFA',
-      adresse: 'Riviera 3 Cap Sud',
+      deliveryMode: 'retrait',
+      qte: 1,
+      gasSubtotal: 13000,
+      deliveryFee: 0,
+      appCommission: 650,
+      vendorNet: 12350,
+      driverNet: 0,
+      total: '13 000 FCFA',
+      adresse: 'Retrait au dépôt',
+      targetVendorId: 'DEP-DEFAULT',
+      targetVendorNom: 'Dépôt Angré 8e Tranche',
       status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
@@ -330,7 +428,7 @@ export default function App() {
 
   const loadStoredUsers = async () => {
     try {
-      const stored = await AsyncStorage.getItem('@registered_users_v4');
+      const stored = await AsyncStorage.getItem('@registered_users_v5');
       if (stored) setRegisteredUsers(JSON.parse(stored));
     } catch (e) {}
   };
@@ -384,18 +482,48 @@ export default function App() {
     ? (vendorViewMode === 'client' ? 'client' : 'depot')
     : user.role;
 
+  const userCity = (user?.ville || 'Abidjan').trim();
+
   const remainingSubDays = user?.role === 'depot' ? getRemainingSubscriptionDays(user) : null;
   const isVendorSubscriptionExpired = user?.role === 'depot' && remainingSubDays <= 0;
 
-  const activeFormatPrices = vendorPrices[selectedCylinder.id] || {
-    recharge: selectedCylinder.priceRecharge,
-    achat: selectedCylinder.priceAchat
+  // Extraction du prix configuré par un vendeur pour un format et un type d'opération donnés
+  const getVendorUnitPrice = (vendorObj, cylinderId, opType) => {
+    const cylMeta = CYLINDER_TYPES.find(c => c.id === cylinderId) || CYLINDER_TYPES[1];
+    const customPrices = vendorObj?.prices?.[cylinderId];
+    if (customPrices) {
+      const parsed = parseInt(opType === 'recharge' ? customPrices.recharge : customPrices.achat, 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return opType === 'recharge' ? cylMeta.defaultRecharge : cylMeta.defaultAchat;
   };
-  const currentUnitPrice = operationType === 'recharge'
-    ? (parseInt(activeFormatPrices.recharge, 10) || selectedCylinder.priceRecharge)
-    : (parseInt(activeFormatPrices.achat, 10) || selectedCylinder.priceAchat);
 
-  const estimatedTotal = (parseInt(quantite, 10) || 1) * currentUnitPrice;
+  // Liste des vendeurs actifs situés STRICTEMENT dans la même ville que le client
+  const localCityVendors = registeredUsers
+    .filter(
+      (u) =>
+        u.role === 'depot' &&
+        (u.ville || '').trim().toLowerCase() === userCity.toLowerCase() &&
+        getRemainingSubscriptionDays(u) > 0
+    )
+    .map((v) => ({
+      ...v,
+      distanceLabel: v.distanceKm ? `${v.distanceKm} km` : 'Proche',
+      currentOfferPrice: getVendorUnitPrice(v, selectedCylinder.id, operationType),
+    }))
+    .sort((a, b) => a.currentOfferPrice - b.currentOfferPrice);
+
+  // Vendeur sélectionné par le client (par défaut l'offre la moins chère de sa ville)
+  const activeOfferVendor =
+    localCityVendors.find((v) => v.id === selectedVendorId) || localCityVendors[0] || null;
+
+  const activeUnitPrice = activeOfferVendor
+    ? activeOfferVendor.currentOfferPrice
+    : operationType === 'recharge'
+    ? selectedCylinder.defaultRecharge
+    : selectedCylinder.defaultAchat;
+
+  const currentFinancials = calculateOrderFinancials(activeUnitPrice, quantite, deliveryMode);
 
   const switchVendorMode = (targetMode) => {
     if (!user || user.role !== 'depot' || isVendorSubscriptionExpired || vendorViewMode === targetMode) return;
@@ -413,8 +541,29 @@ export default function App() {
       : [...updatedList, updatedUserObj];
     setRegisteredUsers(finalList);
     try {
-      await AsyncStorage.setItem('@registered_users_v4', JSON.stringify(finalList));
+      await AsyncStorage.setItem('@registered_users_v5', JSON.stringify(finalList));
     } catch (e) {}
+  };
+
+  const handleSaveVendorPrices = async () => {
+    if (!user || user.role !== 'depot') return;
+    const sanitizedPrices = {
+      B6: {
+        recharge: String(Math.max(500, parseInt(vendorPricesForm.B6?.recharge, 10) || 2000)),
+        achat: String(Math.max(1000, parseInt(vendorPricesForm.B6?.achat, 10) || 13000)),
+      },
+      B12: {
+        recharge: String(Math.max(500, parseInt(vendorPricesForm.B12?.recharge, 10) || 5500)),
+        achat: String(Math.max(1000, parseInt(vendorPricesForm.B12?.achat, 10) || 25000)),
+      },
+      B28: {
+        recharge: String(Math.max(500, parseInt(vendorPricesForm.B28?.recharge, 10) || 13000)),
+        achat: String(Math.max(1000, parseInt(vendorPricesForm.B28?.achat, 10) || 45000)),
+      },
+    };
+    setVendorPricesForm(sanitizedPrices);
+    await persistUserUpdate({ ...user, prices: sanitizedPrices });
+    Alert.alert('Tarifs enregistrés', `Vos offres pour ${user.ville} sont maintenant visibles par les clients.`);
   };
 
   const handleRenewSubscription = async () => {
@@ -455,8 +604,8 @@ export default function App() {
   };
 
   const handleRegister = async (type) => {
-    if (!nom || !telephone || !email || !password) {
-      Alert.alert('Champs requis', 'Complétez les informations obligatoires.');
+    if (!nom || !telephone || !email || !password || !ville.trim()) {
+      Alert.alert('Champs requis', 'Complétez les informations obligatoires dont votre ville.');
       return;
     }
 
@@ -469,41 +618,36 @@ export default function App() {
 
     setLoading(true);
     const nowIso = new Date().toISOString();
+    const cleanCity = ville.trim();
     const newUser = {
       id: `${type === 'depot' ? 'DEP' : type === 'livreur' ? 'LIV' : 'CLI'}-${Math.floor(1000 + Math.random() * 9000)}`,
-      nom: nom.trim(),
+      nom: type === 'depot' && !nom.trim().toLowerCase().startsWith('dépôt') ? `Dépôt ${nom.trim()}` : nom.trim(),
       email: cleanEmail,
       telephone: telephone.trim(),
-      adresse: adresse.trim() || 'Abidjan',
+      ville: cleanCity,
+      adresse: adresse.trim() || cleanCity,
+      distanceKm: 0.5,
       role: type,
       vehicule: type === 'livreur' ? vehicule : null,
       createdAt: nowIso,
       subscriptionExpiresAt: type === 'depot' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
-      isSubscribed: false
+      isSubscribed: false,
+      prices: type === 'depot' ? DEFAULT_VENDOR_PRICES : null,
     };
 
     const updatedUsers = [...registeredUsers, newUser];
     setRegisteredUsers(updatedUsers);
     try {
-      await AsyncStorage.setItem('@registered_users_v4', JSON.stringify(updatedUsers));
+      await AsyncStorage.setItem('@registered_users_v5', JSON.stringify(updatedUsers));
     } catch (e) {}
 
     if (type === 'depot') {
-      setDepotsList(prev => [
-        {
-          id: newUser.id,
-          nom: `Dépôt ${nom.trim()}`,
-          distanceKm: 0.1,
-          distance: '0.1 km',
-          quartier: adresse.trim() || 'Abidjan',
-          telephone: telephone.trim()
-        },
-        ...prev
-      ]);
       setVendorViewMode('depot');
+      setVendorPricesForm(DEFAULT_VENDOR_PRICES);
     }
 
     setUser(newUser);
+    setSelectedVendorId(null);
     setPaymentPhone(telephone.trim());
     if (type === 'client' || type === 'depot') setAdresseLivraison(adresse.trim());
     setDashboardTab('home');
@@ -520,7 +664,7 @@ export default function App() {
     const cleanEmail = email.trim().toLowerCase();
     let storedUsers = registeredUsers;
     try {
-      const stored = await AsyncStorage.getItem('@registered_users_v4');
+      const stored = await AsyncStorage.getItem('@registered_users_v5');
       if (stored) {
         storedUsers = JSON.parse(stored);
         setRegisteredUsers(storedUsers);
@@ -536,6 +680,8 @@ export default function App() {
 
     const userData = {
       ...foundUser,
+      ville: foundUser.ville || 'Abidjan',
+      prices: foundUser.prices || DEFAULT_VENDOR_PRICES,
       subscriptionExpiresAt:
         foundUser.subscriptionExpiresAt ||
         (foundUser.role === 'depot'
@@ -544,8 +690,12 @@ export default function App() {
     };
 
     setUser(userData);
+    setSelectedVendorId(null);
     setPaymentPhone(userData.telephone || '');
-    if (userData.role === 'depot') setVendorViewMode('depot');
+    if (userData.role === 'depot') {
+      setVendorViewMode('depot');
+      setVendorPricesForm(userData.prices || DEFAULT_VENDOR_PRICES);
+    }
     if (userData.adresse && (userData.role === 'client' || userData.role === 'depot')) {
       setAdresseLivraison(userData.adresse);
     }
@@ -571,7 +721,8 @@ export default function App() {
       nom: newDriverName.trim(),
       telephone: newDriverPhone.trim(),
       email: driverEmail,
-      adresse: user?.adresse || 'Abidjan',
+      ville: user?.ville || 'Abidjan',
+      adresse: user?.adresse || user?.ville || 'Abidjan',
       role: 'livreur',
       vehicule: newDriverVehicle,
       createdAt: new Date().toISOString()
@@ -580,23 +731,27 @@ export default function App() {
     const updatedUsers = [...registeredUsers, driverObj];
     setRegisteredUsers(updatedUsers);
     try {
-      await AsyncStorage.setItem('@registered_users_v4', JSON.stringify(updatedUsers));
+      await AsyncStorage.setItem('@registered_users_v5', JSON.stringify(updatedUsers));
     } catch (e) {}
 
     setNewDriverName('');
     setNewDriverPhone('');
-    Alert.alert('Livreur ajouté', `${driverObj.nom} est disponible pour vos courses.`);
+    Alert.alert('Livreur ajouté', `${driverObj.nom} est disponible à ${driverObj.ville}.`);
   };
 
   const handleCreateOrder = () => {
     if (activeViewRole !== 'client') return;
-    if (!adresseLivraison.trim()) {
-      Alert.alert('Adresse requise', 'Indiquez le lieu de livraison.');
+    if (!activeOfferVendor) {
+      Alert.alert('Aucun vendeur', `Aucun dépôt actif disponible à ${userCity}.`);
+      return;
+    }
+    if (deliveryMode === 'livraison' && !adresseLivraison.trim()) {
+      Alert.alert('Adresse requise', 'Indiquez votre quartier ou point de repère pour la livraison.');
       return;
     }
 
     setLoading(true);
-    const qteNum = parseInt(quantite, 10) || 1;
+    const fin = currentFinancials;
     const newCmdId = `CMD-${Math.floor(100 + Math.random() * 900)}`;
 
     const newCmd = {
@@ -605,22 +760,30 @@ export default function App() {
       clientId: user.id,
       clientNom: user.nom || 'Client',
       clientPhone: user.telephone || '',
+      ville: userCity,
       type: `${selectedMarque.name} ${selectedCylinder.name}`,
       operation: operationType === 'recharge' ? 'Recharge' : 'Achat Neuf',
-      qte: qteNum,
+      deliveryMode,
+      qte: fin.qty,
+      gasSubtotal: fin.gasSubtotal,
+      deliveryFee: fin.deliveryFee,
+      appCommission: fin.appTotalCommission,
+      vendorNet: fin.vendorNet,
+      driverNet: fin.driverNet,
+      total: `${fin.totalClient.toLocaleString('fr-FR')} FCFA`,
+      adresse: deliveryMode === 'livraison' ? adresseLivraison.trim() : `Retrait : ${activeOfferVendor.nom}`,
+      targetVendorId: activeOfferVendor.id,
+      targetVendorNom: activeOfferVendor.nom,
       status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
       assignedDriverId: null,
       assignedDriverNom: null,
       assignedDriverPhone: null,
-      total: `${estimatedTotal.toLocaleString('fr-FR')} FCFA`,
-      adresse: adresseLivraison.trim(),
-      depotCible: selectedDepotTarget ? selectedDepotTarget.nom : 'Dépôt proche'
     };
 
     setAllOrders(prev => [newCmd, ...prev]);
-    setOrderSuccessBanner(`Commande ${newCmdId} envoyée.`);
+    setOrderSuccessBanner(`Commande ${newCmdId} envoyée à ${activeOfferVendor.nom}.`);
     setDashboardTab('orders_list');
     setLoading(false);
   };
@@ -637,12 +800,22 @@ export default function App() {
     setDashboardTab('my_deliveries');
   };
 
+  const handleCompletePickupOrder = (orderId) => {
+    if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
+    setAllOrders(prev =>
+      prev.map(o => (o.id === orderId && o.assignedVendorId === user.id ? { ...o, status: 'delivered' } : o))
+    );
+  };
+
   const handleAssignDriverToOrder = (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
-    if (independentDrivers.length === 0) return;
+    if (cityDrivers.length === 0) {
+      Alert.alert('Aucun livreur', `Ajoutez un livreur dans votre ville (${userCity}).`);
+      return;
+    }
 
-    const chosenDriverId = selectedDriverByOrder[orderId] || independentDrivers[0].id;
-    const driver = independentDrivers.find(d => d.id === chosenDriverId) || independentDrivers[0];
+    const chosenDriverId = selectedDriverByOrder[orderId] || cityDrivers[0].id;
+    const driver = cityDrivers.find(d => d.id === chosenDriverId) || cityDrivers[0];
 
     setAllOrders(prev =>
       prev.map(o =>
@@ -687,46 +860,72 @@ export default function App() {
   const handleLogout = () => {
     setUser(null);
     setVendorViewMode('depot');
+    setSelectedVendorId(null);
     setEmail('');
     setPassword('');
     setCurrentScreen('welcome');
     setDashboardTab('home');
   };
 
-  const sortedAndFilteredDepots = [...depotsList]
-    .sort((a, b) => a.distanceKm - b.distanceKm)
-    .filter(d =>
-      d.nom.toLowerCase().includes(searchDepot.toLowerCase()) ||
-      d.quartier.toLowerCase().includes(searchDepot.toLowerCase())
-    );
+  const filteredDepotsList = localCityVendors.filter(d =>
+    d.nom.toLowerCase().includes(searchDepot.toLowerCase()) ||
+    (d.adresse || '').toLowerCase().includes(searchDepot.toLowerCase())
+  );
 
-  const independentDrivers = registeredUsers.filter(u => u.role === 'livreur');
-  const availableOrdersForVendors = activeViewRole === 'depot' ? allOrders.filter(c => c.status === 'available') : [];
+  const cityDrivers = registeredUsers.filter(
+    u => u.role === 'livreur' && (u.ville || '').trim().toLowerCase() === userCity.toLowerCase()
+  );
+
+  const availableOrdersForVendors = activeViewRole === 'depot'
+    ? allOrders.filter(
+        c =>
+          c.status === 'available' &&
+          (c.ville || '').trim().toLowerCase() === userCity.toLowerCase() &&
+          (!c.targetVendorId || c.targetVendorId === user?.id)
+      )
+    : [];
+
   const myVendorDeliveries = activeViewRole === 'depot'
     ? allOrders.filter(c => c.assignedVendorId === user?.id && (c.status === 'accepted' || c.status === 'in_delivery'))
     : [];
+
   const availableOrdersForDrivers = activeViewRole === 'livreur'
-    ? allOrders.filter(c => c.status === 'accepted' && !c.assignedDriverId)
+    ? allOrders.filter(
+        c =>
+          c.status === 'accepted' &&
+          c.deliveryMode === 'livraison' &&
+          !c.assignedDriverId &&
+          (c.ville || '').trim().toLowerCase() === userCity.toLowerCase()
+      )
     : [];
+
   const myDriverActiveOrders = activeViewRole === 'livreur'
     ? allOrders.filter(c => c.assignedDriverId === user?.id && c.status === 'in_delivery')
     : [];
+
   const myDriverDeliveredOrders = activeViewRole === 'livreur'
     ? allOrders.filter(c => c.assignedDriverId === user?.id && c.status === 'delivered')
     : [];
+
   const myClientOrders = activeViewRole === 'client'
     ? allOrders.filter(c => c.clientId === user?.id)
     : [];
 
   const getRoleSubtitle = () => {
     if (!user) return 'Distribution de gaz';
-    if (user.role === 'depot') return activeViewRole === 'depot' ? 'Espace Vendeur' : 'Mode Client';
-    if (user.role === 'livreur') return 'Livreur indépendant';
-    return 'Espace Client';
+    if (user.role === 'depot') return activeViewRole === 'depot' ? `Vendeur • ${userCity}` : `Client • ${userCity}`;
+    if (user.role === 'livreur') return `Livreur • ${userCity}`;
+    return `Client • ${userCity}`;
   };
 
   const getStatusMeta = (cmd) => {
-    if (cmd.status === 'delivered') return { label: 'Livrée', color: '#4ADE80', bg: 'rgba(74, 222, 128, 0.14)' };
+    if (cmd.status === 'delivered') {
+      return {
+        label: cmd.deliveryMode === 'retrait' ? 'Retirée' : 'Livrée',
+        color: '#4ADE80',
+        bg: 'rgba(74, 222, 128, 0.14)'
+      };
+    }
     if (cmd.status === 'in_delivery') {
       return {
         label: `En route • ${cmd.assignedDriverNom}`,
@@ -736,7 +935,7 @@ export default function App() {
     }
     if (cmd.status === 'accepted') {
       return {
-        label: `Validée • ${cmd.assignedVendorNom}`,
+        label: cmd.deliveryMode === 'retrait' ? `Prête au dépôt • ${cmd.assignedVendorNom}` : `Validée • ${cmd.assignedVendorNom}`,
         color: '#FBBF24',
         bg: 'rgba(251, 191, 36, 0.14)'
       };
@@ -749,7 +948,7 @@ export default function App() {
       return [
         { id: 'home', label: 'Accueil', badge: 0 },
         { id: 'vendor_live_orders', label: 'Commandes', badge: availableOrdersForVendors.length },
-        { id: 'my_deliveries', label: 'Livraisons', badge: myVendorDeliveries.length },
+        { id: 'my_deliveries', label: 'En cours', badge: myVendorDeliveries.length },
         { id: 'vendor_drivers', label: 'Livreurs', badge: 0 },
         { id: 'pricing', label: 'Tarifs', badge: 0 },
       ];
@@ -764,7 +963,7 @@ export default function App() {
     }
     return [
       { id: 'home', label: 'Accueil', badge: 0 },
-      { id: 'depots', label: 'Dépôts', badge: 0 },
+      { id: 'depots', label: 'Offres', badge: localCityVendors.length },
       { id: 'order', label: 'Commander', badge: 0 },
       { id: 'orders_list', label: 'Suivi', badge: myClientOrders.filter(o => o.status !== 'delivered').length },
     ];
@@ -884,7 +1083,7 @@ export default function App() {
         >
           {user ? (
             isVendorSubscriptionExpired ? (
-              /* BLOCAGE ABONNEMENT EXPIRÉ — MINI-TUILES OPÉRATEURS */
+              /* BLOCAGE ABONNEMENT EXPIRÉ */
               <FadeInView key="subscription-lock" style={styles.mainWrapper}>
                 <View style={styles.cardBox}>
                   <View style={styles.statusPillDanger}>
@@ -980,11 +1179,7 @@ export default function App() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.greetingTitle}>{user.nom}</Text>
                         <Text style={styles.mutedText}>
-                          {user.role === 'depot'
-                            ? (activeViewRole === 'depot' ? 'Dépôt actif' : 'Achat personnel')
-                            : user.role === 'livreur'
-                            ? `${user.vehicule || 'Moto'} • ${user.adresse}`
-                            : user.adresse}
+                          {userCity} • {user.adresse}
                         </Text>
                       </View>
                     </View>
@@ -1014,8 +1209,8 @@ export default function App() {
                             <Text style={styles.kpiLabel}>En cours</Text>
                           </Pressable>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('vendor_drivers')}>
-                            <Text style={styles.kpiNum}>{independentDrivers.length}</Text>
-                            <Text style={styles.kpiLabel}>Livreurs</Text>
+                            <Text style={styles.kpiNum}>{cityDrivers.length}</Text>
+                            <Text style={styles.kpiLabel}>Livreurs ({userCity})</Text>
                           </Pressable>
                         </>
                       )}
@@ -1040,8 +1235,8 @@ export default function App() {
                       {activeViewRole === 'client' && (
                         <>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('depots')}>
-                            <Text style={styles.kpiNum}>{sortedAndFilteredDepots.length}</Text>
-                            <Text style={styles.kpiLabel}>Dépôts</Text>
+                            <Text style={styles.kpiNum}>{localCityVendors.length}</Text>
+                            <Text style={styles.kpiLabel}>Dépôts à {userCity}</Text>
                           </Pressable>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('orders_list')}>
                             <Text style={styles.kpiNum}>{myClientOrders.length}</Text>
@@ -1057,8 +1252,8 @@ export default function App() {
                         <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('vendor_live_orders')}>
                           <Text style={styles.btnPrimaryText}>Commandes ({availableOrdersForVendors.length})</Text>
                         </AnimatedButton>
-                        <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('my_deliveries')}>
-                          <Text style={styles.btnSecondaryText}>Livraisons</Text>
+                        <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('pricing')}>
+                          <Text style={styles.btnSecondaryText}>Configurer mes tarifs</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -1066,7 +1261,7 @@ export default function App() {
                     {activeViewRole === 'livreur' && (
                       <View style={{ gap: 10 }}>
                         <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('driver_available')}>
-                          <Text style={styles.btnPrimaryText}>Courses ({availableOrdersForDrivers.length})</Text>
+                          <Text style={styles.btnPrimaryText}>Courses à {userCity} ({availableOrdersForDrivers.length})</Text>
                         </AnimatedButton>
                         <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('driver_active')}>
                           <Text style={styles.btnSecondaryText}>Mes livraisons</Text>
@@ -1077,10 +1272,10 @@ export default function App() {
                     {activeViewRole === 'client' && (
                       <View style={{ gap: 10 }}>
                         <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('order')}>
-                          <Text style={styles.btnPrimaryText}>Commander</Text>
+                          <Text style={styles.btnPrimaryText}>Commander du gaz</Text>
                         </AnimatedButton>
                         <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('depots')}>
-                          <Text style={styles.btnSecondaryText}>Dépôts proches</Text>
+                          <Text style={styles.btnSecondaryText}>Comparer les offres ({userCity})</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -1090,24 +1285,62 @@ export default function App() {
                 {/* VENDEUR : COMMANDES DISPONIBLES */}
                 {activeViewRole === 'depot' && dashboardTab === 'vendor_live_orders' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Commandes</Text>
+                    <Text style={styles.cardBoxTitle}>Commandes ({userCity})</Text>
                     {availableOrdersForVendors.length === 0 ? (
                       <View style={styles.emptyStateBox}>
-                        <Text style={styles.emptyStateText}>Aucune commande</Text>
+                        <Text style={styles.emptyStateText}>Aucune commande en attente</Text>
                       </View>
                     ) : (
                       availableOrdersForVendors.map((order) => (
                         <View key={order.id} style={styles.orderCard}>
                           <View style={styles.rowBetween}>
                             <Text style={styles.orderId}>{order.id}</Text>
-                            <Text style={styles.priceHighlight}>{order.total}</Text>
+                            <View style={[
+                              styles.badgePill,
+                              { backgroundColor: order.deliveryMode === 'livraison' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)' }
+                            ]}>
+                              <Text style={[
+                                styles.badgePillText,
+                                { color: order.deliveryMode === 'livraison' ? '#38BDF8' : '#FBBF24' }
+                              ]}>
+                                {order.deliveryMode === 'livraison' ? 'Livraison' : 'Retrait dépôt'}
+                              </Text>
+                            </View>
                           </View>
                           <Text style={styles.orderMainText}>{order.qte}× {order.type} • {order.operation}</Text>
                           <Text style={styles.mutedText}>{order.clientNom} ({order.clientPhone})</Text>
                           <Text style={styles.mutedText}>{order.adresse}</Text>
 
+                          {/* VENTILATION FINANCIÈRE VENDEUR */}
+                          <View style={styles.financeSplitBox}>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.financeLabel}>Total client</Text>
+                              <Text style={styles.financeValue}>{order.total}</Text>
+                            </View>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.financeLabel}>Votre part nette (95 % gaz)</Text>
+                              <Text style={[styles.financeValue, { color: '#4ADE80' }]}>
+                                {(order.vendorNet || 0).toLocaleString('fr-FR')} FCFA
+                              </Text>
+                            </View>
+                            {order.deliveryMode === 'livraison' && (
+                              <View style={styles.rowBetween}>
+                                <Text style={styles.financeLabel}>Part livreur</Text>
+                                <Text style={[styles.financeValue, { color: '#38BDF8' }]}>
+                                  {(order.driverNet || 0).toLocaleString('fr-FR')} FCFA
+                                </Text>
+                              </View>
+                            )}
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.financeLabel}>Commission MONAN</Text>
+                              <Text style={styles.financeMuted}>
+                                {(order.appCommission || 0).toLocaleString('fr-FR')} FCFA
+                              </Text>
+                            </View>
+                          </View>
+
                           <AnimatedButton style={styles.btnSuccess} onPress={() => handleAcceptOrder(order.id)}>
-                            <Text style={styles.btnSuccessText}>Accepter</Text>
+                            <Text style={styles.btnSuccessText}>Accepter la commande</Text>
                           </AnimatedButton>
                         </View>
                       ))
@@ -1115,39 +1348,55 @@ export default function App() {
                   </View>
                 )}
 
-                {/* VENDEUR : LIVRAISONS & ASSIGNATION */}
+                {/* VENDEUR : LIVRAISONS & RETRAITS */}
                 {activeViewRole === 'depot' && dashboardTab === 'my_deliveries' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Livraisons</Text>
+                    <Text style={styles.cardBoxTitle}>Commandes en cours</Text>
                     {myVendorDeliveries.length === 0 ? (
                       <View style={styles.emptyStateBox}>
-                        <Text style={styles.emptyStateText}>Aucune livraison</Text>
+                        <Text style={styles.emptyStateText}>Aucune commande active</Text>
                       </View>
                     ) : (
                       myVendorDeliveries.map((order) => {
-                        const activeSelectedDriverId = selectedDriverByOrder[order.id] || independentDrivers[0]?.id;
+                        const activeSelectedDriverId = selectedDriverByOrder[order.id] || cityDrivers[0]?.id;
                         const isAssigned = order.status === 'in_delivery';
+                        const isPickup = order.deliveryMode === 'retrait';
 
                         return (
                           <View key={order.id} style={styles.orderCard}>
                             <View style={styles.rowBetween}>
                               <Text style={styles.orderId}>{order.id}</Text>
-                              <View style={[styles.badgePill, { backgroundColor: isAssigned ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)' }]}>
-                                <Text style={[styles.badgePillText, { color: isAssigned ? '#38BDF8' : '#FBBF24' }]}>
-                                  {isAssigned ? 'En route' : 'À assigner'}
+                              <View style={[
+                                styles.badgePill,
+                                { backgroundColor: isPickup ? 'rgba(74, 222, 128, 0.15)' : isAssigned ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)' }
+                              ]}>
+                                <Text style={[
+                                  styles.badgePillText,
+                                  { color: isPickup ? '#4ADE80' : isAssigned ? '#38BDF8' : '#FBBF24' }
+                                ]}>
+                                  {isPickup ? 'Retrait dépôt' : isAssigned ? 'En route' : 'À assigner'}
                                 </Text>
                               </View>
                             </View>
 
                             <Text style={styles.orderMainText}>{order.qte}× {order.type}</Text>
                             <Text style={styles.mutedText}>{order.clientNom} • {order.adresse}</Text>
-                            <Text style={styles.priceHighlight}>{order.total}</Text>
+                            <Text style={styles.priceHighlight}>
+                              Votre part : {(order.vendorNet || 0).toLocaleString('fr-FR')} FCFA
+                            </Text>
 
-                            {!isAssigned ? (
+                            {isPickup ? (
+                              <AnimatedButton style={styles.btnSuccess} onPress={() => handleCompletePickupOrder(order.id)}>
+                                <Text style={styles.btnSuccessText}>Confirmer retrait client</Text>
+                              </AnimatedButton>
+                            ) : !isAssigned ? (
                               <View style={styles.dividerSection}>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                                <Text style={styles.microLabel}>
+                                  CHOISIR UN LIVREUR À {userCity.toUpperCase()} (GAIN : {(order.driverNet || 400).toLocaleString('fr-FR')} F)
+                                </Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6, marginBottom: 10 }}>
                                   <View style={{ flexDirection: 'row', gap: 6 }}>
-                                    {independentDrivers.map((drv) => {
+                                    {cityDrivers.map((drv) => {
                                       const isChosen = activeSelectedDriverId === drv.id;
                                       return (
                                         <AnimatedButton
@@ -1165,13 +1414,13 @@ export default function App() {
                                 </ScrollView>
 
                                 <AnimatedButton style={styles.btnPrimary} onPress={() => handleAssignDriverToOrder(order.id)}>
-                                  <Text style={styles.btnPrimaryText}>Assigner</Text>
+                                  <Text style={styles.btnPrimaryText}>Assigner le livreur</Text>
                                 </AnimatedButton>
                               </View>
                             ) : (
                               <View style={styles.driverAssignedStrip}>
                                 <Text style={styles.driverAssignedText}>
-                                  {order.assignedDriverNom} • {order.assignedDriverPhone}
+                                  Livreur : {order.assignedDriverNom} ({order.assignedDriverPhone}) • Part : {(order.driverNet || 400).toLocaleString('fr-FR')} F
                                 </Text>
                               </View>
                             )}
@@ -1182,10 +1431,10 @@ export default function App() {
                   </View>
                 )}
 
-                {/* VENDEUR : LIVREURS INDÉPENDANTS */}
+                {/* VENDEUR : LIVREURS DE LA VILLE */}
                 {activeViewRole === 'depot' && dashboardTab === 'vendor_drivers' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Livreurs ({independentDrivers.length})</Text>
+                    <Text style={styles.cardBoxTitle}>Livreurs à {userCity} ({cityDrivers.length})</Text>
 
                     <View style={styles.subCard}>
                       <TextInput
@@ -1216,11 +1465,11 @@ export default function App() {
                         ))}
                       </View>
                       <AnimatedButton style={styles.btnPrimary} onPress={handleAddDriverFromVendor}>
-                        <Text style={styles.btnPrimaryText}>Ajouter</Text>
+                        <Text style={styles.btnPrimaryText}>Ajouter un livreur</Text>
                       </AnimatedButton>
                     </View>
 
-                    {independentDrivers.map((drv) => {
+                    {cityDrivers.map((drv) => {
                       const activeCount = allOrders.filter(
                         o => o.assignedDriverId === drv.id && o.status === 'in_delivery'
                       ).length;
@@ -1245,68 +1494,84 @@ export default function App() {
                   </View>
                 )}
 
-                {/* VENDEUR : TARIFS */}
+                {/* VENDEUR : TARIFS PERSONNALISÉS */}
                 {activeViewRole === 'depot' && dashboardTab === 'pricing' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Tarifs (FCFA)</Text>
+                    <Text style={styles.cardBoxTitle}>Mes Tarifs ({userCity})</Text>
+                    <Text style={styles.mutedText}>
+                      Ces prix s'affichent directement aux clients de {userCity} lors de leur commande.
+                    </Text>
 
-                    {['B6', 'B12', 'B28'].map((fmt) => (
-                      <View key={fmt} style={{ marginBottom: 12 }}>
-                        <Text style={styles.microLabel}>FORMAT {fmt}</Text>
-                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.label}>Recharge</Text>
-                            <TextInput
-                              style={styles.input}
-                              keyboardType="numeric"
-                              value={vendorPrices[fmt].recharge}
-                              onChangeText={(val) =>
-                                setVendorPrices({ ...vendorPrices, [fmt]: { ...vendorPrices[fmt], recharge: val } })
-                              }
-                            />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.label}>Achat</Text>
-                            <TextInput
-                              style={styles.input}
-                              keyboardType="numeric"
-                              value={vendorPrices[fmt].achat}
-                              onChangeText={(val) =>
-                                setVendorPrices({ ...vendorPrices, [fmt]: { ...vendorPrices[fmt], achat: val } })
-                              }
-                            />
+                    <View style={{ marginTop: 12 }}>
+                      {['B6', 'B12', 'B28'].map((fmt) => (
+                        <View key={fmt} style={{ marginBottom: 12 }}>
+                          <Text style={styles.microLabel}>FORMAT {fmt}</Text>
+                          <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.label}>Recharge (FCFA)</Text>
+                              <TextInput
+                                style={styles.input}
+                                keyboardType="numeric"
+                                value={vendorPricesForm[fmt]?.recharge || ''}
+                                onChangeText={(val) =>
+                                  setVendorPricesForm({
+                                    ...vendorPricesForm,
+                                    [fmt]: { ...vendorPricesForm[fmt], recharge: val }
+                                  })
+                                }
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.label}>Bouteille neuve (FCFA)</Text>
+                              <TextInput
+                                style={styles.input}
+                                keyboardType="numeric"
+                                value={vendorPricesForm[fmt]?.achat || ''}
+                                onChangeText={(val) =>
+                                  setVendorPricesForm({
+                                    ...vendorPricesForm,
+                                    [fmt]: { ...vendorPricesForm[fmt], achat: val }
+                                  })
+                                }
+                              />
+                            </View>
                           </View>
                         </View>
-                      </View>
-                    ))}
+                      ))}
+                    </View>
 
-                    <AnimatedButton style={styles.btnPrimary} onPress={() => Alert.alert('Enregistré', 'Tarifs mis à jour.')}>
-                      <Text style={styles.btnPrimaryText}>Enregistrer</Text>
+                    <AnimatedButton style={styles.btnPrimary} onPress={handleSaveVendorPrices}>
+                      <Text style={styles.btnPrimaryText}>Publier mes tarifs</Text>
                     </AnimatedButton>
                   </View>
                 )}
 
-                {/* LIVREUR : COURSES DISPONIBLES */}
+                {/* LIVREUR : COURSES DISPONIBLES DANS SA VILLE */}
                 {activeViewRole === 'livreur' && dashboardTab === 'driver_available' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Courses disponibles</Text>
+                    <Text style={styles.cardBoxTitle}>Courses disponibles ({userCity})</Text>
                     {availableOrdersForDrivers.length === 0 ? (
                       <View style={styles.emptyStateBox}>
-                        <Text style={styles.emptyStateText}>Aucune course</Text>
+                        <Text style={styles.emptyStateText}>Aucune livraison disponible à {userCity}</Text>
                       </View>
                     ) : (
                       availableOrdersForDrivers.map((order) => (
                         <View key={order.id} style={styles.orderCard}>
                           <View style={styles.rowBetween}>
                             <Text style={styles.orderId}>{order.id}</Text>
-                            <Text style={styles.priceHighlight}>{order.total}</Text>
+                            <View style={[styles.badgePill, { backgroundColor: 'rgba(74, 222, 128, 0.15)' }]}>
+                              <Text style={[styles.badgePillText, { color: '#4ADE80' }]}>
+                                Gain : {(order.driverNet || 400).toLocaleString('fr-FR')} F
+                              </Text>
+                            </View>
                           </View>
                           <Text style={styles.orderMainText}>{order.qte}× {order.type}</Text>
-                          <Text style={styles.mutedText}>Retrait : {order.assignedVendorNom}</Text>
-                          <Text style={styles.mutedText}>Livraison : {order.adresse}</Text>
+                          <Text style={styles.mutedText}>Dépôt : {order.assignedVendorNom}</Text>
+                          <Text style={styles.mutedText}>Destination : {order.adresse}</Text>
+                          <Text style={styles.priceHighlight}>À encaisser : {order.total}</Text>
 
                           <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverClaimOrder(order.id)}>
-                            <Text style={styles.btnSuccessText}>Prendre</Text>
+                            <Text style={styles.btnSuccessText}>Accepter la course</Text>
                           </AnimatedButton>
                         </View>
                       ))
@@ -1317,7 +1582,7 @@ export default function App() {
                 {/* LIVREUR : EN COURS */}
                 {activeViewRole === 'livreur' && dashboardTab === 'driver_active' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>En cours</Text>
+                    <Text style={styles.cardBoxTitle}>Livraisons en cours</Text>
                     {myDriverActiveOrders.length === 0 ? (
                       <View style={styles.emptyStateBox}>
                         <Text style={styles.emptyStateText}>Aucune course en cours</Text>
@@ -1327,14 +1592,17 @@ export default function App() {
                         <View key={order.id} style={styles.orderCard}>
                           <View style={styles.rowBetween}>
                             <Text style={styles.orderId}>{order.id}</Text>
-                            <Text style={styles.priceHighlight}>{order.total}</Text>
+                            <Text style={[styles.priceHighlight, { color: '#4ADE80' }]}>
+                              Votre part : {(order.driverNet || 400).toLocaleString('fr-FR')} F
+                            </Text>
                           </View>
                           <Text style={styles.orderMainText}>{order.qte}× {order.type} ({order.operation})</Text>
                           <Text style={styles.mutedText}>{order.clientNom} • {order.clientPhone}</Text>
                           <Text style={styles.mutedText}>{order.adresse}</Text>
+                          <Text style={styles.mutedText}>Total client : {order.total}</Text>
 
                           <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverConfirmDelivery(order.id)}>
-                            <Text style={styles.btnSuccessText}>Livré</Text>
+                            <Text style={styles.btnSuccessText}>Confirmer la livraison</Text>
                           </AnimatedButton>
                         </View>
                       ))
@@ -1345,10 +1613,10 @@ export default function App() {
                 {/* LIVREUR : HISTORIQUE */}
                 {activeViewRole === 'livreur' && dashboardTab === 'driver_history' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Livrées</Text>
+                    <Text style={styles.cardBoxTitle}>Courses livrées</Text>
                     {myDriverDeliveredOrders.length === 0 ? (
                       <View style={styles.emptyStateBox}>
-                        <Text style={styles.emptyStateText}>Aucune livraison</Text>
+                        <Text style={styles.emptyStateText}>Aucune livraison terminée</Text>
                       </View>
                     ) : (
                       myDriverDeliveredOrders.map((cmd) => (
@@ -1357,63 +1625,85 @@ export default function App() {
                             <Text style={styles.listRowTitle}>{cmd.id} • {cmd.qte}× {cmd.type}</Text>
                             <Text style={styles.mutedText}>{cmd.clientNom} • {cmd.date}</Text>
                           </View>
-                          <Text style={styles.priceHighlight}>{cmd.total}</Text>
+                          <Text style={[styles.priceHighlight, { color: '#4ADE80' }]}>
+                            +{(cmd.driverNet || 400).toLocaleString('fr-FR')} F
+                          </Text>
                         </View>
                       ))
                     )}
                   </View>
                 )}
 
-                {/* CLIENT : DÉPÔTS PROCHES */}
+                {/* CLIENT : OFFRES DES DÉPÔTS DE SA VILLE */}
                 {activeViewRole === 'client' && dashboardTab === 'depots' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Dépôts</Text>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.cardBoxTitle}>Dépôts à {userCity}</Text>
+                      <View style={styles.cityPill}>
+                        <Text style={styles.cityPillText}>{userCity}</Text>
+                      </View>
+                    </View>
+
                     <TextInput
                       style={styles.input}
-                      placeholder="Rechercher un quartier..."
+                      placeholder="Filtrer par quartier ou nom de dépôt..."
                       placeholderTextColor="#64748B"
                       value={searchDepot}
                       onChangeText={setSearchDepot}
                     />
 
-                    {sortedAndFilteredDepots.map((depot) => (
-                      <View key={depot.id} style={styles.listRowCard}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.listRowTitle}>{depot.nom}</Text>
-                          <Text style={styles.mutedText}>{depot.quartier} • {depot.distance}</Text>
-                        </View>
-                        <AnimatedButton
-                          style={styles.compactPrimaryBtn}
-                          onPress={() => {
-                            setSelectedDepotTarget(depot);
-                            setAdresseLivraison(depot.quartier);
-                            setDashboardTab('order');
-                          }}
-                        >
-                          <Text style={styles.compactPrimaryBtnText}>Choisir</Text>
-                        </AnimatedButton>
+                    {filteredDepotsList.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucun vendeur enregistré à {userCity}</Text>
                       </View>
-                    ))}
+                    ) : (
+                      filteredDepotsList.map((depot) => {
+                        const b6Rech = getVendorUnitPrice(depot, 'B6', 'recharge');
+                        const b12Rech = getVendorUnitPrice(depot, 'B12', 'recharge');
+                        return (
+                          <View key={depot.id} style={styles.orderCard}>
+                            <View style={styles.rowBetween}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.listRowTitle}>{depot.nom}</Text>
+                                <Text style={styles.mutedText}>{depot.adresse} • {depot.distanceLabel}</Text>
+                              </View>
+                              <AnimatedButton
+                                style={styles.compactPrimaryBtn}
+                                onPress={() => {
+                                  setSelectedVendorId(depot.id);
+                                  setDashboardTab('order');
+                                }}
+                              >
+                                <Text style={styles.compactPrimaryBtnText}>Commander</Text>
+                              </AnimatedButton>
+                            </View>
+
+                            <View style={styles.vendorPriceBadgesRow}>
+                              <View style={styles.miniPriceTag}>
+                                <Text style={styles.miniPriceTagText}>B6 Rech: {b6Rech.toLocaleString('fr-FR')} F</Text>
+                              </View>
+                              <View style={styles.miniPriceTag}>
+                                <Text style={styles.miniPriceTagText}>B12 Rech: {b12Rech.toLocaleString('fr-FR')} F</Text>
+                              </View>
+                            </View>
+                          </View>
+                        );
+                      })
+                    )}
                   </View>
                 )}
 
-                {/* CLIENT : COMMANDE UNIFIÉE */}
+                {/* CLIENT : COMMANDE AVEC COMPARATEUR D'OFFRES VENDEURS & LIVRAISON */}
                 {activeViewRole === 'client' && dashboardTab === 'order' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Commander</Text>
-
-                    {selectedDepotTarget && (
-                      <View style={styles.targetDepotChip}>
-                        <Text style={styles.targetDepotText}>
-                          {selectedDepotTarget.nom} ({selectedDepotTarget.distance})
-                        </Text>
-                        <Pressable onPress={() => setSelectedDepotTarget(null)}>
-                          <Text style={{ color: '#F97316', fontWeight: '800', fontSize: 12 }}>✕</Text>
-                        </Pressable>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.cardBoxTitle}>Commander</Text>
+                      <View style={styles.cityPill}>
+                        <Text style={styles.cityPillText}>Ville : {userCity}</Text>
                       </View>
-                    )}
+                    </View>
 
-                    <Text style={styles.label}>Type</Text>
+                    <Text style={styles.label}>1. Type d'opération</Text>
                     <View style={styles.segmentedRow}>
                       <AnimatedButton
                         containerStyle={{ flex: 1 }}
@@ -1435,14 +1725,10 @@ export default function App() {
                       </AnimatedButton>
                     </View>
 
-                    <Text style={styles.label}>Format</Text>
-                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                    <Text style={styles.label}>2. Format & Marque</Text>
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
                       {CYLINDER_TYPES.map((cyl) => {
                         const isSelected = selectedCylinder.id === cyl.id;
-                        const activePrice = operationType === 'recharge'
-                          ? (parseInt(vendorPrices[cyl.id]?.recharge, 10) || cyl.priceRecharge)
-                          : (parseInt(vendorPrices[cyl.id]?.achat, 10) || cyl.priceAchat);
-
                         return (
                           <AnimatedButton
                             key={cyl.id}
@@ -1451,13 +1737,12 @@ export default function App() {
                             onPress={() => setSelectedCylinder(cyl)}
                           >
                             <Text style={[styles.formatTitle, isSelected && { color: '#F97316' }]}>{cyl.id}</Text>
-                            <Text style={styles.formatPrice}>{activePrice.toLocaleString('fr-FR')} F</Text>
+                            <Text style={styles.formatPrice}>{cyl.name.split(' ')[1]}</Text>
                           </AnimatedButton>
                         );
                       })}
                     </View>
 
-                    <Text style={styles.label}>Marque</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
                       <View style={{ flexDirection: 'row', gap: 6 }}>
                         {MARQUES_GAZ.map((m) => {
@@ -1475,24 +1760,122 @@ export default function App() {
                       </View>
                     </ScrollView>
 
-                    <Text style={styles.label}>Quantité</Text>
+                    {/* OFFRES DES VENDEURS DE LA VILLE DU CLIENT */}
+                    <Text style={styles.label}>3. Offres des vendeurs à {userCity}</Text>
+                    {localCityVendors.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucun vendeur actif à {userCity}</Text>
+                      </View>
+                    ) : (
+                      <View style={{ gap: 8, marginBottom: 14 }}>
+                        {localCityVendors.map((vendor) => {
+                          const isChosen = activeOfferVendor?.id === vendor.id;
+                          return (
+                            <AnimatedButton
+                              key={vendor.id}
+                              style={[styles.vendorOfferCard, isChosen && styles.vendorOfferCardActive]}
+                              onPress={() => setSelectedVendorId(vendor.id)}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.listRowTitle, isChosen && { color: '#F97316' }]}>
+                                  {vendor.nom}
+                                </Text>
+                                <Text style={styles.mutedText}>
+                                  {vendor.adresse} • {vendor.distanceLabel}
+                                </Text>
+                              </View>
+                              <View style={{ alignItems: 'flex-end' }}>
+                                <Text style={styles.selectRowPrice}>
+                                  {vendor.currentOfferPrice.toLocaleString('fr-FR')} F
+                                </Text>
+                                <Text style={styles.microLabel}>/ unité</Text>
+                              </View>
+                            </AnimatedButton>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    <Text style={styles.label}>4. Quantité & Mode de réception</Text>
                     <QuantityStepper value={quantite} onChange={setQuantite} />
 
-                    <Text style={styles.label}>Adresse de livraison</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Quartier, repère..."
-                      placeholderTextColor="#64748B"
-                      value={adresseLivraison}
-                      onChangeText={setAdresseLivraison}
-                    />
+                    <View style={styles.segmentedRow}>
+                      <AnimatedButton
+                        containerStyle={{ flex: 1 }}
+                        style={[styles.segBtn, deliveryMode === 'livraison' && styles.segBtnActive]}
+                        onPress={() => setDeliveryMode('livraison')}
+                      >
+                        <Text style={[styles.segBtnText, deliveryMode === 'livraison' && styles.segBtnTextActive]}>
+                          Livraison (+{STANDARD_DELIVERY_FEE} F)
+                        </Text>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        containerStyle={{ flex: 1 }}
+                        style={[styles.segBtn, deliveryMode === 'retrait' && styles.segBtnActive]}
+                        onPress={() => setDeliveryMode('retrait')}
+                      >
+                        <Text style={[styles.segBtnText, deliveryMode === 'retrait' && styles.segBtnTextActive]}>
+                          Retrait dépôt (0 F)
+                        </Text>
+                      </AnimatedButton>
+                    </View>
 
-                    <AnimatedButton style={styles.btnPrimary} onPress={handleCreateOrder} disabled={loading}>
+                    {deliveryMode === 'livraison' && (
+                      <>
+                        <Text style={styles.label}>Adresse de livraison ({userCity})</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Quartier, rue, repère..."
+                          placeholderTextColor="#64748B"
+                          value={adresseLivraison}
+                          onChangeText={setAdresseLivraison}
+                        />
+                      </>
+                    )}
+
+                    {/* RÉCAPITULATIF CHIFFRÉ & VENTILATION */}
+                    <View style={styles.financeSplitBox}>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeLabel}>
+                          Gaz ({currentFinancials.qty} × {currentFinancials.unitPrice.toLocaleString('fr-FR')} F)
+                        </Text>
+                        <Text style={styles.financeValue}>
+                          {currentFinancials.gasSubtotal.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeLabel}>Frais de livraison</Text>
+                        <Text style={styles.financeValue}>
+                          {currentFinancials.deliveryFee === 0
+                            ? 'Gratuit (Retrait)'
+                            : `${currentFinancials.deliveryFee.toLocaleString('fr-FR')} FCFA`}
+                        </Text>
+                      </View>
+                      <View style={[styles.rowBetween, styles.financeTotalRow]}>
+                        <Text style={styles.financeTotalLabel}>Total à payer</Text>
+                        <Text style={styles.priceHighlight}>
+                          {currentFinancials.totalClient.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+                      <Text style={styles.financeNote}>
+                        Répartition : Vendeur {currentFinancials.vendorNet.toLocaleString('fr-FR')} F
+                        {deliveryMode === 'livraison'
+                          ? ` • Livreur ${currentFinancials.driverNet.toLocaleString('fr-FR')} F`
+                          : ''}
+                        {` • Commission MONAN ${currentFinancials.appTotalCommission.toLocaleString('fr-FR')} F`}
+                      </Text>
+                    </View>
+
+                    <AnimatedButton
+                      style={[styles.btnPrimary, !activeOfferVendor && { opacity: 0.5 }]}
+                      onPress={handleCreateOrder}
+                      disabled={loading || !activeOfferVendor}
+                    >
                       {loading ? (
                         <ActivityIndicator color="#FFFFFF" />
                       ) : (
                         <Text style={styles.btnPrimaryText}>
-                          Commander • {estimatedTotal.toLocaleString('fr-FR')} F
+                          Valider • {currentFinancials.totalClient.toLocaleString('fr-FR')} F
                         </Text>
                       )}
                     </AnimatedButton>
@@ -1526,6 +1909,9 @@ export default function App() {
                               </View>
                             </View>
                             <Text style={styles.orderMainText}>{cmd.qte}× {cmd.type} ({cmd.operation})</Text>
+                            <Text style={styles.mutedText}>
+                              Dépôt : {cmd.assignedVendorNom || cmd.targetVendorNom} • {cmd.deliveryMode === 'livraison' ? 'Livraison' : 'Retrait'}
+                            </Text>
                             <View style={styles.rowBetween}>
                               <Text style={styles.mutedText}>{cmd.date}</Text>
                               <Text style={styles.priceHighlight}>{cmd.total}</Text>
@@ -1552,7 +1938,7 @@ export default function App() {
                     <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_client')}>
                       <View>
                         <Text style={styles.roleSelectTitle}>Client</Text>
-                        <Text style={styles.roleSelectSub}>Commander du gaz</Text>
+                        <Text style={styles.roleSelectSub}>Comparer les prix et commander</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
                     </AnimatedButton>
@@ -1560,7 +1946,7 @@ export default function App() {
                     <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_depot')}>
                       <View>
                         <Text style={styles.roleSelectTitle}>Vendeur</Text>
-                        <Text style={styles.roleSelectSub}>Gérer un dépôt</Text>
+                        <Text style={styles.roleSelectSub}>Gérer un dépôt et ses tarifs</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
                     </AnimatedButton>
@@ -1602,10 +1988,28 @@ export default function App() {
                   <Text style={styles.label}>Téléphone</Text>
                   <TextInput style={styles.input} keyboardType="phone-pad" placeholder="0700000000" placeholderTextColor="#64748B" value={telephone} onChangeText={setTelephone} />
 
+                  <Text style={styles.label}>Ville</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {CITIES.map((c) => {
+                        const isSelected = ville.toLowerCase() === c.toLowerCase();
+                        return (
+                          <AnimatedButton
+                            key={c}
+                            style={[styles.chip, isSelected && styles.chipActive]}
+                            onPress={() => setVille(c)}
+                          >
+                            <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{c}</Text>
+                          </AnimatedButton>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+
                   <Text style={styles.label}>
-                    {currentScreen === 'register_livreur' ? 'Zone' : 'Adresse'}
+                    {currentScreen === 'register_livreur' ? 'Zone d’activité' : 'Quartier / Adresse'}
                   </Text>
-                  <TextInput style={styles.input} placeholder="Cocody Angré" placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
+                  <TextInput style={styles.input} placeholder="Ex : Angré 8e Tranche" placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
 
                   {currentScreen === 'register_livreur' && (
                     <>
@@ -1787,17 +2191,57 @@ const styles = StyleSheet.create({
   kpiGrid: { flexDirection: 'row', gap: 8 },
   kpiCard: { flex: 1, backgroundColor: '#0F172A', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#1E293B', alignItems: 'center' },
   kpiNum: { fontSize: 20, fontWeight: '900', color: '#F97316' },
-  kpiLabel: { fontSize: 11, fontWeight: '600', color: '#94A3B8', marginTop: 2 },
+  kpiLabel: { fontSize: 11, fontWeight: '600', color: '#94A3B8', marginTop: 2, textAlign: 'center' },
 
   cardBox: { backgroundColor: '#0F172A', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#1E293B' },
   cardBoxTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF', marginBottom: 14 },
   subCard: { backgroundColor: '#1E293B', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#334155' },
+
+  cityPill: { backgroundColor: 'rgba(249, 115, 22, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 14 },
+  cityPillText: { color: '#F97316', fontSize: 11, fontWeight: '800' },
 
   orderCard: { backgroundColor: '#1E293B', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#334155', gap: 4 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   orderId: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
   orderMainText: { color: '#E2E8F0', fontSize: 13, fontWeight: '600', marginTop: 2 },
   priceHighlight: { color: '#F97316', fontWeight: '900', fontSize: 14 },
+
+  vendorPriceBadgesRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  miniPriceTag: { backgroundColor: '#0F172A', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#334155' },
+  miniPriceTagText: { color: '#CBD5E1', fontSize: 11, fontWeight: '700' },
+
+  vendorOfferCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#334155',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  vendorOfferCardActive: {
+    borderColor: '#F97316',
+    backgroundColor: '#263347',
+  },
+
+  financeSplitBox: {
+    backgroundColor: '#0F172A',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 6,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+    gap: 5,
+  },
+  financeLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600' },
+  financeValue: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  financeMuted: { color: '#64748B', fontSize: 11, fontWeight: '700' },
+  financeTotalRow: { borderTopWidth: 1, borderTopColor: '#1E293B', paddingTop: 6, marginTop: 2 },
+  financeTotalLabel: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  financeNote: { color: '#64748B', fontSize: 10, marginTop: 4 },
 
   badgePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   badgePillText: { fontSize: 11, fontWeight: '800' },
@@ -1809,11 +2253,8 @@ const styles = StyleSheet.create({
   listRowCard: { backgroundColor: '#1E293B', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#334155', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   listRowTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 
-  targetDepotChip: { backgroundColor: '#1E293B', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginBottom: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#F97316' },
-  targetDepotText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-
   segmentedRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  segBtn: { height: 42, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
+  segBtn: { height: 42, borderRadius: 10, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155', paddingHorizontal: 8 },
   segBtnActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
   segBtnText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
   segBtnTextActive: { color: '#FFFFFF', fontWeight: '800' },
@@ -1828,12 +2269,7 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
   chipTextActive: { color: '#FFFFFF', fontWeight: '800' },
 
-  // MINI-TUILES OPÉRATEURS MOBILE MONEY
-  operatorRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
+  operatorRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   operatorTile: {
     height: 48,
     backgroundColor: '#FFFFFF',
@@ -1846,9 +2282,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     position: 'relative',
   },
-  operatorTileActive: {
-    borderColor: '#F97316',
-  },
+  operatorTileActive: { borderColor: '#F97316' },
   operatorCheckBadge: {
     position: 'absolute',
     top: 3,
@@ -1861,15 +2295,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  operatorCheckText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  operatorTileLogo: {
-    width: '85%',
-    height: 30,
-  },
+  operatorCheckText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },
+  operatorTileLogo: { width: '85%', height: 30 },
 
   stepperContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 4, width: 132, justifyContent: 'space-between', marginBottom: 14 },
   stepperBtn: { width: 34, height: 34, backgroundColor: '#F97316', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
@@ -1903,7 +2330,7 @@ const styles = StyleSheet.create({
   toastSuccess: { backgroundColor: 'rgba(74, 222, 128, 0.14)', borderRadius: 10, padding: 10, marginBottom: 12 },
   toastSuccessText: { color: '#4ADE80', fontWeight: '700', fontSize: 12, textAlign: 'center' },
 
-  emptyStateBox: { paddingVertical: 28, alignItems: 'center' },
+  emptyStateBox: { paddingVertical: 24, alignItems: 'center' },
   emptyStateText: { color: '#64748B', fontWeight: '600', fontSize: 13 },
 
   welcomeContainer: { flex: 1, justifyContent: 'space-between', paddingVertical: 8 },
