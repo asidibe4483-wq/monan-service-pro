@@ -17,7 +17,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "MONAN Service utilise votre position GPS pour calculer la distance exacte et les frais de livraison."
       }
     },
     "android": {
@@ -27,8 +28,20 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "backgroundColor": "#0F172A"
       },
-      "package": "com.monanservice.app"
+      "package": "com.monanservice.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "MONAN Service utilise votre position GPS pour calculer la distance exacte et les frais de livraison."
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },

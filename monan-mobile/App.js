@@ -18,11 +18,12 @@ import {
   BackHandler
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 
 // URL de votre backend hébergé sur Render pour la synchronisation multi-appareils
 const API_BASE_URL = 'https://monan-service-pro.onrender.com/api';
-const STORAGE_USERS_KEY = '@monan_users_v6';
-const STORAGE_ORDERS_KEY = '@monan_orders_v6';
+const STORAGE_USERS_KEY = '@monan_users_v7';
+const STORAGE_ORDERS_KEY = '@monan_orders_v7';
 
 const APP_GAS_COMMISSION_RATE = 0.05; // 5 % commission plateforme sur le gaz
 const APP_DELIVERY_COMMISSION_RATE = 0.20; // 20 % commission plateforme sur la livraison
@@ -30,6 +31,7 @@ const BASE_DELIVERY_FEE = 300; // Prise en charge de base (FCFA)
 const FREE_BASE_KM = 1.5; // Kilomètres inclus dans la prise en charge
 const PER_KM_RATE = 100; // Tarif par km supplémentaire (FCFA)
 const MIN_DELIVERY_FEE = 400; // Minimum de course (FCFA)
+const ROAD_TORTUOSITY_FACTOR = 1.3; // Facteur de correction trajet routier vs vol d'oiseau
 
 const DEFAULT_VENDOR_PRICES = {
   B6: { recharge: '2000', achat: '13000' },
@@ -37,7 +39,6 @@ const DEFAULT_VENDOR_PRICES = {
   B28: { recharge: '13000', achat: '45000' },
 };
 
-// Normalisation insensible aux accents, majuscules et espaces ("Bouaké" === "bouake")
 const normalizeText = (value) =>
   (value || '')
     .toString()
@@ -46,39 +47,46 @@ const normalizeText = (value) =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-// Coordonnées de référence des communes et localités en Côte d'Ivoire
+const hasValidCoords = (c) =>
+  Boolean(
+    c &&
+      typeof c.latitude === 'number' &&
+      typeof c.longitude === 'number' &&
+      !Number.isNaN(c.latitude) &&
+      !Number.isNaN(c.longitude)
+  );
+
+// Référentiel de secours si le GPS d'un compte n'a pas encore été enregistré
 const LOCALITY_COORDS = {
-  // Grand Abidjan
-  anyama: { lat: 5.4946, lon: -4.0518 },
-  yopougon: { lat: 5.3364, lon: -4.0833 },
-  abobo: { lat: 5.4161, lon: -4.0159 },
-  cocody: { lat: 5.3484, lon: -3.9881 },
-  angre: { lat: 5.3912, lon: -3.9835 },
-  riviera: { lat: 5.3567, lon: -3.9512 },
-  adjame: { lat: 5.3514, lon: -4.0236 },
-  plateau: { lat: 5.3235, lon: -4.0205 },
-  marcory: { lat: 5.3022, lon: -3.9828 },
-  koumassi: { lat: 5.2951, lon: -3.9494 },
-  treichville: { lat: 5.2989, lon: -4.0017 },
-  'port-bouet': { lat: 5.2581, lon: -3.9261 },
-  'port bouet': { lat: 5.2581, lon: -3.9261 },
-  bingerville: { lat: 5.3558, lon: -3.8854 },
-  songon: { lat: 5.3189, lon: -4.2492 },
-  abidjan: { lat: 5.3453, lon: -4.0244 },
-  // Autres villes
-  bouake: { lat: 7.6939, lon: -5.0303 },
-  'air france': { lat: 7.6845, lon: -5.0211 },
-  odienne: { lat: 9.5051, lon: -7.5643 },
-  yamoussoukro: { lat: 6.8276, lon: -5.2893 },
-  korhogo: { lat: 9.4580, lon: -5.6296 },
-  'san-pedro': { lat: 4.7485, lon: -6.6363 },
-  'san pedro': { lat: 4.7485, lon: -6.6363 },
-  daloa: { lat: 6.8774, lon: -6.4502 },
-  man: { lat: 7.4125, lon: -7.5538 },
-  gagnoa: { lat: 6.1319, lon: -5.9506 },
+  anyama: { latitude: 5.4946, longitude: -4.0518 },
+  yopougon: { latitude: 5.3364, longitude: -4.0833 },
+  abobo: { latitude: 5.4161, longitude: -4.0159 },
+  cocody: { latitude: 5.3484, longitude: -3.9881 },
+  angre: { latitude: 5.3912, longitude: -3.9835 },
+  riviera: { latitude: 5.3567, longitude: -3.9512 },
+  adjame: { latitude: 5.3514, longitude: -4.0236 },
+  plateau: { latitude: 5.3235, longitude: -4.0205 },
+  marcory: { latitude: 5.3022, longitude: -3.9828 },
+  koumassi: { latitude: 5.2951, longitude: -3.9494 },
+  treichville: { latitude: 5.2989, longitude: -4.0017 },
+  'port-bouet': { latitude: 5.2581, longitude: -3.9261 },
+  'port bouet': { latitude: 5.2581, longitude: -3.9261 },
+  bingerville: { latitude: 5.3558, longitude: -3.8854 },
+  songon: { latitude: 5.3189, longitude: -4.2492 },
+  abidjan: { latitude: 5.3453, longitude: -4.0244 },
+  bouake: { latitude: 7.6939, longitude: -5.0303 },
+  'air france': { latitude: 7.6845, longitude: -5.0211 },
+  odienne: { latitude: 9.5051, longitude: -7.5643 },
+  yamoussoukro: { latitude: 6.8276, longitude: -5.2893 },
+  korhogo: { latitude: 9.4580, longitude: -5.6296 },
+  'san-pedro': { latitude: 4.7485, longitude: -6.6363 },
+  'san pedro': { latitude: 4.7485, longitude: -6.6363 },
+  daloa: { latitude: 6.8774, longitude: -6.4502 },
+  man: { latitude: 7.4125, longitude: -7.5538 },
+  gagnoa: { latitude: 6.1319, longitude: -5.9506 },
 };
 
-const findCoordinatesForLocation = (localityText, cityText) => {
+const findFallbackCoords = (localityText, cityText) => {
   const normLoc = normalizeText(localityText);
   const normCity = normalizeText(cityText);
 
@@ -91,49 +99,68 @@ const findCoordinatesForLocation = (localityText, cityText) => {
   return null;
 };
 
-// Calcul de distance routière (Haversine * 1.3) entre vendeur et client
-const estimateRoadDistanceKm = (vendor, clientLocality, clientCity) => {
-  const normVendorLoc = normalizeText(vendor?.adresse || '');
-  const normClientLoc = normalizeText(clientLocality || '');
-
-  if (normVendorLoc && normClientLoc && normVendorLoc === normClientLoc) {
-    return 1.2; // Même quartier exact
-  }
-
-  const vendorCoords = findCoordinatesForLocation(vendor?.adresse, vendor?.ville);
-  const clientCoords = findCoordinatesForLocation(clientLocality, clientCity);
-
-  if (vendorCoords && clientCoords) {
-    const toRad = (deg) => (deg * Math.PI) / 180;
-    const R = 6371;
-    const dLat = toRad(clientCoords.lat - vendorCoords.lat);
-    const dLon = toRad(clientCoords.lon - vendorCoords.lon);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(vendorCoords.lat)) *
-        Math.cos(toRad(clientCoords.lat)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const straightKm = R * c;
-
-    if (straightKm < 0.3) {
-      // Quartiers différents dans une ville sans sous-coordonnées précises
-      const hashDiff = Math.abs(normVendorLoc.length - normClientLoc.length) + 2.4;
-      return Number(hashDiff.toFixed(1));
-    }
-    return Number((straightKm * 1.3).toFixed(1));
-  }
-
-  // Estimation déterministe si la localité n'est pas dans le référentiel
-  const seed = Math.abs((normVendorLoc + normClientLoc).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
-  const fallbackKm = 2.0 + (seed % 90) / 10;
-  return Number(fallbackKm.toFixed(1));
+const computeHaversineKm = (coordA, coordB) => {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(coordB.latitude - coordA.latitude);
+  const dLon = toRad(coordB.longitude - coordA.longitude);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(coordA.latitude)) *
+      Math.cos(toRad(coordB.latitude)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 };
 
-// Calcul dynamique des frais de livraison (style Yango / Glovo)
-const calculateDeliveryQuote = (vendor, clientLocality, clientCity) => {
-  const distanceKm = estimateRoadDistanceKm(vendor, clientLocality, clientCity);
+// Calcul de distance routière avec priorité absolue aux coordonnées GPS réelles (expo-location)
+const estimateRoadDistance = (vendor, clientLocality, clientCity, liveClientCoords) => {
+  const vendorHasGps = hasValidCoords(vendor?.coords);
+  const clientHasGps = hasValidCoords(liveClientCoords);
+
+  if (vendorHasGps && clientHasGps) {
+    const straightKm = computeHaversineKm(vendor.coords, liveClientCoords);
+    const roadKm = Math.max(0.5, Number((straightKm * ROAD_TORTUOSITY_FACTOR).toFixed(1)));
+    return { distanceKm: roadKm, isExactGps: true };
+  }
+
+  const resolvedVendorCoords = vendorHasGps
+    ? vendor.coords
+    : findFallbackCoords(vendor?.adresse, vendor?.ville);
+
+  const resolvedClientCoords = clientHasGps
+    ? liveClientCoords
+    : findFallbackCoords(clientLocality, clientCity);
+
+  if (resolvedVendorCoords && resolvedClientCoords) {
+    const straightKm = computeHaversineKm(resolvedVendorCoords, resolvedClientCoords);
+    if (straightKm < 0.25 && !vendorHasGps && !clientHasGps) {
+      const normVendorLoc = normalizeText(vendor?.adresse || '');
+      const normClientLoc = normalizeText(clientLocality || '');
+      const sameQuarter = normVendorLoc && normClientLoc && normVendorLoc === normClientLoc;
+      return { distanceKm: sameQuarter ? 1.2 : 2.8, isExactGps: false };
+    }
+    const roadKm = Math.max(0.6, Number((straightKm * ROAD_TORTUOSITY_FACTOR).toFixed(1)));
+    return { distanceKm: roadKm, isExactGps: false };
+  }
+
+  const normVendorLoc = normalizeText(vendor?.adresse || '');
+  const normClientLoc = normalizeText(clientLocality || '');
+  const seed = Math.abs(
+    (normVendorLoc + normClientLoc).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+  );
+  return { distanceKm: Number((2.0 + (seed % 80) / 10).toFixed(1)), isExactGps: false };
+};
+
+// Calcul dynamique des frais de livraison et de la ventilation financière
+const calculateDeliveryQuote = (vendor, clientLocality, clientCity, liveClientCoords) => {
+  const { distanceKm, isExactGps } = estimateRoadDistance(
+    vendor,
+    clientLocality,
+    clientCity,
+    liveClientCoords
+  );
   const extraKm = Math.max(0, distanceKm - FREE_BASE_KM);
   const rawFee = BASE_DELIVERY_FEE + extraKm * PER_KM_RATE;
   const roundedFee = Math.max(MIN_DELIVERY_FEE, Math.round(rawFee / 50) * 50);
@@ -143,6 +170,7 @@ const calculateDeliveryQuote = (vendor, clientLocality, clientCity) => {
 
   return {
     distanceKm,
+    isExactGps,
     deliveryFee: roundedFee,
     appDeliveryCommission,
     driverNet,
@@ -169,6 +197,7 @@ const calculateOrderFinancials = (unitPrice, quantity, deliveryMode, deliveryQuo
     unitPrice,
     gasSubtotal,
     distanceKm,
+    isExactGps: deliveryQuote.isExactGps,
     deliveryFee,
     totalClient,
     appGasCommission,
@@ -227,22 +256,22 @@ const ONBOARDING_SLIDES = [
   {
     id: '2',
     badge: 'CLIENT',
-    title: 'Offres locales en direct',
-    subtitle: 'Choisissez votre vendeur et visualisez le tarif de livraison selon la distance.',
+    title: 'Distance GPS & Offres en direct',
+    subtitle: 'Visualisez le tarif exact de chaque dépôt et les frais calculés par GPS.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '3',
     badge: 'VENDEUR',
-    title: 'Tarifs personnalisés',
-    subtitle: 'Fixez vos prix par bouteille et publiez vos offres dans votre ville.',
+    title: 'Tarifs & Position GPS du dépôt',
+    subtitle: 'Fixez vos prix et enregistrez les coordonnées GPS exactes de votre point de vente.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '4',
     badge: 'LIVREUR',
     title: 'Courses rémunérées au km',
-    subtitle: 'Votre gain s’ajuste automatiquement selon la distance parcourue.',
+    subtitle: 'Votre gain s’ajuste automatiquement selon la distance GPS réelle.',
     icon: require('./assets/splash-icon.png')
   }
 ];
@@ -349,6 +378,7 @@ const DEFAULT_USERS = [
     telephone: '0707070707',
     ville: 'Abidjan',
     adresse: 'Cocody Angré',
+    coords: { latitude: 5.3912, longitude: -3.9835 },
     createdAt: new Date().toISOString(),
     subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     isSubscribed: true,
@@ -366,6 +396,7 @@ const DEFAULT_USERS = [
     telephone: '0708020304',
     ville: 'Abidjan',
     adresse: 'Anyama',
+    coords: { latitude: 5.4946, longitude: -4.0518 },
     createdAt: new Date().toISOString(),
     subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     isSubscribed: true,
@@ -383,6 +414,7 @@ const DEFAULT_USERS = [
     telephone: '0505050505',
     ville: 'Abidjan',
     adresse: 'Yopougon',
+    coords: { latitude: 5.3364, longitude: -4.0833 },
     createdAt: new Date().toISOString()
   },
   {
@@ -408,6 +440,7 @@ export default function App() {
   const [vendorViewMode, setVendorViewMode] = useState('depot');
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
   const [selectedPlan, setSelectedPlan] = useState(SUBSCRIPTION_PLANS[1]);
@@ -415,11 +448,9 @@ export default function App() {
   const [paymentPhone, setPaymentPhone] = useState('');
 
   const [registeredUsers, setRegisteredUsers] = useState(DEFAULT_USERS);
-
-  // Formulaire de tarification du vendeur connecté
   const [vendorPricesForm, setVendorPricesForm] = useState(DEFAULT_VENDOR_PRICES);
 
-  // Champs d'inscription / connexion (Ville en saisie libre)
+  // Champs d'inscription / connexion
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
@@ -427,6 +458,7 @@ export default function App() {
   const [ville, setVille] = useState('');
   const [adresse, setAdresse] = useState('');
   const [vehicule, setVehicule] = useState('Moto');
+  const [registerCoords, setRegisterCoords] = useState(null);
 
   // Ajout livreur par vendeur
   const [newDriverName, setNewDriverName] = useState('');
@@ -434,18 +466,18 @@ export default function App() {
   const [newDriverVehicle, setNewDriverVehicle] = useState('Moto');
   const [selectedDriverByOrder, setSelectedDriverByOrder] = useState({});
 
-  // Paramètres de commande client
+  // Paramètres de commande client + GPS en direct
   const [selectedMarque, setSelectedMarque] = useState(MARQUES_GAZ[0]);
-  const [selectedCylinder, setSelectedCylinder] = useState(CYLINDER_TYPES[0]); // B6 par défaut
+  const [selectedCylinder, setSelectedCylinder] = useState(CYLINDER_TYPES[0]);
   const [operationType, setOperationType] = useState('recharge');
   const [deliveryMode, setDeliveryMode] = useState('livraison');
   const [quantite, setQuantite] = useState('1');
   const [adresseLivraison, setAdresseLivraison] = useState('');
+  const [clientCoords, setClientCoords] = useState(null);
   const [selectedVendorId, setSelectedVendorId] = useState(null);
 
   const [searchDepot, setSearchDepot] = useState('');
   const [orderSuccessBanner, setOrderSuccessBanner] = useState('');
-
   const [allOrders, setAllOrders] = useState([]);
 
   useEffect(() => {
@@ -454,7 +486,95 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Fusionne les utilisateurs locaux et distants sans écraser les comptes existants
+  // Capture GPS matérielle via expo-location + géocodage inversé optionnel
+  const captureDeviceGPS = async ({ silent = false, fillAddress = false, onCaptured } = {}) => {
+    setGpsLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        if (!silent) {
+          Alert.alert(
+            'Autorisation GPS requise',
+            'Activez la localisation pour mesurer la distance exacte.'
+          );
+        }
+        return null;
+      }
+
+      let position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      if (!position) {
+        position = await Location.getLastKnownPositionAsync();
+      }
+
+      if (!position?.coords) {
+        if (!silent) {
+          Alert.alert('Signal GPS indisponible', 'Vérifiez que la localisation est activée sur l’appareil.');
+        }
+        return null;
+      }
+
+      const coordsObj = {
+        latitude: Number(position.coords.latitude.toFixed(6)),
+        longitude: Number(position.coords.longitude.toFixed(6)),
+      };
+
+      if (fillAddress) {
+        try {
+          const placemarks = await Location.reverseGeocodeAsync(coordsObj);
+          if (placemarks && placemarks.length > 0) {
+            const place = placemarks[0];
+            const detectedCity = place.city || place.subregion || place.region || '';
+            const detectedQuarter = place.district || place.street || place.name || '';
+            if (detectedCity && !ville.trim()) setVille(detectedCity);
+            if (detectedQuarter && !adresse.trim()) setAdresse(detectedQuarter);
+            if (detectedQuarter && !adresseLivraison.trim()) setAdresseLivraison(detectedQuarter);
+          }
+        } catch (geoErr) {}
+      }
+
+      if (onCaptured) onCaptured(coordsObj);
+      return coordsObj;
+    } catch (err) {
+      if (!silent) {
+        Alert.alert('Erreur GPS', 'Impossible de lire les coordonnées GPS sur cet appareil.');
+      }
+      return null;
+    } finally {
+      setGpsLoading(false);
+    }
+  };
+
+  const activeViewRole = !user
+    ? null
+    : user.role === 'depot'
+    ? (vendorViewMode === 'client' ? 'client' : 'depot')
+    : user.role;
+
+  // Récupération automatique des coordonnées GPS exactes du client à l'ouverture de l'écran Commande
+  useEffect(() => {
+    if (user && activeViewRole === 'client' && (dashboardTab === 'order' || dashboardTab === 'depots')) {
+      captureDeviceGPS({
+        silent: true,
+        fillAddress: !adresseLivraison.trim(),
+        onCaptured: (coords) => setClientCoords(coords),
+      });
+    }
+  }, [user, activeViewRole, dashboardTab]);
+
+  // Récupération automatique des coordonnées GPS lors de l'inscription d'un vendeur
+  useEffect(() => {
+    if (!user && currentScreen === 'register_depot' && !registerCoords) {
+      captureDeviceGPS({
+        silent: true,
+        fillAddress: true,
+        onCaptured: (coords) => setRegisterCoords(coords),
+      });
+    }
+  }, [user, currentScreen]);
+
   const mergeUsersLists = (baseList, incomingList) => {
     const map = new Map();
     baseList.forEach(u => {
@@ -470,7 +590,6 @@ export default function App() {
     return Array.from(map.values());
   };
 
-  // Synchronisation avec le serveur Render + repli AsyncStorage local
   const syncAppState = async (localUsersOverride = null, localOrdersOverride = null) => {
     setSyncing(true);
     try {
@@ -480,7 +599,6 @@ export default function App() {
       let mergedUsers = localUsersOverride || (storedUsersRaw ? JSON.parse(storedUsersRaw) : DEFAULT_USERS);
       let mergedOrders = localOrdersOverride || (storedOrdersRaw ? JSON.parse(storedOrdersRaw) : []);
 
-      // Tentative de synchronisation réseau avec le backend Render (multi-appareils)
       try {
         const response = await fetch(`${API_BASE_URL}/sync`, {
           method: 'POST',
@@ -498,9 +616,7 @@ export default function App() {
             mergedOrders = Array.from(orderMap.values());
           }
         }
-      } catch (networkErr) {
-        // Hors-ligne ou endpoint /api/sync non encore déployé : conservation locale intacte
-      }
+      } catch (networkErr) {}
 
       setRegisteredUsers(mergedUsers);
       setAllOrders(mergedOrders);
@@ -558,12 +674,6 @@ export default function App() {
     return () => backSub?.remove?.();
   }, [hasSeenOnboarding, onboardingStep, user, currentScreen, dashboardTab]);
 
-  const activeViewRole = !user
-    ? null
-    : user.role === 'depot'
-    ? (vendorViewMode === 'client' ? 'client' : 'depot')
-    : user.role;
-
   const userCity = (user?.ville || '').trim();
   const normalizedUserCity = normalizeText(userCity);
 
@@ -580,7 +690,6 @@ export default function App() {
     return opType === 'recharge' ? cylMeta.defaultRecharge : cylMeta.defaultAchat;
   };
 
-  // Offres de TOUS les vendeurs actifs situés dans la même ville que le client
   const clientDeliveryLocality = (adresseLivraison || user?.adresse || userCity).trim();
 
   const localCityVendors = registeredUsers
@@ -591,7 +700,7 @@ export default function App() {
         getRemainingSubscriptionDays(u) > 0
     )
     .map((v) => {
-      const quote = calculateDeliveryQuote(v, clientDeliveryLocality, userCity);
+      const quote = calculateDeliveryQuote(v, clientDeliveryLocality, userCity, clientCoords);
       return {
         ...v,
         currentOfferPrice: getVendorUnitPrice(v, selectedCylinder.id, operationType),
@@ -611,7 +720,7 @@ export default function App() {
 
   const activeDeliveryQuote = activeOfferVendor
     ? activeOfferVendor.deliveryQuote
-    : { distanceKm: 1.5, deliveryFee: MIN_DELIVERY_FEE, appDeliveryCommission: 80, driverNet: 320 };
+    : { distanceKm: 1.5, isExactGps: false, deliveryFee: MIN_DELIVERY_FEE, appDeliveryCommission: 80, driverNet: 320 };
 
   const currentFinancials = calculateOrderFinancials(
     activeUnitPrice,
@@ -632,6 +741,22 @@ export default function App() {
     const latestUsers = storedRaw ? JSON.parse(storedRaw) : registeredUsers;
     const updatedList = mergeUsersLists(latestUsers, [updatedUserObj]);
     await syncAppState(updatedList, null);
+  };
+
+  const handleUpdateVendorGPS = async () => {
+    if (!user || user.role !== 'depot') return;
+    const captured = await captureDeviceGPS({
+      silent: false,
+      fillAddress: false,
+      onCaptured: async (coords) => {
+        await persistUserUpdate({ ...user, coords });
+        Alert.alert(
+          'Position GPS enregistrée',
+          `Coordonnées du dépôt verrouillées (${coords.latitude}, ${coords.longitude}).`
+        );
+      },
+    });
+    return captured;
   };
 
   const handleSaveVendorPrices = async () => {
@@ -699,6 +824,11 @@ export default function App() {
     }
 
     setLoading(true);
+    let finalCoords = registerCoords;
+    if (!finalCoords) {
+      finalCoords = await captureDeviceGPS({ silent: true });
+    }
+
     const { users: latestUsers } = await syncAppState();
     const cleanEmail = email.trim().toLowerCase();
 
@@ -720,6 +850,7 @@ export default function App() {
       telephone: telephone.trim(),
       ville: cleanCity,
       adresse: cleanLocality,
+      coords: finalCoords || null,
       role: type,
       vehicule: type === 'livreur' ? vehicule : null,
       createdAt: nowIso,
@@ -737,6 +868,8 @@ export default function App() {
     }
 
     setUser(newUser);
+    setClientCoords(finalCoords || null);
+    setRegisterCoords(null);
     setSelectedVendorId(null);
     setPaymentPhone(telephone.trim());
     setAdresseLivraison(cleanLocality);
@@ -773,6 +906,7 @@ export default function App() {
     };
 
     setUser(userData);
+    setClientCoords(userData.coords || null);
     setSelectedVendorId(null);
     setPaymentPhone(userData.telephone || '');
     if (userData.role === 'depot') {
@@ -824,13 +958,26 @@ export default function App() {
       Alert.alert('Aucun vendeur', `Aucun dépôt actif disponible à ${userCity}.`);
       return;
     }
-    if (deliveryMode === 'livraison' && !adresseLivraison.trim()) {
-      Alert.alert('Lieu requis', 'Indiquez votre quartier ou commune pour calculer la livraison.');
+    if (deliveryMode === 'livraison' && !adresseLivraison.trim() && !clientCoords) {
+      Alert.alert('Lieu requis', 'Indiquez votre quartier ou activez votre GPS pour calculer la livraison.');
       return;
     }
 
     setLoading(true);
-    const fin = currentFinancials;
+    // Verrouillage automatique des coordonnées GPS exactes au moment de valider la commande
+    const freshClientCoords =
+      (await captureDeviceGPS({
+        silent: true,
+        onCaptured: (c) => setClientCoords(c),
+      })) || clientCoords;
+
+    const finalQuote = calculateDeliveryQuote(
+      activeOfferVendor,
+      clientDeliveryLocality,
+      userCity,
+      freshClientCoords
+    );
+    const fin = calculateOrderFinancials(activeUnitPrice, quantite, deliveryMode, finalQuote);
     const newCmdId = `CMD-${Math.floor(100 + Math.random() * 900)}`;
 
     const newCmd = {
@@ -839,11 +986,13 @@ export default function App() {
       clientId: user.id,
       clientNom: user.nom || 'Client',
       clientPhone: user.telephone || '',
+      clientCoords: freshClientCoords || null,
       ville: userCity,
       type: `${selectedMarque.name} ${selectedCylinder.name}`,
       operation: operationType === 'recharge' ? 'Recharge' : 'Achat Neuf',
       deliveryMode,
       distanceKm: fin.distanceKm,
+      isExactGps: fin.isExactGps,
       qte: fin.qty,
       gasSubtotal: fin.gasSubtotal,
       deliveryFee: fin.deliveryFee,
@@ -851,9 +1000,16 @@ export default function App() {
       vendorNet: fin.vendorNet,
       driverNet: fin.driverNet,
       total: `${fin.totalClient.toLocaleString('fr-FR')} FCFA`,
-      adresse: deliveryMode === 'livraison' ? adresseLivraison.trim() : `Retrait : ${activeOfferVendor.nom}`,
+      adresse:
+        deliveryMode === 'livraison'
+          ? adresseLivraison.trim() ||
+            (freshClientCoords
+              ? `GPS (${freshClientCoords.latitude}, ${freshClientCoords.longitude})`
+              : userCity)
+          : `Retrait : ${activeOfferVendor.nom}`,
       targetVendorId: activeOfferVendor.id,
       targetVendorNom: activeOfferVendor.nom,
+      vendorCoords: activeOfferVendor.coords || null,
       status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
@@ -942,6 +1098,8 @@ export default function App() {
     setUser(null);
     setVendorViewMode('depot');
     setSelectedVendorId(null);
+    setClientCoords(null);
+    setRegisterCoords(null);
     setEmail('');
     setPassword('');
     setCurrentScreen('welcome');
@@ -1266,6 +1424,11 @@ export default function App() {
                         <Text style={styles.mutedText}>
                           {userCity} • {user.adresse}
                         </Text>
+                        {hasValidCoords(user.coords) && (
+                          <Text style={styles.gpsBadgeText}>
+                            GPS : {user.coords.latitude}, {user.coords.longitude}
+                          </Text>
+                        )}
                       </View>
                     </View>
 
@@ -1352,7 +1515,7 @@ export default function App() {
                                 <View style={{ flex: 1 }}>
                                   <Text style={styles.listRowTitle}>{vendor.nom}</Text>
                                   <Text style={styles.mutedText}>
-                                    {vendor.adresse} • {vendor.deliveryQuote.distanceKm} km (Livraison : {vendor.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} F)
+                                    {vendor.adresse} • {vendor.deliveryQuote.distanceKm} km ({vendor.deliveryQuote.isExactGps ? 'GPS' : 'Est.'}) • Livraison : {vendor.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} F
                                   </Text>
                                 </View>
                                 <AnimatedButton
@@ -1391,7 +1554,7 @@ export default function App() {
                           <Text style={styles.btnPrimaryText}>Commandes ({availableOrdersForVendors.length})</Text>
                         </AnimatedButton>
                         <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('pricing')}>
-                          <Text style={styles.btnSecondaryText}>Configurer mes tarifs</Text>
+                          <Text style={styles.btnSecondaryText}>Tarifs & Position GPS du dépôt</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -1445,6 +1608,11 @@ export default function App() {
                           <Text style={styles.orderMainText}>{order.qte}× {order.type} • {order.operation}</Text>
                           <Text style={styles.mutedText}>{order.clientNom} ({order.clientPhone})</Text>
                           <Text style={styles.mutedText}>{order.adresse}</Text>
+                          {hasValidCoords(order.clientCoords) && (
+                            <Text style={styles.gpsBadgeText}>
+                              GPS Client : {order.clientCoords.latitude}, {order.clientCoords.longitude}
+                            </Text>
+                          )}
 
                           {/* VENTILATION FINANCIÈRE */}
                           <View style={styles.financeSplitBox}>
@@ -1629,13 +1797,30 @@ export default function App() {
                   </View>
                 )}
 
-                {/* VENDEUR : TARIFS PERSONNALISÉS */}
+                {/* VENDEUR : TARIFS PERSONNALISÉS & POSITION GPS DU DÉPÔT */}
                 {activeViewRole === 'depot' && dashboardTab === 'pricing' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Mes Tarifs ({userCity})</Text>
-                    <Text style={styles.mutedText}>
-                      Ces prix s'affichent directement aux clients de {userCity} lors de leur commande.
-                    </Text>
+                    <Text style={styles.cardBoxTitle}>Tarifs & Position GPS ({userCity})</Text>
+
+                    <View style={styles.gpsBox}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.microLabel}>COORDONNÉES GPS DU DÉPÔT</Text>
+                        <Text style={styles.gpsCoordValue}>
+                          {hasValidCoords(user.coords)
+                            ? `${user.coords.latitude}, ${user.coords.longitude}`
+                            : 'Non enregistrées (estimation par quartier)'}
+                        </Text>
+                      </View>
+                      <AnimatedButton
+                        style={styles.gpsActionBtn}
+                        onPress={handleUpdateVendorGPS}
+                        disabled={gpsLoading}
+                      >
+                        <Text style={styles.gpsActionBtnText}>
+                          {gpsLoading ? 'GPS...' : 'Actualiser GPS'}
+                        </Text>
+                      </AnimatedButton>
+                    </View>
 
                     <View style={{ marginTop: 12 }}>
                       {['B6', 'B12', 'B28'].map((fmt) => (
@@ -1703,6 +1888,11 @@ export default function App() {
                           <Text style={styles.orderMainText}>{order.qte}× {order.type}</Text>
                           <Text style={styles.mutedText}>Dépôt : {order.assignedVendorNom}</Text>
                           <Text style={styles.mutedText}>Destination : {order.adresse}</Text>
+                          {hasValidCoords(order.clientCoords) && (
+                            <Text style={styles.gpsBadgeText}>
+                              GPS Client : {order.clientCoords.latitude}, {order.clientCoords.longitude}
+                            </Text>
+                          )}
                           <Text style={styles.priceHighlight}>À encaisser : {order.total}</Text>
 
                           <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverClaimOrder(order.id)}>
@@ -1734,6 +1924,11 @@ export default function App() {
                           <Text style={styles.orderMainText}>{order.qte}× {order.type} ({order.operation})</Text>
                           <Text style={styles.mutedText}>{order.clientNom} • {order.clientPhone}</Text>
                           <Text style={styles.mutedText}>{order.adresse}</Text>
+                          {hasValidCoords(order.clientCoords) && (
+                            <Text style={styles.gpsBadgeText}>
+                              GPS : {order.clientCoords.latitude}, {order.clientCoords.longitude}
+                            </Text>
+                          )}
                           <Text style={styles.mutedText}>Total client : {order.total}</Text>
 
                           <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverConfirmDelivery(order.id)}>
@@ -1802,7 +1997,7 @@ export default function App() {
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.listRowTitle}>{depot.nom}</Text>
                                 <Text style={styles.mutedText}>
-                                  {depot.adresse} • {depot.deliveryQuote.distanceKm} km • Livraison : {depot.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} F
+                                  {depot.adresse} • {depot.deliveryQuote.distanceKm} km ({depot.deliveryQuote.isExactGps ? 'GPS exact' : 'Est.'}) • Livraison : {depot.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} F
                                 </Text>
                               </View>
                               <AnimatedButton
@@ -1834,7 +2029,7 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CLIENT : COMMANDE AVEC COMPARATEUR D'OFFRES VENDEURS & CALCUL LIVRAISON AU KM */}
+                {/* CLIENT : COMMANDE AVEC GPS AUTOMATIQUE & CALCUL LIVRAISON AU KM */}
                 {activeViewRole === 'client' && dashboardTab === 'order' && (
                   <View style={styles.cardBox}>
                     <View style={styles.rowBetween}>
@@ -1901,10 +2096,37 @@ export default function App() {
                       </View>
                     </ScrollView>
 
-                    <Text style={styles.label}>3. Votre lieu de livraison ({userCity})</Text>
+                    {/* POSITION GPS CLIENT EN DIRECT */}
+                    <Text style={styles.label}>3. Position GPS & Adresse de livraison ({userCity})</Text>
+                    <View style={styles.gpsBox}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.microLabel}>POSITION GPS CLIENT</Text>
+                        <Text style={styles.gpsCoordValue}>
+                          {hasValidCoords(clientCoords)
+                            ? `${clientCoords.latitude}, ${clientCoords.longitude}`
+                            : 'Position GPS en attente'}
+                        </Text>
+                      </View>
+                      <AnimatedButton
+                        style={styles.gpsActionBtn}
+                        onPress={() =>
+                          captureDeviceGPS({
+                            silent: false,
+                            fillAddress: true,
+                            onCaptured: (coords) => setClientCoords(coords),
+                          })
+                        }
+                        disabled={gpsLoading}
+                      >
+                        <Text style={styles.gpsActionBtnText}>
+                          {gpsLoading ? 'Localisation...' : 'Actualiser GPS'}
+                        </Text>
+                      </AnimatedButton>
+                    </View>
+
                     <TextInput
-                      style={styles.input}
-                      placeholder="Ex : Yopougon, Cocody Angré, Air France..."
+                      style={[styles.input, { marginTop: 8 }]}
+                      placeholder="Quartier / point de repère (ex : Yopougon, Angré...)"
                       placeholderTextColor="#64748B"
                       value={adresseLivraison}
                       onChangeText={setAdresseLivraison}
@@ -1931,10 +2153,10 @@ export default function App() {
                                   {vendor.nom}
                                 </Text>
                                 <Text style={styles.mutedText}>
-                                  Localité : {vendor.adresse} • Distance : {vendor.deliveryQuote.distanceKm} km
+                                  {vendor.adresse} • Distance : {vendor.deliveryQuote.distanceKm} km ({vendor.deliveryQuote.isExactGps ? 'GPS exact' : 'Est.'})
                                 </Text>
                                 <Text style={styles.deliveryEstimateTag}>
-                                  Livraison estimée : {vendor.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} FCFA
+                                  Livraison calculée : {vendor.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} FCFA
                                 </Text>
                               </View>
                               <View style={{ alignItems: 'flex-end' }}>
@@ -1986,7 +2208,7 @@ export default function App() {
                       <View style={styles.rowBetween}>
                         <Text style={styles.financeLabel}>
                           {deliveryMode === 'livraison'
-                            ? `Livraison (${activeOfferVendor?.adresse || ''} → ${clientDeliveryLocality}, ${currentFinancials.distanceKm} km)`
+                            ? `Livraison (${currentFinancials.distanceKm} km • ${currentFinancials.isExactGps ? 'GPS exact' : 'Estimation'})`
                             : 'Retrait au dépôt'}
                         </Text>
                         <Text style={styles.financeValue}>
@@ -2083,7 +2305,7 @@ export default function App() {
                     <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_client')}>
                       <View>
                         <Text style={styles.roleSelectTitle}>Client</Text>
-                        <Text style={styles.roleSelectSub}>Comparer les offres et commander</Text>
+                        <Text style={styles.roleSelectSub}>Comparer les prix et commander</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
                     </AnimatedButton>
@@ -2091,7 +2313,7 @@ export default function App() {
                     <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_depot')}>
                       <View>
                         <Text style={styles.roleSelectTitle}>Vendeur</Text>
-                        <Text style={styles.roleSelectSub}>Gérer un dépôt et ses tarifs</Text>
+                        <Text style={styles.roleSelectSub}>Gérer un dépôt, ses tarifs et sa position GPS</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
                     </AnimatedButton>
@@ -2152,6 +2374,35 @@ export default function App() {
                     value={adresse}
                     onChangeText={setAdresse}
                   />
+
+                  {/* CAPTURE GPS LORS DE L'INSCRIPTION */}
+                  {(currentScreen === 'register_depot' || currentScreen === 'register_client') && (
+                    <View style={[styles.gpsBox, { marginBottom: 12 }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.microLabel}>COORDONNÉES GPS</Text>
+                        <Text style={styles.gpsCoordValue}>
+                          {hasValidCoords(registerCoords)
+                            ? `${registerCoords.latitude}, ${registerCoords.longitude}`
+                            : 'Non capturées'}
+                        </Text>
+                      </View>
+                      <AnimatedButton
+                        style={styles.gpsActionBtn}
+                        onPress={() =>
+                          captureDeviceGPS({
+                            silent: false,
+                            fillAddress: true,
+                            onCaptured: (coords) => setRegisterCoords(coords),
+                          })
+                        }
+                        disabled={gpsLoading}
+                      >
+                        <Text style={styles.gpsActionBtnText}>
+                          {gpsLoading ? 'GPS...' : 'Capturer GPS'}
+                        </Text>
+                      </AnimatedButton>
+                    </View>
+                  )}
 
                   {currentScreen === 'register_livreur' && (
                     <>
@@ -2325,6 +2576,22 @@ const styles = StyleSheet.create({
   avatarText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
   greetingTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
   mutedText: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
+  gpsBadgeText: { color: '#4ADE80', fontSize: 11, fontWeight: '700', marginTop: 3 },
+
+  gpsBox: {
+    backgroundColor: '#1E293B',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  gpsCoordValue: { color: '#E2E8F0', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  gpsActionBtn: { backgroundColor: '#0EA5E9', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  gpsActionBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
 
   subStrip: { backgroundColor: '#0F172A', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#1E293B', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   microLabel: { color: '#64748B', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
