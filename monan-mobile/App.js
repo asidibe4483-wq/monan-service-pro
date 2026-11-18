@@ -51,6 +51,7 @@ const SUBSCRIPTION_PLANS = [
 ];
 
 const PAYMENT_METHODS = ['Wave', 'Orange Money', 'MTN MoMo', 'Moov Money'];
+const VEHICLE_TYPES = ['Moto', 'Tricycle'];
 
 const ONBOARDING_SLIDES = [
   {
@@ -71,7 +72,14 @@ const ONBOARDING_SLIDES = [
     id: '3',
     badge: 'VENDEUR',
     title: 'Commandes en direct',
-    subtitle: 'Recevez les commandes clients, acceptez-les et gérez votre dépôt.',
+    subtitle: 'Recevez les commandes clients, assignez un livreur et gérez votre dépôt.',
+    icon: require('./assets/splash-icon.png')
+  },
+  {
+    id: '4',
+    badge: 'LIVREUR',
+    title: 'Courses & Livraisons',
+    subtitle: 'Récupérez les bouteilles au dépôt et livrez rapidement les clients.',
     icon: require('./assets/splash-icon.png')
   }
 ];
@@ -209,6 +217,7 @@ export default function App() {
       role: 'depot',
       nom: 'Dépôt Angré',
       telephone: '0707070707',
+      adresse: 'Cocody Angré',
       createdAt: new Date().toISOString(),
       subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       isSubscribed: true
@@ -219,6 +228,17 @@ export default function App() {
       role: 'client',
       nom: 'Kouassi Yves',
       telephone: '0505050505',
+      adresse: 'Angré Star 10',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'LIV-DEFAULT',
+      email: 'livreur@monan.ci',
+      role: 'livreur',
+      nom: 'Koné Moussa',
+      telephone: '0102030405',
+      adresse: 'Cocody / Angré',
+      vehicule: 'Tricycle',
       createdAt: new Date().toISOString()
     }
   ]);
@@ -234,6 +254,13 @@ export default function App() {
   const [nom, setNom] = useState('');
   const [telephone, setTelephone] = useState('');
   const [adresse, setAdresse] = useState('');
+  const [vehicule, setVehicule] = useState('Moto');
+
+  // Ajout rapide de livreur par le vendeur
+  const [newDriverName, setNewDriverName] = useState('');
+  const [newDriverPhone, setNewDriverPhone] = useState('');
+  const [newDriverVehicle, setNewDriverVehicle] = useState('Moto');
+  const [selectedDriverByOrder, setSelectedDriverByOrder] = useState({});
 
   const [selectedMarque, setSelectedMarque] = useState(MARQUES_GAZ[0]);
   const [selectedCylinder, setSelectedCylinder] = useState(CYLINDER_TYPES[1]);
@@ -260,6 +287,9 @@ export default function App() {
       status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
+      assignedDriverId: null,
+      assignedDriverNom: null,
+      assignedDriverPhone: null,
     },
     {
       id: 'CMD-802',
@@ -274,6 +304,9 @@ export default function App() {
       status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
+      assignedDriverId: null,
+      assignedDriverNom: null,
+      assignedDriverPhone: null,
     }
   ]);
 
@@ -443,6 +476,7 @@ export default function App() {
       telephone: telephone.trim(),
       adresse: adresse.trim() || 'Abidjan',
       role: type,
+      vehicule: type === 'livreur' ? vehicule : null,
       createdAt: nowIso,
       subscriptionExpiresAt: type === 'depot' ? trialExpiryIso : null,
       isSubscribed: false
@@ -510,12 +544,19 @@ export default function App() {
             : null)
       };
     } else {
-      const inferredRole = (cleanEmail.includes('depot') || cleanEmail.includes('vendeur') || cleanEmail.includes('pro')) ? 'depot' : 'client';
+      let inferredRole = 'client';
+      if (cleanEmail.includes('depot') || cleanEmail.includes('vendeur') || cleanEmail.includes('pro')) {
+        inferredRole = 'depot';
+      } else if (cleanEmail.includes('livreur') || cleanEmail.includes('coursier') || cleanEmail.includes('driver')) {
+        inferredRole = 'livreur';
+      }
+
       userData = {
-        id: inferredRole === 'depot' ? 'DEP-CURRENT' : 'CLI-CURRENT',
+        id: inferredRole === 'depot' ? 'DEP-CURRENT' : inferredRole === 'livreur' ? 'LIV-CURRENT' : 'CLI-CURRENT',
         email: cleanEmail,
         nom: cleanEmail.split('@')[0],
-        telephone: '',
+        telephone: '0700000000',
+        vehicule: inferredRole === 'livreur' ? 'Moto' : null,
         role: inferredRole,
         createdAt: new Date().toISOString(),
         subscriptionExpiresAt: inferredRole === 'depot' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
@@ -528,6 +569,37 @@ export default function App() {
     setActiveRoleMode(userData.role);
     setDashboardTab('home');
     setLoading(false);
+  };
+
+  const handleAddDriverFromVendor = async () => {
+    if (!newDriverName.trim() || !newDriverPhone.trim()) {
+      Alert.alert('Champs requis', 'Entrez le nom et le téléphone du livreur.');
+      return;
+    }
+
+    const driverId = `LIV-${Math.floor(1000 + Math.random() * 9000)}`;
+    const driverObj = {
+      id: driverId,
+      nom: newDriverName.trim(),
+      telephone: newDriverPhone.trim(),
+      email: `${newDriverPhone.trim()}@livreur.monan.ci`,
+      adresse: user?.adresse || 'Zone Dépôt',
+      role: 'livreur',
+      vehicule: newDriverVehicle,
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedUsers = [...registeredUsers, driverObj];
+    setRegisteredUsers(updatedUsers);
+    try {
+      await AsyncStorage.setItem('@registered_users', JSON.stringify(updatedUsers));
+    } catch (e) {
+      console.log('Erreur ajout livreur:', e);
+    }
+
+    setNewDriverName('');
+    setNewDriverPhone('');
+    Alert.alert('Livreur ajouté', `${driverObj.nom} est maintenant associé aux livraisons.`);
   };
 
   const handleCreateOrder = () => {
@@ -550,6 +622,9 @@ export default function App() {
       status: 'available',
       assignedVendorId: null,
       assignedVendorNom: null,
+      assignedDriverId: null,
+      assignedDriverNom: null,
+      assignedDriverPhone: null,
       total: `${totalCalculated.toLocaleString('fr-FR')} FCFA`,
       adresse: adresseLivraison,
       depotCible: selectedDepotTarget ? selectedDepotTarget.nom : 'Dépôt proche'
@@ -577,7 +652,56 @@ export default function App() {
       })
     );
 
-    Alert.alert('Commande acceptée', 'Cette commande est réservée pour votre dépôt.');
+    Alert.alert('Commande acceptée', 'Vous pouvez maintenant lui assigner un livreur dans l’onglet Livraisons.');
+  };
+
+  const handleAssignDriverToOrder = (orderId) => {
+    if (isVendorSubscriptionExpired) return;
+    const drivers = registeredUsers.filter(u => u.role === 'livreur');
+    if (drivers.length === 0) {
+      Alert.alert('Aucun livreur', 'Ajoutez d’abord un livreur dans l’onglet Livreurs.');
+      return;
+    }
+
+    const chosenDriverId = selectedDriverByOrder[orderId] || drivers[0].id;
+    const driver = drivers.find(d => d.id === chosenDriverId) || drivers[0];
+
+    setAllOrders(prevOrders =>
+      prevOrders.map(order => {
+        if (order.id === orderId) {
+          return {
+            ...order,
+            status: 'in_delivery',
+            assignedDriverId: driver.id,
+            assignedDriverNom: driver.nom,
+            assignedDriverPhone: driver.telephone
+          };
+        }
+        return order;
+      })
+    );
+
+    Alert.alert('Livreur associé', `La commande ${orderId} a été confiée à ${driver.nom} (${driver.telephone}).`);
+  };
+
+  const handleDriverClaimOrder = (orderId) => {
+    setAllOrders(prevOrders =>
+      prevOrders.map(order => {
+        if (order.id === orderId) {
+          return {
+            ...order,
+            status: 'in_delivery',
+            assignedDriverId: user.id,
+            assignedDriverNom: user.nom || 'Livreur',
+            assignedDriverPhone: user.telephone || ''
+          };
+        }
+        return order;
+      })
+    );
+
+    Alert.alert('Course acceptée', 'Rendez-vous au dépôt pour récupérer la bouteille.');
+    setDashboardTab('driver_active');
   };
 
   const handleMarkAsDelivered = (orderId) => {
@@ -590,7 +714,7 @@ export default function App() {
         return order;
       })
     );
-    Alert.alert('Succès', 'Commande livrée.');
+    Alert.alert('Livraison validée', 'La commande a été marquée comme livrée au client.');
   };
 
   const handleLogout = () => {
@@ -608,9 +732,39 @@ export default function App() {
       d.quartier.toLowerCase().includes(searchDepot.toLowerCase())
     );
 
+  const registeredDrivers = registeredUsers.filter(u => u.role === 'livreur');
+
+  // Filtres Vendeur
   const availableOrdersForVendors = allOrders.filter(cmd => cmd.status === 'available');
-  const myAcceptedOrders = allOrders.filter(cmd => cmd.assignedVendorId === user?.id && cmd.status === 'accepted');
+  const myVendorDeliveries = allOrders.filter(
+    cmd => cmd.assignedVendorId === user?.id && (cmd.status === 'accepted' || cmd.status === 'in_delivery')
+  );
+
+  // Filtres Livreur
+  const availableOrdersForDrivers = allOrders.filter(cmd => cmd.status === 'accepted' && !cmd.assignedDriverId);
+  const myDriverActiveOrders = allOrders.filter(cmd => cmd.assignedDriverId === user?.id && cmd.status === 'in_delivery');
+  const myDriverDeliveredOrders = allOrders.filter(cmd => cmd.assignedDriverId === user?.id && cmd.status === 'delivered');
+
+  // Filtres Client
   const myClientOrders = allOrders.filter(cmd => cmd.clientNom === user?.nom || user?.role === 'client');
+
+  const getRoleHeaderLabel = () => {
+    if (!user) return 'GAZ EN LIGNE';
+    if (activeRoleMode === 'depot') return 'ESPACE VENDEUR';
+    if (activeRoleMode === 'livreur') return 'ESPACE LIVREUR';
+    return 'ESPACE CLIENT';
+  };
+
+  const getClientStatusLabel = (cmd) => {
+    if (cmd.status === 'delivered') return 'Livrée';
+    if (cmd.status === 'in_delivery') {
+      return `En livraison • ${cmd.assignedDriverNom} (${cmd.assignedDriverPhone})`;
+    }
+    if (cmd.status === 'accepted') {
+      return `Préparation (${cmd.assignedVendorNom})`;
+    }
+    return "En attente d'un dépôt";
+  };
 
   if (!isAppReady || hasSeenOnboarding === null) {
     return (
@@ -694,9 +848,7 @@ export default function App() {
           </View>
           <View>
             <Text style={styles.brandTitle}>MONAN SERVICE</Text>
-            <Text style={styles.brandSub}>
-              {user ? (activeRoleMode === 'depot' ? 'ESPACE VENDEUR' : 'ESPACE CLIENT') : 'GAZ EN LIGNE'}
-            </Text>
+            <Text style={styles.brandSub}>{getRoleHeaderLabel()}</Text>
           </View>
         </View>
 
@@ -841,7 +993,16 @@ export default function App() {
                         onPress={() => setDashboardTab('my_deliveries')}
                       >
                         <Text style={[styles.pillText, dashboardTab === 'my_deliveries' && styles.pillTextActive]}>
-                          Livraisons ({myAcceptedOrders.length})
+                          Livraisons ({myVendorDeliveries.length})
+                        </Text>
+                      </AnimatedButton>
+
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'vendor_drivers' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('vendor_drivers')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'vendor_drivers' && styles.pillTextActive]}>
+                          Livreurs ({registeredDrivers.length})
                         </Text>
                       </AnimatedButton>
 
@@ -850,6 +1011,35 @@ export default function App() {
                         onPress={() => setDashboardTab('pricing')}
                       >
                         <Text style={[styles.pillText, dashboardTab === 'pricing' && styles.pillTextActive]}>Mes Prix</Text>
+                      </AnimatedButton>
+                    </>
+                  ) : activeRoleMode === 'livreur' ? (
+                    <>
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'driver_available' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('driver_available')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'driver_available' && styles.pillTextActive]}>
+                          Courses dispo ({availableOrdersForDrivers.length})
+                        </Text>
+                      </AnimatedButton>
+
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'driver_active' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('driver_active')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'driver_active' && styles.pillTextActive]}>
+                          Mes courses ({myDriverActiveOrders.length})
+                        </Text>
+                      </AnimatedButton>
+
+                      <AnimatedButton
+                        style={[styles.pillBtn, dashboardTab === 'driver_history' && styles.pillBtnActive]}
+                        onPress={() => setDashboardTab('driver_history')}
+                      >
+                        <Text style={[styles.pillText, dashboardTab === 'driver_history' && styles.pillTextActive]}>
+                          Livrées ({myDriverDeliveredOrders.length})
+                        </Text>
                       </AnimatedButton>
                     </>
                   ) : (
@@ -895,7 +1085,11 @@ export default function App() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.greetingTitle}>Bonjour, {user.nom || 'Utilisateur'}</Text>
                       <Text style={styles.greetingSubtitle}>
-                        {user.role === 'depot' ? (activeRoleMode === 'depot' ? 'Mode Vendeur' : 'Mode Client (Vendeur)') : 'Compte Client'}
+                        {user.role === 'depot'
+                          ? (activeRoleMode === 'depot' ? 'Mode Vendeur' : 'Mode Client (Vendeur)')
+                          : user.role === 'livreur'
+                          ? `Livreur • ${user.vehicule || 'Moto'}`
+                          : 'Compte Client'}
                       </Text>
                     </View>
                   </View>
@@ -919,12 +1113,31 @@ export default function App() {
                     {activeRoleMode === 'depot' ? (
                       <>
                         <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>COMMANDES DISPONIBLES</Text>
+                          <Text style={styles.kpiCardTag}>COMMANDES DISPO</Text>
                           <Text style={styles.kpiCardNum}>{availableOrdersForVendors.length}</Text>
                         </View>
                         <View style={styles.kpiCard}>
-                          <Text style={styles.kpiCardTag}>MES LIVRAISONS</Text>
-                          <Text style={styles.kpiCardNum}>{myAcceptedOrders.length}</Text>
+                          <Text style={styles.kpiCardTag}>LIVRAISONS</Text>
+                          <Text style={styles.kpiCardNum}>{myVendorDeliveries.length}</Text>
+                        </View>
+                        <View style={styles.kpiCard}>
+                          <Text style={styles.kpiCardTag}>LIVREURS</Text>
+                          <Text style={styles.kpiCardNum}>{registeredDrivers.length}</Text>
+                        </View>
+                      </>
+                    ) : activeRoleMode === 'livreur' ? (
+                      <>
+                        <View style={styles.kpiCard}>
+                          <Text style={styles.kpiCardTag}>COURSES DISPO</Text>
+                          <Text style={styles.kpiCardNum}>{availableOrdersForDrivers.length}</Text>
+                        </View>
+                        <View style={styles.kpiCard}>
+                          <Text style={styles.kpiCardTag}>EN COURS</Text>
+                          <Text style={styles.kpiCardNum}>{myDriverActiveOrders.length}</Text>
+                        </View>
+                        <View style={styles.kpiCard}>
+                          <Text style={styles.kpiCardTag}>LIVRÉES</Text>
+                          <Text style={styles.kpiCardNum}>{myDriverDeliveredOrders.length}</Text>
                         </View>
                       </>
                     ) : (
@@ -947,8 +1160,22 @@ export default function App() {
                         <Text style={styles.actionCardTitle}>Commandes en direct</Text>
                       </AnimatedButton>
 
+                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('my_deliveries')}>
+                        <Text style={styles.actionCardTitleWhite}>Assigner un livreur</Text>
+                      </AnimatedButton>
+
                       <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('pricing')}>
                         <Text style={styles.actionCardTitleWhite}>Gérer mes prix</Text>
+                      </AnimatedButton>
+                    </View>
+                  ) : activeRoleMode === 'livreur' ? (
+                    <View style={{ gap: 10 }}>
+                      <AnimatedButton style={styles.actionCardOrange} onPress={() => setDashboardTab('driver_available')}>
+                        <Text style={styles.actionCardTitle}>Courses disponibles</Text>
+                      </AnimatedButton>
+
+                      <AnimatedButton style={styles.actionCardNavy} onPress={() => setDashboardTab('driver_active')}>
+                        <Text style={styles.actionCardTitleWhite}>Mes courses en cours</Text>
                       </AnimatedButton>
                     </View>
                   ) : (
@@ -995,29 +1222,222 @@ export default function App() {
                 </View>
               )}
 
-              {/* LIVRAISONS VENDEUR */}
+              {/* LIVRAISONS & ASSIGNATION LIVREUR (VENDEUR) */}
               {dashboardTab === 'my_deliveries' && activeRoleMode === 'depot' && (
                 <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Livraisons en cours</Text>
-                  {myAcceptedOrders.length === 0 ? (
+                  <Text style={styles.cardBoxTitle}>Livraisons & Livreurs</Text>
+                  {myVendorDeliveries.length === 0 ? (
                     <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune livraison en cours.</Text>
                   ) : (
-                    myAcceptedOrders.map((order) => (
-                      <View key={order.id} style={[styles.liveOrderCard, { borderColor: '#4ADE80' }]}>
-                        <View style={styles.liveOrderHeader}>
-                          <Text style={styles.liveOrderId}>{order.id}</Text>
-                          <Text style={[styles.liveOrderBadge, { backgroundColor: 'rgba(74, 222, 128, 0.2)', color: '#4ADE80' }]}>
-                            RESERVÉE
+                    myVendorDeliveries.map((order) => {
+                      const activeSelectedDriverId = selectedDriverByOrder[order.id] || registeredDrivers[0]?.id;
+
+                      return (
+                        <View key={order.id} style={[styles.liveOrderCard, { borderColor: order.status === 'in_delivery' ? '#38BDF8' : '#4ADE80' }]}>
+                          <View style={styles.liveOrderHeader}>
+                            <Text style={styles.liveOrderId}>{order.id}</Text>
+                            <Text style={[
+                              styles.liveOrderBadge,
+                              order.status === 'in_delivery'
+                                ? { backgroundColor: 'rgba(56, 189, 248, 0.2)', color: '#38BDF8' }
+                                : { backgroundColor: 'rgba(74, 222, 128, 0.2)', color: '#4ADE80' }
+                            ]}>
+                              {order.status === 'in_delivery' ? 'EN LIVRAISON' : 'PRÊTE À LIVRER'}
+                            </Text>
+                          </View>
+                          <Text style={styles.liveOrderClient}>Client : {order.clientNom} ({order.clientPhone})</Text>
+                          <Text style={styles.liveOrderArticle}>{order.qte}x {order.type}</Text>
+                          <Text style={styles.liveOrderAddress}>Adresse : {order.adresse}</Text>
+                          <Text style={styles.liveOrderTotal}>Total : {order.total}</Text>
+
+                          {order.status === 'accepted' ? (
+                            <View style={styles.assignDriverBox}>
+                              <Text style={styles.assignDriverLabel}>Choisir un livreur :</Text>
+                              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
+                                <View style={{ flexDirection: 'row', gap: 6 }}>
+                                  {registeredDrivers.map((drv) => {
+                                    const isChosen = activeSelectedDriverId === drv.id;
+                                    return (
+                                      <AnimatedButton
+                                        key={drv.id}
+                                        style={[styles.driverChip, isChosen && styles.driverChipActive]}
+                                        onPress={() => setSelectedDriverByOrder(prev => ({ ...prev, [order.id]: drv.id }))}
+                                      >
+                                        <Text style={[styles.driverChipText, isChosen && { color: '#FFFFFF' }]}>
+                                          {drv.nom} ({drv.vehicule || 'Moto'})
+                                        </Text>
+                                      </AnimatedButton>
+                                    );
+                                  })}
+                                </View>
+                              </ScrollView>
+
+                              <AnimatedButton style={styles.btnAcceptOrder} onPress={() => handleAssignDriverToOrder(order.id)}>
+                                <Text style={styles.btnAcceptOrderText}>Assigner le livreur</Text>
+                              </AnimatedButton>
+                            </View>
+                          ) : (
+                            <View style={styles.assignedDriverBanner}>
+                              <Text style={styles.assignedDriverText}>
+                                Livreur : <Text style={{ fontWeight: '900', color: '#38BDF8' }}>{order.assignedDriverNom}</Text> ({order.assignedDriverPhone})
+                              </Text>
+                              <AnimatedButton style={[styles.btnOrange, { marginTop: 8 }]} onPress={() => handleMarkAsDelivered(order.id)}>
+                                <Text style={styles.btnOrangeText}>Valider la livraison</Text>
+                              </AnimatedButton>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })
+                  )}
+                </View>
+              )}
+
+              {/* GESTION DES LIVREURS (VENDEUR) */}
+              {dashboardTab === 'vendor_drivers' && activeRoleMode === 'depot' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Mes livreurs ({registeredDrivers.length})</Text>
+
+                  <View style={styles.addDriverForm}>
+                    <Text style={styles.label}>Ajouter un livreur</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Nom du livreur (Ex: Yao Paul)"
+                      placeholderTextColor="#64748B"
+                      value={newDriverName}
+                      onChangeText={setNewDriverName}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="phone-pad"
+                      placeholder="Téléphone (Ex: 0701020304)"
+                      placeholderTextColor="#64748B"
+                      value={newDriverPhone}
+                      onChangeText={setNewDriverPhone}
+                    />
+                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+                      {VEHICLE_TYPES.map((v) => (
+                        <AnimatedButton
+                          key={v}
+                          style={[styles.opTypeBtn, newDriverVehicle === v && styles.opTypeBtnActive]}
+                          onPress={() => setNewDriverVehicle(v)}
+                        >
+                          <Text style={[styles.opTypeText, newDriverVehicle === v && styles.opTypeTextActive]}>{v}</Text>
+                        </AnimatedButton>
+                      ))}
+                    </View>
+                    <AnimatedButton style={styles.btnOrange} onPress={handleAddDriverFromVendor}>
+                      <Text style={styles.btnOrangeText}>Associer le livreur</Text>
+                    </AnimatedButton>
+                  </View>
+
+                  {registeredDrivers.map((drv) => {
+                    const activeDeliveriesCount = allOrders.filter(
+                      o => o.assignedDriverId === drv.id && o.status === 'in_delivery'
+                    ).length;
+
+                    return (
+                      <View key={drv.id} style={styles.driverRowCard}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.depotTitle}>{drv.nom}</Text>
+                          <Text style={styles.depotSub}>{drv.telephone} • {drv.vehicule || 'Moto'}</Text>
+                        </View>
+                        <View style={[
+                          styles.driverStatusPill,
+                          activeDeliveriesCount > 0 ? { backgroundColor: 'rgba(249, 115, 22, 0.2)' } : { backgroundColor: 'rgba(34, 197, 94, 0.2)' }
+                        ]}>
+                          <Text style={[
+                            styles.driverStatusText,
+                            activeDeliveriesCount > 0 ? { color: '#F97316' } : { color: '#4ADE80' }
+                          ]}>
+                            {activeDeliveriesCount > 0 ? `En course (${activeDeliveriesCount})` : 'Disponible'}
                           </Text>
                         </View>
-                        <Text style={styles.liveOrderClient}>Client : {order.clientNom}</Text>
-                        <Text style={styles.liveOrderArticle}>{order.qte}x {order.type}</Text>
-                        <Text style={styles.liveOrderAddress}>Adresse : {order.adresse}</Text>
-                        <Text style={styles.liveOrderTotal}>Total : {order.total}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
 
-                        <AnimatedButton style={[styles.btnOrange, { marginTop: 8 }]} onPress={() => handleMarkAsDelivered(order.id)}>
-                          <Text style={styles.btnOrangeText}>Valider la livraison</Text>
+              {/* ESPACE LIVREUR : COURSES DISPONIBLES */}
+              {dashboardTab === 'driver_available' && activeRoleMode === 'livreur' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Courses disponibles</Text>
+
+                  {availableOrdersForDrivers.length === 0 ? (
+                    <View style={styles.emptyStateBox}>
+                      <Text style={styles.emptyStateText}>Aucune course prête au dépôt pour le moment.</Text>
+                    </View>
+                  ) : (
+                    availableOrdersForDrivers.map((order) => (
+                      <View key={order.id} style={styles.liveOrderCard}>
+                        <View style={styles.liveOrderHeader}>
+                          <Text style={styles.liveOrderId}>{order.id} • {order.date}</Text>
+                          <Text style={styles.liveOrderBadge}>À RÉCUPÉRER</Text>
+                        </View>
+                        <Text style={styles.liveOrderClient}>Dépôt : {order.assignedVendorNom}</Text>
+                        <Text style={styles.liveOrderArticle}>{order.qte}x {order.type} ({order.operation})</Text>
+                        <Text style={styles.liveOrderAddress}>Livrer à : {order.clientNom} • {order.adresse}</Text>
+                        <Text style={styles.liveOrderTotal}>Montant : {order.total}</Text>
+
+                        <AnimatedButton style={styles.btnAcceptOrder} onPress={() => handleDriverClaimOrder(order.id)}>
+                          <Text style={styles.btnAcceptOrderText}>Prendre la course</Text>
                         </AnimatedButton>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+
+              {/* ESPACE LIVREUR : MES COURSES EN COURS */}
+              {dashboardTab === 'driver_active' && activeRoleMode === 'livreur' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Mes courses en cours</Text>
+
+                  {myDriverActiveOrders.length === 0 ? (
+                    <View style={styles.emptyStateBox}>
+                      <Text style={styles.emptyStateText}>Vous n'avez aucune livraison en cours.</Text>
+                    </View>
+                  ) : (
+                    myDriverActiveOrders.map((order) => (
+                      <View key={order.id} style={[styles.liveOrderCard, { borderColor: '#38BDF8' }]}>
+                        <View style={styles.liveOrderHeader}>
+                          <Text style={styles.liveOrderId}>{order.id}</Text>
+                          <Text style={[styles.liveOrderBadge, { backgroundColor: 'rgba(56, 189, 248, 0.2)', color: '#38BDF8' }]}>
+                            EN ROUTE
+                          </Text>
+                        </View>
+                        <Text style={styles.liveOrderClient}>Client : {order.clientNom} ({order.clientPhone})</Text>
+                        <Text style={styles.liveOrderArticle}>{order.qte}x {order.type} ({order.operation})</Text>
+                        <Text style={styles.liveOrderAddress}>Destination : {order.adresse}</Text>
+                        <Text style={styles.liveOrderAddress}>Dépôt : {order.assignedVendorNom}</Text>
+                        <Text style={styles.liveOrderTotal}>À encaisser : {order.total}</Text>
+
+                        <AnimatedButton style={[styles.btnAcceptOrder, { marginTop: 10 }]} onPress={() => handleMarkAsDelivered(order.id)}>
+                          <Text style={styles.btnAcceptOrderText}>Confirmer la livraison</Text>
+                        </AnimatedButton>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+
+              {/* ESPACE LIVREUR : HISTORIQUE LIVRÉES */}
+              {dashboardTab === 'driver_history' && activeRoleMode === 'livreur' && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.cardBoxTitle}>Courses livrées</Text>
+
+                  {myDriverDeliveredOrders.length === 0 ? (
+                    <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune livraison terminée.</Text>
+                  ) : (
+                    myDriverDeliveredOrders.map((cmd) => (
+                      <View key={cmd.id} style={styles.orderRow}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <Text style={styles.orderRowId}>{cmd.id} • {cmd.date}</Text>
+                          <Text style={[styles.orderRowStatus, { color: '#4ADE80' }]}>Livrée</Text>
+                        </View>
+                        <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type} • Client : {cmd.clientNom}</Text>
+                        <Text style={styles.orderRowTotal}>{cmd.total}</Text>
                       </View>
                     ))
                   )}
@@ -1193,13 +1613,19 @@ export default function App() {
                   ) : (
                     myClientOrders.map((cmd) => (
                       <View key={cmd.id} style={styles.orderRow}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Text style={styles.orderRowId}>{cmd.id} • {cmd.date}</Text>
                           <Text style={[
                             styles.orderRowStatus,
-                            cmd.status === 'accepted' ? { color: '#4ADE80' } : { color: '#F97316' }
+                            cmd.status === 'delivered'
+                              ? { color: '#4ADE80' }
+                              : cmd.status === 'in_delivery'
+                              ? { color: '#38BDF8' }
+                              : cmd.status === 'accepted'
+                              ? { color: '#FBBF24' }
+                              : { color: '#F97316' }
                           ]}>
-                            {cmd.status === 'accepted' ? `Acceptée (${cmd.assignedVendorNom})` : 'En attente d\'un dépôt'}
+                            {getClientStatusLabel(cmd)}
                           </Text>
                         </View>
                         <Text style={styles.orderRowBody}>{cmd.qte}x {cmd.type} ({cmd.operation})</Text>
@@ -1238,6 +1664,18 @@ export default function App() {
                     </View>
                   </View>
 
+                  <Text style={{ color: '#CBD5E1', fontSize: 11, marginBottom: 8 }}>Format B28 (28 kg)</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Recharge (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.recharge} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, recharge: val } })} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Achat (F)</Text>
+                      <TextInput style={styles.input} keyboardType="numeric" value={vendorPrices.B28.achat} onChangeText={(val) => setVendorPrices({ ...vendorPrices, B28: { ...vendorPrices.B28, achat: val } })} />
+                    </View>
+                  </View>
+
                   <AnimatedButton style={styles.btnOrange} onPress={() => Alert.alert('Succès', 'Tarifs mis à jour.')}>
                     <Text style={styles.btnOrangeText}>Enregistrer</Text>
                   </AnimatedButton>
@@ -1263,17 +1701,24 @@ export default function App() {
                   </FadeInView>
 
                   <View style={styles.cardsWrapper}>
-                    <FadeInView delay={120}>
+                    <FadeInView delay={100}>
                       <AnimatedButton style={styles.welcomeCardDark} onPress={() => setCurrentScreen('register_client')}>
                         <Text style={styles.welcomeCardTitleLight}>Espace Client</Text>
                         <Text style={styles.welcomeCardSubLight}>Commandes de gaz</Text>
                       </AnimatedButton>
                     </FadeInView>
 
-                    <FadeInView delay={200}>
+                    <FadeInView delay={160}>
                       <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_depot')}>
                         <Text style={styles.welcomeCardTitleDark}>Espace Vendeur</Text>
                         <Text style={styles.welcomeCardSubDark}>Gérer mon dépôt</Text>
+                      </AnimatedButton>
+                    </FadeInView>
+
+                    <FadeInView delay={220}>
+                      <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_livreur')}>
+                        <Text style={styles.welcomeCardTitleDark}>Espace Livreur</Text>
+                        <Text style={styles.welcomeCardSubDark}>Effectuer les livraisons</Text>
                       </AnimatedButton>
                     </FadeInView>
                   </View>
@@ -1286,24 +1731,49 @@ export default function App() {
                 </View>
               )}
 
-              {(currentScreen === 'register_client' || currentScreen === 'register_depot') && (
+              {(currentScreen === 'register_client' || currentScreen === 'register_depot' || currentScreen === 'register_livreur') && (
                 <View style={styles.cardBox}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
                     <Text style={styles.backBtnInlineText}>Retour</Text>
                   </AnimatedButton>
                   
                   <Text style={styles.cardBoxTitle}>
-                    {currentScreen === 'register_depot' ? 'Inscription Vendeur' : 'Inscription Client'}
+                    {currentScreen === 'register_depot'
+                      ? 'Inscription Vendeur'
+                      : currentScreen === 'register_livreur'
+                      ? 'Inscription Livreur'
+                      : 'Inscription Client'}
                   </Text>
 
-                  <Text style={styles.label}>Nom complet / Dépôt *</Text>
-                  <TextInput style={styles.input} placeholder="Ex: Dépôt Angré" placeholderTextColor="#64748B" value={nom} onChangeText={setNom} />
+                  <Text style={styles.label}>
+                    {currentScreen === 'register_depot' ? 'Nom du Dépôt / Responsable *' : 'Nom complet *'}
+                  </Text>
+                  <TextInput style={styles.input} placeholder="Ex: Koné Moussa" placeholderTextColor="#64748B" value={nom} onChangeText={setNom} />
 
                   <Text style={styles.label}>Téléphone *</Text>
                   <TextInput style={styles.input} keyboardType="phone-pad" placeholder="0700000000" placeholderTextColor="#64748B" value={telephone} onChangeText={setTelephone} />
 
-                  <Text style={styles.label}>Adresse *</Text>
-                  <TextInput style={styles.input} placeholder="Quartier, repère..." placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
+                  <Text style={styles.label}>
+                    {currentScreen === 'register_livreur' ? 'Zone de livraison *' : 'Adresse *'}
+                  </Text>
+                  <TextInput style={styles.input} placeholder="Quartier, commune..." placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
+
+                  {currentScreen === 'register_livreur' && (
+                    <>
+                      <Text style={styles.label}>Véhicule *</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                        {VEHICLE_TYPES.map((v) => (
+                          <AnimatedButton
+                            key={v}
+                            style={[styles.opTypeBtn, vehicule === v && styles.opTypeBtnActive]}
+                            onPress={() => setVehicule(v)}
+                          >
+                            <Text style={[styles.opTypeText, vehicule === v && styles.opTypeTextActive]}>{v}</Text>
+                          </AnimatedButton>
+                        ))}
+                      </View>
+                    </>
+                  )}
 
                   <Text style={styles.label}>Email *</Text>
                   <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="email@exemple.com" placeholderTextColor="#64748B" value={email} onChangeText={setEmail} />
@@ -1311,7 +1781,19 @@ export default function App() {
                   <Text style={styles.label}>Mot de passe *</Text>
                   <TextInput style={styles.input} secureTextEntry placeholder="••••••••" placeholderTextColor="#64748B" value={password} onChangeText={setPassword} />
 
-                  <AnimatedButton style={styles.btnOrange} onPress={() => handleRegister(currentScreen === 'register_depot' ? 'depot' : 'client')} disabled={loading}>
+                  <AnimatedButton
+                    style={styles.btnOrange}
+                    onPress={() =>
+                      handleRegister(
+                        currentScreen === 'register_depot'
+                          ? 'depot'
+                          : currentScreen === 'register_livreur'
+                          ? 'livreur'
+                          : 'client'
+                      )
+                    }
+                    disabled={loading}
+                  >
                     {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnOrangeText}>S'inscrire</Text>}
                   </AnimatedButton>
                 </View>
@@ -1461,11 +1943,24 @@ const styles = StyleSheet.create({
   liveOrderArticle: { color: '#CBD5E1', fontSize: 12, marginVertical: 2 },
   liveOrderAddress: { color: '#94A3B8', fontSize: 11 },
   liveOrderTotal: { color: '#F97316', fontWeight: '900', fontSize: 14, marginTop: 4 },
-  btnAcceptOrder: { backgroundColor: '#22C55E', paddingVertical: 8, borderRadius: 8, alignItems: 'center', marginTop: 10 },
+  btnAcceptOrder: { backgroundColor: '#22C55E', paddingVertical: 8, borderRadius: 8, alignItems: 'center', marginTop: 8 },
   btnAcceptOrderText: { color: '#FFFFFF', fontWeight: '900', fontSize: 13 },
 
+  assignDriverBox: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#334155' },
+  assignDriverLabel: { color: '#CBD5E1', fontSize: 11, fontWeight: '800' },
+  driverChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#0F172A', borderWidth: 1, borderColor: '#334155' },
+  driverChipActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
+  driverChipText: { color: '#CBD5E1', fontSize: 11, fontWeight: '700' },
+  assignedDriverBanner: { marginTop: 10, padding: 10, borderRadius: 8, backgroundColor: '#0F172A', borderWidth: 1, borderColor: '#38BDF8' },
+  assignedDriverText: { color: '#FFFFFF', fontSize: 12 },
+
+  addDriverForm: { backgroundColor: '#1E293B', padding: 12, borderRadius: 12, marginBottom: 14, borderWidth: 1, borderColor: '#334155' },
+  driverRowCard: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', borderRadius: 10, padding: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  driverStatusPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  driverStatusText: { fontSize: 10, fontWeight: '800' },
+
   emptyStateBox: { backgroundColor: '#1E293B', padding: 20, borderRadius: 12, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#334155' },
-  emptyStateText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  emptyStateText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13, textAlign: 'center' },
 
   opTypeBtn: { flex: 1, paddingVertical: 9, borderRadius: 8, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
   opTypeBtnActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
