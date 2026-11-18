@@ -264,14 +264,14 @@ const ONBOARDING_SLIDES = [
     id: '3',
     badge: 'VENDEUR',
     title: 'Tarifs & Position GPS du dépôt',
-    subtitle: 'Fixez vos prix et enregistrez les coordonnées GPS exactes de votre point de vente.',
+    subtitle: 'Fixez vos prix et enregistrez les coordonnées GPS de votre dépôt.',
     icon: require('./assets/splash-icon.png')
   },
   {
     id: '4',
     badge: 'LIVREUR',
     title: 'Courses rémunérées au km',
-    subtitle: 'Votre gain s’ajuste automatiquement selon la distance GPS réelle.',
+    subtitle: 'Votre gain s’ajuste automatiquement selon la distance GPS.',
     icon: require('./assets/splash-icon.png')
   }
 ];
@@ -443,6 +443,11 @@ export default function App() {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
+  // États de confirmation visuelle pour tarifs et GPS
+  const [savingPrices, setSavingPrices] = useState(false);
+  const [pricesSavedFeedback, setPricesSavedFeedback] = useState(false);
+  const [gpsSavedFeedback, setGpsSavedFeedback] = useState(false);
+
   const [selectedPlan, setSelectedPlan] = useState(SUBSCRIPTION_PLANS[1]);
   const [paymentMethod, setPaymentMethod] = useState('Wave');
   const [paymentPhone, setPaymentPhone] = useState('');
@@ -486,6 +491,16 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  const showFeedbackAlert = (title, message) => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert(`${title} : ${message}`);
+      }
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
   // Capture GPS matérielle via expo-location + géocodage inversé optionnel
   const captureDeviceGPS = async ({ silent = false, fillAddress = false, onCaptured } = {}) => {
     setGpsLoading(true);
@@ -493,9 +508,9 @@ export default function App() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         if (!silent) {
-          Alert.alert(
-            'Autorisation GPS requise',
-            'Activez la localisation pour mesurer la distance exacte.'
+          showFeedbackAlert(
+            'GPS requis',
+            'Activez la localisation sur votre appareil.'
           );
         }
         return null;
@@ -511,7 +526,7 @@ export default function App() {
 
       if (!position?.coords) {
         if (!silent) {
-          Alert.alert('Signal GPS indisponible', 'Vérifiez que la localisation est activée sur l’appareil.');
+          showFeedbackAlert('GPS indisponible', 'Vérifiez que la localisation est activée.');
         }
         return null;
       }
@@ -535,11 +550,11 @@ export default function App() {
         } catch (geoErr) {}
       }
 
-      if (onCaptured) onCaptured(coordsObj);
+      if (onCaptured) await onCaptured(coordsObj);
       return coordsObj;
     } catch (err) {
       if (!silent) {
-        Alert.alert('Erreur GPS', 'Impossible de lire les coordonnées GPS sur cet appareil.');
+        showFeedbackAlert('Erreur GPS', 'Impossible de lire votre position.');
       }
       return null;
     } finally {
@@ -745,15 +760,14 @@ export default function App() {
 
   const handleUpdateVendorGPS = async () => {
     if (!user || user.role !== 'depot') return;
+    setGpsSavedFeedback(false);
     const captured = await captureDeviceGPS({
       silent: false,
       fillAddress: false,
       onCaptured: async (coords) => {
         await persistUserUpdate({ ...user, coords });
-        Alert.alert(
-          'Position GPS enregistrée',
-          `Coordonnées du dépôt verrouillées (${coords.latitude}, ${coords.longitude}).`
-        );
+        setGpsSavedFeedback(true);
+        setTimeout(() => setGpsSavedFeedback(false), 3500);
       },
     });
     return captured;
@@ -761,29 +775,36 @@ export default function App() {
 
   const handleSaveVendorPrices = async () => {
     if (!user || user.role !== 'depot') return;
-    const sanitizedPrices = {
-      B6: {
-        recharge: String(Math.max(500, parseInt(vendorPricesForm.B6?.recharge, 10) || 2000)),
-        achat: String(Math.max(1000, parseInt(vendorPricesForm.B6?.achat, 10) || 13000)),
-      },
-      B12: {
-        recharge: String(Math.max(500, parseInt(vendorPricesForm.B12?.recharge, 10) || 5500)),
-        achat: String(Math.max(1000, parseInt(vendorPricesForm.B12?.achat, 10) || 25000)),
-      },
-      B28: {
-        recharge: String(Math.max(500, parseInt(vendorPricesForm.B28?.recharge, 10) || 13000)),
-        achat: String(Math.max(1000, parseInt(vendorPricesForm.B28?.achat, 10) || 45000)),
-      },
-    };
-    setVendorPricesForm(sanitizedPrices);
-    await persistUserUpdate({ ...user, prices: sanitizedPrices });
-    Alert.alert('Offres publiées', `Vos tarifs sont visibles par tous les clients de ${user.ville}.`);
+    setSavingPrices(true);
+    setPricesSavedFeedback(false);
+    try {
+      const sanitizedPrices = {
+        B6: {
+          recharge: String(Math.max(500, parseInt(vendorPricesForm.B6?.recharge, 10) || 2000)),
+          achat: String(Math.max(1000, parseInt(vendorPricesForm.B6?.achat, 10) || 13000)),
+        },
+        B12: {
+          recharge: String(Math.max(500, parseInt(vendorPricesForm.B12?.recharge, 10) || 5500)),
+          achat: String(Math.max(1000, parseInt(vendorPricesForm.B12?.achat, 10) || 25000)),
+        },
+        B28: {
+          recharge: String(Math.max(500, parseInt(vendorPricesForm.B28?.recharge, 10) || 13000)),
+          achat: String(Math.max(1000, parseInt(vendorPricesForm.B28?.achat, 10) || 45000)),
+        },
+      };
+      setVendorPricesForm(sanitizedPrices);
+      await persistUserUpdate({ ...user, prices: sanitizedPrices });
+      setPricesSavedFeedback(true);
+      setTimeout(() => setPricesSavedFeedback(false), 3500);
+    } finally {
+      setSavingPrices(false);
+    }
   };
 
   const handleRenewSubscription = async () => {
     const phoneToUse = (paymentPhone || user?.telephone || '').trim();
     if (!phoneToUse || phoneToUse.length < 8) {
-      Alert.alert('Numéro requis', 'Entrez un numéro Mobile Money valide.');
+      showFeedbackAlert('Numéro requis', 'Entrez un numéro Mobile Money valide.');
       return;
     }
 
@@ -803,7 +824,7 @@ export default function App() {
     setVendorViewMode('depot');
     setDashboardTab('home');
     setLoading(false);
-    Alert.alert('Abonnement actif', `Forfait ${selectedPlan.label} activé via ${paymentMethod}.`);
+    showFeedbackAlert('Abonnement actif', `Forfait ${selectedPlan.label} activé.`);
   };
 
   const handleSimulateExpiration = async () => {
@@ -819,7 +840,7 @@ export default function App() {
 
   const handleRegister = async (type) => {
     if (!nom.trim() || !telephone.trim() || !email.trim() || !password.trim() || !ville.trim()) {
-      Alert.alert('Champs requis', 'Complétez tous les champs obligatoires, y compris votre ville.');
+      showFeedbackAlert('Champs requis', 'Complétez tous les champs obligatoires.');
       return;
     }
 
@@ -835,7 +856,7 @@ export default function App() {
     const existingAccount = latestUsers.find(u => u.email.toLowerCase() === cleanEmail);
     if (existingAccount) {
       setLoading(false);
-      Alert.alert('Email utilisé', `Déjà associé à un compte ${ROLE_LABELS[existingAccount.role]}.`);
+      showFeedbackAlert('Email utilisé', `Déjà associé à un compte ${ROLE_LABELS[existingAccount.role]}.`);
       return;
     }
 
@@ -879,7 +900,7 @@ export default function App() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Champs requis', 'Entrez votre email et mot de passe.');
+      showFeedbackAlert('Champs requis', 'Entrez votre email et mot de passe.');
       return;
     }
 
@@ -890,7 +911,7 @@ export default function App() {
     const foundUser = latestUsers.find(u => u.email.toLowerCase() === cleanEmail);
     if (!foundUser) {
       setLoading(false);
-      Alert.alert('Compte introuvable', 'Vérifiez votre email ou créez un compte.');
+      showFeedbackAlert('Compte introuvable', 'Vérifiez votre email ou créez un compte.');
       return;
     }
 
@@ -921,14 +942,14 @@ export default function App() {
   const handleAddDriverFromVendor = async () => {
     if (user?.role !== 'depot') return;
     if (!newDriverName.trim() || !newDriverPhone.trim()) {
-      Alert.alert('Champs requis', 'Renseignez le nom et le téléphone.');
+      showFeedbackAlert('Champs requis', 'Renseignez le nom et le téléphone.');
       return;
     }
 
     const { users: latestUsers } = await syncAppState();
     const driverEmail = `${newDriverPhone.trim()}@livreur.monan.ci`;
     if (latestUsers.some(u => u.email.toLowerCase() === driverEmail)) {
-      Alert.alert('Déjà inscrit', 'Ce numéro est déjà enregistré.');
+      showFeedbackAlert('Déjà inscrit', 'Ce numéro est déjà enregistré.');
       return;
     }
 
@@ -949,22 +970,21 @@ export default function App() {
 
     setNewDriverName('');
     setNewDriverPhone('');
-    Alert.alert('Livreur ajouté', `${driverObj.nom} est disponible à ${driverObj.ville}.`);
+    showFeedbackAlert('Livreur ajouté', `${driverObj.nom} a été enregistré.`);
   };
 
   const handleCreateOrder = async () => {
     if (activeViewRole !== 'client') return;
     if (!activeOfferVendor) {
-      Alert.alert('Aucun vendeur', `Aucun dépôt actif disponible à ${userCity}.`);
+      showFeedbackAlert('Aucun vendeur', `Aucun dépôt actif à ${userCity}.`);
       return;
     }
     if (deliveryMode === 'livraison' && !adresseLivraison.trim() && !clientCoords) {
-      Alert.alert('Lieu requis', 'Indiquez votre quartier ou activez votre GPS pour calculer la livraison.');
+      showFeedbackAlert('Lieu requis', 'Indiquez votre quartier ou activez votre GPS.');
       return;
     }
 
     setLoading(true);
-    // Verrouillage automatique des coordonnées GPS exactes au moment de valider la commande
     const freshClientCoords =
       (await captureDeviceGPS({
         silent: true,
@@ -1021,7 +1041,7 @@ export default function App() {
     const updatedOrders = [newCmd, ...allOrders];
     await syncAppState(null, updatedOrders);
 
-    setOrderSuccessBanner(`Commande ${newCmdId} envoyée à ${activeOfferVendor.nom}.`);
+    setOrderSuccessBanner(`Commande ${newCmdId} envoyée.`);
     setDashboardTab('orders_list');
     setLoading(false);
   };
@@ -1048,7 +1068,7 @@ export default function App() {
   const handleAssignDriverToOrder = async (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
     if (cityDrivers.length === 0) {
-      Alert.alert('Aucun livreur', `Ajoutez un livreur dans votre ville (${userCity}).`);
+      showFeedbackAlert('Aucun livreur', `Ajoutez un livreur à ${userCity}.`);
       return;
     }
 
@@ -1174,7 +1194,7 @@ export default function App() {
     }
     if (cmd.status === 'accepted') {
       return {
-        label: cmd.deliveryMode === 'retrait' ? `Prête au dépôt • ${cmd.assignedVendorNom}` : `Validée • ${cmd.assignedVendorNom}`,
+        label: cmd.deliveryMode === 'retrait' ? `Prête • ${cmd.assignedVendorNom}` : `Validée • ${cmd.assignedVendorNom}`,
         color: '#FBBF24',
         bg: 'rgba(251, 191, 36, 0.14)'
       };
@@ -1332,9 +1352,9 @@ export default function App() {
                   <View style={styles.statusPillDanger}>
                     <Text style={styles.statusPillDangerText}>ABONNEMENT EXPIRÉ</Text>
                   </View>
-                  <Text style={styles.cardBoxTitle}>Renouveler l'accès</Text>
+                  <Text style={styles.cardBoxTitle}>Renouveler</Text>
                   <Text style={styles.mutedText}>
-                    Choisissez une formule pour réactiver votre dépôt ({user.nom}).
+                    Choisissez une formule pour {user.nom}.
                   </Text>
 
                   <View style={{ gap: 8, marginTop: 14, marginBottom: 16 }}>
@@ -1367,7 +1387,7 @@ export default function App() {
                     })}
                   </View>
 
-                  <Text style={styles.label}>Moyen de paiement</Text>
+                  <Text style={styles.label}>Paiement</Text>
                   <View style={styles.operatorRow}>
                     {PAYMENT_OPERATORS.map((op) => {
                       const isSelected = paymentMethod === op.name;
@@ -1458,7 +1478,7 @@ export default function App() {
                           </Pressable>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('vendor_drivers')}>
                             <Text style={styles.kpiNum}>{cityDrivers.length}</Text>
-                            <Text style={styles.kpiLabel}>Livreurs ({userCity})</Text>
+                            <Text style={styles.kpiLabel}>Livreurs</Text>
                           </Pressable>
                         </>
                       )}
@@ -1484,7 +1504,7 @@ export default function App() {
                         <>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('depots')}>
                             <Text style={styles.kpiNum}>{localCityVendors.length}</Text>
-                            <Text style={styles.kpiLabel}>Vendeurs à {userCity}</Text>
+                            <Text style={styles.kpiLabel}>Vendeurs</Text>
                           </Pressable>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('orders_list')}>
                             <Text style={styles.kpiNum}>{myClientOrders.length}</Text>
@@ -1498,7 +1518,7 @@ export default function App() {
                     {activeViewRole === 'client' && (
                       <View style={styles.cardBox}>
                         <View style={styles.rowBetween}>
-                          <Text style={styles.cardBoxTitle}>Offres disponibles à {userCity}</Text>
+                          <Text style={styles.cardBoxTitle}>Offres à {userCity}</Text>
                           <View style={styles.cityPill}>
                             <Text style={styles.cityPillText}>{localCityVendors.length} dépôt(s)</Text>
                           </View>
@@ -1506,7 +1526,7 @@ export default function App() {
 
                         {localCityVendors.length === 0 ? (
                           <View style={styles.emptyStateBox}>
-                            <Text style={styles.emptyStateText}>Aucun vendeur enregistré à {userCity}</Text>
+                            <Text style={styles.emptyStateText}>Aucun vendeur à {userCity}</Text>
                           </View>
                         ) : (
                           localCityVendors.map((vendor) => (
@@ -1554,7 +1574,7 @@ export default function App() {
                           <Text style={styles.btnPrimaryText}>Commandes ({availableOrdersForVendors.length})</Text>
                         </AnimatedButton>
                         <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('pricing')}>
-                          <Text style={styles.btnSecondaryText}>Tarifs & Position GPS du dépôt</Text>
+                          <Text style={styles.btnSecondaryText}>Tarifs & GPS</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -1562,17 +1582,17 @@ export default function App() {
                     {activeViewRole === 'livreur' && (
                       <View style={{ gap: 10 }}>
                         <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('driver_available')}>
-                          <Text style={styles.btnPrimaryText}>Courses à {userCity} ({availableOrdersForDrivers.length})</Text>
+                          <Text style={styles.btnPrimaryText}>Courses ({availableOrdersForDrivers.length})</Text>
                         </AnimatedButton>
                         <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('driver_active')}>
-                          <Text style={styles.btnSecondaryText}>Mes livraisons</Text>
+                          <Text style={styles.btnSecondaryText}>En cours</Text>
                         </AnimatedButton>
                       </View>
                     )}
 
                     {activeViewRole === 'client' && (
                       <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('order')}>
-                        <Text style={styles.btnPrimaryText}>Commander du gaz</Text>
+                        <Text style={styles.btnPrimaryText}>Commander</Text>
                       </AnimatedButton>
                     )}
                   </View>
@@ -1601,7 +1621,7 @@ export default function App() {
                               ]}>
                                 {order.deliveryMode === 'livraison'
                                   ? `Livraison (${order.distanceKm || 1.5} km)`
-                                  : 'Retrait dépôt'}
+                                  : 'Retrait'}
                               </Text>
                             </View>
                           </View>
@@ -1621,7 +1641,7 @@ export default function App() {
                               <Text style={styles.financeValue}>{order.total}</Text>
                             </View>
                             <View style={styles.rowBetween}>
-                              <Text style={styles.financeLabel}>Votre part nette (95 % gaz)</Text>
+                              <Text style={styles.financeLabel}>Votre part (95 %)</Text>
                               <Text style={[styles.financeValue, { color: '#4ADE80' }]}>
                                 {(order.vendorNet || 0).toLocaleString('fr-FR')} FCFA
                               </Text>
@@ -1643,7 +1663,7 @@ export default function App() {
                           </View>
 
                           <AnimatedButton style={styles.btnSuccess} onPress={() => handleAcceptOrder(order.id)}>
-                            <Text style={styles.btnSuccessText}>Accepter la commande</Text>
+                            <Text style={styles.btnSuccessText}>Accepter</Text>
                           </AnimatedButton>
                         </View>
                       ))
@@ -1654,7 +1674,7 @@ export default function App() {
                 {/* VENDEUR : LIVRAISONS & RETRAITS */}
                 {activeViewRole === 'depot' && dashboardTab === 'my_deliveries' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Commandes en cours</Text>
+                    <Text style={styles.cardBoxTitle}>En cours</Text>
                     {myVendorDeliveries.length === 0 ? (
                       <View style={styles.emptyStateBox}>
                         <Text style={styles.emptyStateText}>Aucune commande active</Text>
@@ -1677,7 +1697,7 @@ export default function App() {
                                   styles.badgePillText,
                                   { color: isPickup ? '#4ADE80' : isAssigned ? '#38BDF8' : '#FBBF24' }
                                 ]}>
-                                  {isPickup ? 'Retrait dépôt' : isAssigned ? 'En route' : 'À assigner'}
+                                  {isPickup ? 'Retrait' : isAssigned ? 'En route' : 'À assigner'}
                                 </Text>
                               </View>
                             </View>
@@ -1690,12 +1710,12 @@ export default function App() {
 
                             {isPickup ? (
                               <AnimatedButton style={styles.btnSuccess} onPress={() => handleCompletePickupOrder(order.id)}>
-                                <Text style={styles.btnSuccessText}>Confirmer retrait client</Text>
+                                <Text style={styles.btnSuccessText}>Confirmer retrait</Text>
                               </AnimatedButton>
                             ) : !isAssigned ? (
                               <View style={styles.dividerSection}>
                                 <Text style={styles.microLabel}>
-                                  LIVREUR À {userCity.toUpperCase()} • GAIN COURSE ({order.distanceKm || 1.5} KM) : {(order.driverNet || 0).toLocaleString('fr-FR')} F
+                                  LIVREUR • GAIN ({order.distanceKm || 1.5} KM) : {(order.driverNet || 0).toLocaleString('fr-FR')} F
                                 </Text>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6, marginBottom: 10 }}>
                                   <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -1717,13 +1737,13 @@ export default function App() {
                                 </ScrollView>
 
                                 <AnimatedButton style={styles.btnPrimary} onPress={() => handleAssignDriverToOrder(order.id)}>
-                                  <Text style={styles.btnPrimaryText}>Assigner le livreur</Text>
+                                  <Text style={styles.btnPrimaryText}>Assigner</Text>
                                 </AnimatedButton>
                               </View>
                             ) : (
                               <View style={styles.driverAssignedStrip}>
                                 <Text style={styles.driverAssignedText}>
-                                  Livreur : {order.assignedDriverNom} ({order.assignedDriverPhone}) • Gain : {(order.driverNet || 0).toLocaleString('fr-FR')} F
+                                  Livreur : {order.assignedDriverNom} ({order.assignedDriverPhone}) • {(order.driverNet || 0).toLocaleString('fr-FR')} F
                                 </Text>
                               </View>
                             )}
@@ -1737,7 +1757,7 @@ export default function App() {
                 {/* VENDEUR : LIVREURS DE LA VILLE */}
                 {activeViewRole === 'depot' && dashboardTab === 'vendor_drivers' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Livreurs à {userCity} ({cityDrivers.length})</Text>
+                    <Text style={styles.cardBoxTitle}>Livreurs ({cityDrivers.length})</Text>
 
                     <View style={styles.subCard}>
                       <TextInput
@@ -1768,7 +1788,7 @@ export default function App() {
                         ))}
                       </View>
                       <AnimatedButton style={styles.btnPrimary} onPress={handleAddDriverFromVendor}>
-                        <Text style={styles.btnPrimaryText}>Ajouter un livreur</Text>
+                        <Text style={styles.btnPrimaryText}>Ajouter</Text>
                       </AnimatedButton>
                     </View>
 
@@ -1797,32 +1817,38 @@ export default function App() {
                   </View>
                 )}
 
-                {/* VENDEUR : TARIFS PERSONNALISÉS & POSITION GPS DU DÉPÔT */}
+                {/* VENDEUR : TARIFS & POSITION GPS */}
                 {activeViewRole === 'depot' && dashboardTab === 'pricing' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Tarifs & Position GPS ({userCity})</Text>
+                    <Text style={styles.cardBoxTitle}>Tarifs & GPS</Text>
 
                     <View style={styles.gpsBox}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.microLabel}>COORDONNÉES GPS DU DÉPÔT</Text>
+                        <Text style={styles.microLabel}>POSITION GPS</Text>
                         <Text style={styles.gpsCoordValue}>
                           {hasValidCoords(user.coords)
                             ? `${user.coords.latitude}, ${user.coords.longitude}`
-                            : 'Non enregistrées (estimation par quartier)'}
+                            : 'Non enregistrée'}
                         </Text>
                       </View>
                       <AnimatedButton
-                        style={styles.gpsActionBtn}
+                        style={[styles.gpsActionBtn, gpsSavedFeedback && { backgroundColor: '#16A34A' }]}
                         onPress={handleUpdateVendorGPS}
                         disabled={gpsLoading}
                       >
                         <Text style={styles.gpsActionBtnText}>
-                          {gpsLoading ? 'GPS...' : 'Actualiser GPS'}
+                          {gpsLoading ? 'GPS...' : gpsSavedFeedback ? 'Enregistré ✓' : 'Ma position'}
                         </Text>
                       </AnimatedButton>
                     </View>
 
-                    <View style={{ marginTop: 12 }}>
+                    {gpsSavedFeedback && (
+                      <View style={[styles.toastSuccess, { marginTop: 10, marginBottom: 0 }]}>
+                        <Text style={styles.toastSuccessText}>✓ Position GPS enregistrée</Text>
+                      </View>
+                    )}
+
+                    <View style={{ marginTop: 14 }}>
                       {['B6', 'B12', 'B28'].map((fmt) => (
                         <View key={fmt} style={{ marginBottom: 12 }}>
                           <Text style={styles.microLabel}>FORMAT {fmt}</Text>
@@ -1860,8 +1886,24 @@ export default function App() {
                       ))}
                     </View>
 
-                    <AnimatedButton style={styles.btnPrimary} onPress={handleSaveVendorPrices}>
-                      <Text style={styles.btnPrimaryText}>Publier mes tarifs</Text>
+                    {pricesSavedFeedback && (
+                      <View style={styles.toastSuccess}>
+                        <Text style={styles.toastSuccessText}>✓ Tarifs enregistrés</Text>
+                      </View>
+                    )}
+
+                    <AnimatedButton
+                      style={[styles.btnPrimary, pricesSavedFeedback && { backgroundColor: '#16A34A' }]}
+                      onPress={handleSaveVendorPrices}
+                      disabled={savingPrices}
+                    >
+                      <Text style={styles.btnPrimaryText}>
+                        {savingPrices
+                          ? 'Enregistrement...'
+                          : pricesSavedFeedback
+                          ? 'Enregistré ✓'
+                          : 'Enregistrer'}
+                      </Text>
                     </AnimatedButton>
                   </View>
                 )}
@@ -1869,10 +1911,10 @@ export default function App() {
                 {/* LIVREUR : COURSES DISPONIBLES DANS SA VILLE */}
                 {activeViewRole === 'livreur' && dashboardTab === 'driver_available' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Courses disponibles ({userCity})</Text>
+                    <Text style={styles.cardBoxTitle}>Courses ({userCity})</Text>
                     {availableOrdersForDrivers.length === 0 ? (
                       <View style={styles.emptyStateBox}>
-                        <Text style={styles.emptyStateText}>Aucune livraison disponible à {userCity}</Text>
+                        <Text style={styles.emptyStateText}>Aucune course disponible</Text>
                       </View>
                     ) : (
                       availableOrdersForDrivers.map((order) => (
@@ -1893,10 +1935,10 @@ export default function App() {
                               GPS Client : {order.clientCoords.latitude}, {order.clientCoords.longitude}
                             </Text>
                           )}
-                          <Text style={styles.priceHighlight}>À encaisser : {order.total}</Text>
+                          <Text style={styles.priceHighlight}>Total : {order.total}</Text>
 
                           <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverClaimOrder(order.id)}>
-                            <Text style={styles.btnSuccessText}>Accepter la course</Text>
+                            <Text style={styles.btnSuccessText}>Accepter</Text>
                           </AnimatedButton>
                         </View>
                       ))
@@ -1907,7 +1949,7 @@ export default function App() {
                 {/* LIVREUR : EN COURS */}
                 {activeViewRole === 'livreur' && dashboardTab === 'driver_active' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Livraisons en cours</Text>
+                    <Text style={styles.cardBoxTitle}>En cours</Text>
                     {myDriverActiveOrders.length === 0 ? (
                       <View style={styles.emptyStateBox}>
                         <Text style={styles.emptyStateText}>Aucune course en cours</Text>
@@ -1918,7 +1960,7 @@ export default function App() {
                           <View style={styles.rowBetween}>
                             <Text style={styles.orderId}>{order.id} • {order.distanceKm || 1.5} km</Text>
                             <Text style={[styles.priceHighlight, { color: '#4ADE80' }]}>
-                              Votre part : {(order.driverNet || 0).toLocaleString('fr-FR')} F
+                              Gain : {(order.driverNet || 0).toLocaleString('fr-FR')} F
                             </Text>
                           </View>
                           <Text style={styles.orderMainText}>{order.qte}× {order.type} ({order.operation})</Text>
@@ -1929,10 +1971,10 @@ export default function App() {
                               GPS : {order.clientCoords.latitude}, {order.clientCoords.longitude}
                             </Text>
                           )}
-                          <Text style={styles.mutedText}>Total client : {order.total}</Text>
+                          <Text style={styles.mutedText}>Total : {order.total}</Text>
 
                           <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverConfirmDelivery(order.id)}>
-                            <Text style={styles.btnSuccessText}>Confirmer la livraison</Text>
+                            <Text style={styles.btnSuccessText}>Livré</Text>
                           </AnimatedButton>
                         </View>
                       ))
@@ -1943,7 +1985,7 @@ export default function App() {
                 {/* LIVREUR : HISTORIQUE */}
                 {activeViewRole === 'livreur' && dashboardTab === 'driver_history' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Courses livrées</Text>
+                    <Text style={styles.cardBoxTitle}>Livrées</Text>
                     {myDriverDeliveredOrders.length === 0 ? (
                       <View style={styles.emptyStateBox}>
                         <Text style={styles.emptyStateText}>Aucune livraison terminée</Text>
@@ -1968,15 +2010,15 @@ export default function App() {
                 {activeViewRole === 'client' && dashboardTab === 'depots' && (
                   <View style={styles.cardBox}>
                     <View style={styles.rowBetween}>
-                      <Text style={styles.cardBoxTitle}>Vendeurs à {userCity}</Text>
+                      <Text style={styles.cardBoxTitle}>Vendeurs ({userCity})</Text>
                       <View style={styles.cityPill}>
-                        <Text style={styles.cityPillText}>{filteredDepotsList.length} trouvé(s)</Text>
+                        <Text style={styles.cityPillText}>{filteredDepotsList.length}</Text>
                       </View>
                     </View>
 
                     <TextInput
                       style={styles.input}
-                      placeholder="Rechercher par quartier ou nom de dépôt..."
+                      placeholder="Quartier ou nom du dépôt..."
                       placeholderTextColor="#64748B"
                       value={searchDepot}
                       onChangeText={setSearchDepot}
@@ -1984,7 +2026,7 @@ export default function App() {
 
                     {filteredDepotsList.length === 0 ? (
                       <View style={styles.emptyStateBox}>
-                        <Text style={styles.emptyStateText}>Aucun vendeur enregistré à {userCity}</Text>
+                        <Text style={styles.emptyStateText}>Aucun vendeur à {userCity}</Text>
                       </View>
                     ) : (
                       filteredDepotsList.map((depot) => {
@@ -1997,7 +2039,7 @@ export default function App() {
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.listRowTitle}>{depot.nom}</Text>
                                 <Text style={styles.mutedText}>
-                                  {depot.adresse} • {depot.deliveryQuote.distanceKm} km ({depot.deliveryQuote.isExactGps ? 'GPS exact' : 'Est.'}) • Livraison : {depot.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} F
+                                  {depot.adresse} • {depot.deliveryQuote.distanceKm} km ({depot.deliveryQuote.isExactGps ? 'GPS' : 'Est.'}) • Livraison : {depot.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} F
                                 </Text>
                               </View>
                               <AnimatedButton
@@ -2029,17 +2071,17 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CLIENT : COMMANDE AVEC GPS AUTOMATIQUE & CALCUL LIVRAISON AU KM */}
+                {/* CLIENT : COMMANDE */}
                 {activeViewRole === 'client' && dashboardTab === 'order' && (
                   <View style={styles.cardBox}>
                     <View style={styles.rowBetween}>
                       <Text style={styles.cardBoxTitle}>Commander</Text>
                       <View style={styles.cityPill}>
-                        <Text style={styles.cityPillText}>Ville : {userCity}</Text>
+                        <Text style={styles.cityPillText}>{userCity}</Text>
                       </View>
                     </View>
 
-                    <Text style={styles.label}>1. Type d'opération</Text>
+                    <Text style={styles.label}>1. Opération</Text>
                     <View style={styles.segmentedRow}>
                       <AnimatedButton
                         containerStyle={{ flex: 1 }}
@@ -2097,14 +2139,14 @@ export default function App() {
                     </ScrollView>
 
                     {/* POSITION GPS CLIENT EN DIRECT */}
-                    <Text style={styles.label}>3. Position GPS & Adresse de livraison ({userCity})</Text>
+                    <Text style={styles.label}>3. Position & Quartier</Text>
                     <View style={styles.gpsBox}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.microLabel}>POSITION GPS CLIENT</Text>
+                        <Text style={styles.microLabel}>POSITION GPS</Text>
                         <Text style={styles.gpsCoordValue}>
                           {hasValidCoords(clientCoords)
                             ? `${clientCoords.latitude}, ${clientCoords.longitude}`
-                            : 'Position GPS en attente'}
+                            : 'En attente'}
                         </Text>
                       </View>
                       <AnimatedButton
@@ -2119,24 +2161,24 @@ export default function App() {
                         disabled={gpsLoading}
                       >
                         <Text style={styles.gpsActionBtnText}>
-                          {gpsLoading ? 'Localisation...' : 'Actualiser GPS'}
+                          {gpsLoading ? 'GPS...' : 'Ma position'}
                         </Text>
                       </AnimatedButton>
                     </View>
 
                     <TextInput
                       style={[styles.input, { marginTop: 8 }]}
-                      placeholder="Quartier / point de repère (ex : Yopougon, Angré...)"
+                      placeholder="Quartier / point de repère..."
                       placeholderTextColor="#64748B"
                       value={adresseLivraison}
                       onChangeText={setAdresseLivraison}
                     />
 
                     {/* OFFRES DES VENDEURS DE LA VILLE DU CLIENT */}
-                    <Text style={styles.label}>4. Choisissez votre vendeur à {userCity} ({localCityVendors.length})</Text>
+                    <Text style={styles.label}>4. Vendeur ({localCityVendors.length})</Text>
                     {localCityVendors.length === 0 ? (
                       <View style={styles.emptyStateBox}>
-                        <Text style={styles.emptyStateText}>Aucun vendeur actif enregistré à {userCity}</Text>
+                        <Text style={styles.emptyStateText}>Aucun vendeur à {userCity}</Text>
                       </View>
                     ) : (
                       <View style={{ gap: 8, marginBottom: 14 }}>
@@ -2153,10 +2195,10 @@ export default function App() {
                                   {vendor.nom}
                                 </Text>
                                 <Text style={styles.mutedText}>
-                                  {vendor.adresse} • Distance : {vendor.deliveryQuote.distanceKm} km ({vendor.deliveryQuote.isExactGps ? 'GPS exact' : 'Est.'})
+                                  {vendor.adresse} • {vendor.deliveryQuote.distanceKm} km ({vendor.deliveryQuote.isExactGps ? 'GPS' : 'Est.'})
                                 </Text>
                                 <Text style={styles.deliveryEstimateTag}>
-                                  Livraison calculée : {vendor.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} FCFA
+                                  Livraison : {vendor.deliveryQuote.deliveryFee.toLocaleString('fr-FR')} FCFA
                                 </Text>
                               </View>
                               <View style={{ alignItems: 'flex-end' }}>
@@ -2171,7 +2213,7 @@ export default function App() {
                       </View>
                     )}
 
-                    <Text style={styles.label}>5. Quantité & Mode de réception</Text>
+                    <Text style={styles.label}>5. Quantité & Réception</Text>
                     <QuantityStepper value={quantite} onChange={setQuantite} />
 
                     <View style={styles.segmentedRow}>
@@ -2181,7 +2223,7 @@ export default function App() {
                         onPress={() => setDeliveryMode('livraison')}
                       >
                         <Text style={[styles.segBtnText, deliveryMode === 'livraison' && styles.segBtnTextActive]}>
-                          Livraison (+{activeDeliveryQuote.deliveryFee.toLocaleString('fr-FR')} F)
+                          Livraison ({activeDeliveryQuote.deliveryFee.toLocaleString('fr-FR')} F)
                         </Text>
                       </AnimatedButton>
                       <AnimatedButton
@@ -2190,12 +2232,12 @@ export default function App() {
                         onPress={() => setDeliveryMode('retrait')}
                       >
                         <Text style={[styles.segBtnText, deliveryMode === 'retrait' && styles.segBtnTextActive]}>
-                          Retrait dépôt (0 F)
+                          Retrait (0 F)
                         </Text>
                       </AnimatedButton>
                     </View>
 
-                    {/* RÉCAPITULATIF CHIFFRÉ & VENTILATION AUTOMATIQUE */}
+                    {/* RÉCAPITULATIF CHIFFRÉ */}
                     <View style={styles.financeSplitBox}>
                       <View style={styles.rowBetween}>
                         <Text style={styles.financeLabel}>
@@ -2208,7 +2250,7 @@ export default function App() {
                       <View style={styles.rowBetween}>
                         <Text style={styles.financeLabel}>
                           {deliveryMode === 'livraison'
-                            ? `Livraison (${currentFinancials.distanceKm} km • ${currentFinancials.isExactGps ? 'GPS exact' : 'Estimation'})`
+                            ? `Livraison (${currentFinancials.distanceKm} km)`
                             : 'Retrait au dépôt'}
                         </Text>
                         <Text style={styles.financeValue}>
@@ -2218,18 +2260,11 @@ export default function App() {
                         </Text>
                       </View>
                       <View style={[styles.rowBetween, styles.financeTotalRow]}>
-                        <Text style={styles.financeTotalLabel}>Total à payer</Text>
+                        <Text style={styles.financeTotalLabel}>Total</Text>
                         <Text style={styles.priceHighlight}>
                           {currentFinancials.totalClient.toLocaleString('fr-FR')} FCFA
                         </Text>
                       </View>
-                      <Text style={styles.financeNote}>
-                        Ventilation : Vendeur {currentFinancials.vendorNet.toLocaleString('fr-FR')} F
-                        {deliveryMode === 'livraison'
-                          ? ` • Livreur ${currentFinancials.driverNet.toLocaleString('fr-FR')} F`
-                          : ''}
-                        {` • Commission MONAN ${currentFinancials.appTotalCommission.toLocaleString('fr-FR')} F`}
-                      </Text>
                     </View>
 
                     <AnimatedButton
@@ -2241,7 +2276,7 @@ export default function App() {
                         <ActivityIndicator color="#FFFFFF" />
                       ) : (
                         <Text style={styles.btnPrimaryText}>
-                          Valider • {currentFinancials.totalClient.toLocaleString('fr-FR')} F
+                          Commander • {currentFinancials.totalClient.toLocaleString('fr-FR')} F
                         </Text>
                       )}
                     </AnimatedButton>
@@ -2251,7 +2286,7 @@ export default function App() {
                 {/* CLIENT : SUIVI */}
                 {activeViewRole === 'client' && dashboardTab === 'orders_list' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Mes commandes</Text>
+                    <Text style={styles.cardBoxTitle}>Suivi</Text>
 
                     {orderSuccessBanner !== '' && (
                       <View style={styles.toastSuccess}>
@@ -2276,7 +2311,7 @@ export default function App() {
                             </View>
                             <Text style={styles.orderMainText}>{cmd.qte}× {cmd.type} ({cmd.operation})</Text>
                             <Text style={styles.mutedText}>
-                              Dépôt : {cmd.assignedVendorNom || cmd.targetVendorNom} •{' '}
+                              {cmd.assignedVendorNom || cmd.targetVendorNom} •{' '}
                               {cmd.deliveryMode === 'livraison' ? `Livraison (${cmd.distanceKm || 1.5} km)` : 'Retrait'}
                             </Text>
                             <View style={styles.rowBetween}>
@@ -2298,14 +2333,14 @@ export default function App() {
                 <View style={styles.welcomeContainer}>
                   <View style={styles.heroSection}>
                     <Text style={styles.heroTitle}>Distribution & Livraison de Gaz</Text>
-                    <Text style={styles.heroSub}>Créez un profil ou connectez-vous.</Text>
+                    <Text style={styles.heroSub}>Choisissez votre profil.</Text>
                   </View>
 
                   <View style={{ gap: 10 }}>
                     <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_client')}>
                       <View>
                         <Text style={styles.roleSelectTitle}>Client</Text>
-                        <Text style={styles.roleSelectSub}>Comparer les prix et commander</Text>
+                        <Text style={styles.roleSelectSub}>Commander du gaz</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
                     </AnimatedButton>
@@ -2313,7 +2348,7 @@ export default function App() {
                     <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_depot')}>
                       <View>
                         <Text style={styles.roleSelectTitle}>Vendeur</Text>
-                        <Text style={styles.roleSelectSub}>Gérer un dépôt, ses tarifs et sa position GPS</Text>
+                        <Text style={styles.roleSelectSub}>Gérer mon dépôt</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
                     </AnimatedButton>
@@ -2341,10 +2376,10 @@ export default function App() {
 
                   <Text style={styles.cardBoxTitle}>
                     {currentScreen === 'register_depot'
-                      ? 'Compte Vendeur'
+                      ? 'Inscription Vendeur'
                       : currentScreen === 'register_livreur'
-                      ? 'Compte Livreur'
-                      : 'Compte Client'}
+                      ? 'Inscription Livreur'
+                      : 'Inscription Client'}
                   </Text>
 
                   <Text style={styles.label}>
@@ -2355,21 +2390,19 @@ export default function App() {
                   <Text style={styles.label}>Téléphone</Text>
                   <TextInput style={styles.input} keyboardType="phone-pad" placeholder="0700000000" placeholderTextColor="#64748B" value={telephone} onChangeText={setTelephone} />
 
-                  <Text style={styles.label}>Ville (Saisie libre)</Text>
+                  <Text style={styles.label}>Ville</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="Ex : Abidjan, Bouaké, Odienné, Daloa..."
+                    placeholder="Abidjan, Bouaké, Odienné..."
                     placeholderTextColor="#64748B"
                     value={ville}
                     onChangeText={setVille}
                   />
 
-                  <Text style={styles.label}>
-                    {currentScreen === 'register_livreur' ? 'Zone / Commune d’activité' : 'Commune / Quartier'}
-                  </Text>
+                  <Text style={styles.label}>Quartier</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="Ex : Anyama, Yopougon, Cocody Angré..."
+                    placeholder="Anyama, Yopougon, Angré..."
                     placeholderTextColor="#64748B"
                     value={adresse}
                     onChangeText={setAdresse}
@@ -2379,11 +2412,11 @@ export default function App() {
                   {(currentScreen === 'register_depot' || currentScreen === 'register_client') && (
                     <View style={[styles.gpsBox, { marginBottom: 12 }]}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.microLabel}>COORDONNÉES GPS</Text>
+                        <Text style={styles.microLabel}>POSITION GPS</Text>
                         <Text style={styles.gpsCoordValue}>
                           {hasValidCoords(registerCoords)
                             ? `${registerCoords.latitude}, ${registerCoords.longitude}`
-                            : 'Non capturées'}
+                            : 'Non capturée'}
                         </Text>
                       </View>
                       <AnimatedButton
@@ -2398,7 +2431,7 @@ export default function App() {
                         disabled={gpsLoading}
                       >
                         <Text style={styles.gpsActionBtnText}>
-                          {gpsLoading ? 'GPS...' : 'Capturer GPS'}
+                          {gpsLoading ? 'GPS...' : 'Ma position'}
                         </Text>
                       </AnimatedButton>
                     </View>
@@ -2441,7 +2474,7 @@ export default function App() {
                     }
                     disabled={loading}
                   >
-                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnPrimaryText}>Créer le compte</Text>}
+                    {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.btnPrimaryText}>S'inscrire</Text>}
                   </AnimatedButton>
                 </View>
               )}
@@ -2653,7 +2686,6 @@ const styles = StyleSheet.create({
   financeMuted: { color: '#64748B', fontSize: 11, fontWeight: '700' },
   financeTotalRow: { borderTopWidth: 1, borderTopColor: '#1E293B', paddingTop: 6, marginTop: 2 },
   financeTotalLabel: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
-  financeNote: { color: '#64748B', fontSize: 10, marginTop: 4 },
 
   badgePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   badgePillText: { fontSize: 11, fontWeight: '800' },
@@ -2739,8 +2771,8 @@ const styles = StyleSheet.create({
   strikePrice: { color: '#64748B', fontSize: 11, textDecorationLine: 'line-through' },
   selectRowPrice: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
 
-  toastSuccess: { backgroundColor: 'rgba(74, 222, 128, 0.14)', borderRadius: 10, padding: 10, marginBottom: 12 },
-  toastSuccessText: { color: '#4ADE80', fontWeight: '700', fontSize: 12, textAlign: 'center' },
+  toastSuccess: { backgroundColor: 'rgba(74, 222, 128, 0.16)', borderWidth: 1, borderColor: 'rgba(74, 222, 128, 0.4)', borderRadius: 10, padding: 10, marginBottom: 10 },
+  toastSuccessText: { color: '#4ADE80', fontWeight: '800', fontSize: 13, textAlign: 'center' },
 
   emptyStateBox: { paddingVertical: 24, alignItems: 'center' },
   emptyStateText: { color: '#64748B', fontWeight: '600', fontSize: 13 },
