@@ -85,7 +85,7 @@ const ONBOARDING_SLIDES = [
     id: '4',
     badge: 'LIVREUR',
     title: 'Courses & Livraisons',
-    subtitle: 'Récupérez les bouteilles au dépôt et livrez rapidement les clients.',
+    subtitle: 'Récupérez les bouteilles dans les dépôts proches et livrez librement.',
     icon: require('./assets/splash-icon.png')
   }
 ];
@@ -226,7 +226,6 @@ const DEFAULT_USERS = [
     id: 'LIV-DEFAULT',
     email: 'livreur@monan.ci',
     role: 'livreur',
-    depotId: 'DEP-DEFAULT',
     nom: 'Koné Moussa',
     telephone: '0102030405',
     adresse: 'Cocody / Angré',
@@ -264,9 +263,8 @@ export default function App() {
   const [telephone, setTelephone] = useState('');
   const [adresse, setAdresse] = useState('');
   const [vehicule, setVehicule] = useState('Moto');
-  const [selectedDepotForDriver, setSelectedDepotForDriver] = useState('DEP-DEFAULT');
 
-  // Ajout rapide de livreur par le vendeur
+  // Enregistrement d'un livreur indépendant par le vendeur
   const [newDriverName, setNewDriverName] = useState('');
   const [newDriverPhone, setNewDriverPhone] = useState('');
   const [newDriverVehicle, setNewDriverVehicle] = useState('Moto');
@@ -331,7 +329,7 @@ export default function App() {
 
   const loadStoredUsers = async () => {
     try {
-      const stored = await AsyncStorage.getItem('@registered_users_v3');
+      const stored = await AsyncStorage.getItem('@registered_users_v4');
       if (stored) {
         setRegisteredUsers(JSON.parse(stored));
       }
@@ -396,7 +394,7 @@ export default function App() {
 
   // Mode actif strict :
   // - Vendeur ('depot') : peut uniquement basculer entre 'depot' et 'client'
-  // - Livreur ('livreur') : strictement détaché ('livreur' uniquement)
+  // - Livreur ('livreur') : indépendant et détaché ('livreur' uniquement)
   // - Client ('client') : 'client' uniquement
   const activeViewRole = !user
     ? null
@@ -428,7 +426,7 @@ export default function App() {
     const finalList = exists ? updatedList : [...updatedList, updatedUserObj];
     setRegisteredUsers(finalList);
     try {
-      await AsyncStorage.setItem('@registered_users_v3', JSON.stringify(finalList));
+      await AsyncStorage.setItem('@registered_users_v4', JSON.stringify(finalList));
     } catch (e) {
       console.log('Erreur sauvegarde utilisateur:', e);
     }
@@ -505,7 +503,6 @@ export default function App() {
       telephone: telephone.trim(),
       adresse: adresse.trim() || 'Abidjan',
       role: type,
-      depotId: type === 'livreur' ? selectedDepotForDriver : null,
       vehicule: type === 'livreur' ? vehicule : null,
       createdAt: nowIso,
       subscriptionExpiresAt: type === 'depot' ? trialExpiryIso : null,
@@ -516,7 +513,7 @@ export default function App() {
     setRegisteredUsers(updatedUsers);
 
     try {
-      await AsyncStorage.setItem('@registered_users_v3', JSON.stringify(updatedUsers));
+      await AsyncStorage.setItem('@registered_users_v4', JSON.stringify(updatedUsers));
     } catch (e) {
       console.log('Erreur sauvegarde utilisateurs:', e);
     }
@@ -554,7 +551,7 @@ export default function App() {
     
     let storedUsers = registeredUsers;
     try {
-      const stored = await AsyncStorage.getItem('@registered_users_v3');
+      const stored = await AsyncStorage.getItem('@registered_users_v4');
       if (stored) {
         storedUsers = JSON.parse(stored);
         setRegisteredUsers(storedUsers);
@@ -615,9 +612,8 @@ export default function App() {
       nom: newDriverName.trim(),
       telephone: newDriverPhone.trim(),
       email: driverEmail,
-      adresse: user?.adresse || 'Zone Dépôt',
+      adresse: user?.adresse || 'Abidjan',
       role: 'livreur',
-      depotId: user.id,
       vehicule: newDriverVehicle,
       createdAt: new Date().toISOString()
     };
@@ -625,14 +621,14 @@ export default function App() {
     const updatedUsers = [...registeredUsers, driverObj];
     setRegisteredUsers(updatedUsers);
     try {
-      await AsyncStorage.setItem('@registered_users_v3', JSON.stringify(updatedUsers));
+      await AsyncStorage.setItem('@registered_users_v4', JSON.stringify(updatedUsers));
     } catch (e) {
       console.log('Erreur ajout livreur:', e);
     }
 
     setNewDriverName('');
     setNewDriverPhone('');
-    Alert.alert('Livreur rattaché', `${driverObj.nom} est maintenant rattaché à votre dépôt.`);
+    Alert.alert('Livreur enregistré', `${driverObj.nom} a été ajouté comme livreur indépendant.`);
   };
 
   const handleCreateOrder = () => {
@@ -687,18 +683,18 @@ export default function App() {
       })
     );
 
-    Alert.alert('Commande acceptée', 'Assignez maintenant un livreur dans l’onglet Livraisons.');
+    Alert.alert('Commande acceptée', 'La commande est disponible pour les livreurs indépendants ou assignable dans Livraisons.');
   };
 
   const handleAssignDriverToOrder = (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
-    if (myDepotDrivers.length === 0) {
-      Alert.alert('Aucun livreur', 'Ajoutez d’abord un livreur dans l’onglet Livreurs.');
+    if (independentDrivers.length === 0) {
+      Alert.alert('Aucun livreur', 'Aucun livreur indépendant disponible pour le moment.');
       return;
     }
 
-    const chosenDriverId = selectedDriverByOrder[orderId] || myDepotDrivers[0].id;
-    const driver = myDepotDrivers.find(d => d.id === chosenDriverId) || myDepotDrivers[0];
+    const chosenDriverId = selectedDriverByOrder[orderId] || independentDrivers[0].id;
+    const driver = independentDrivers.find(d => d.id === chosenDriverId) || independentDrivers[0];
 
     setAllOrders(prevOrders =>
       prevOrders.map(order => {
@@ -768,10 +764,8 @@ export default function App() {
       d.quartier.toLowerCase().includes(searchDepot.toLowerCase())
     );
 
-  // Données filtrées par rôle
-  const myDepotDrivers = user?.role === 'depot'
-    ? registeredUsers.filter(u => u.role === 'livreur' && (!u.depotId || u.depotId === user?.id))
-    : [];
+  // Tous les livreurs sont indépendants (aucun filtre depotId)
+  const independentDrivers = registeredUsers.filter(u => u.role === 'livreur');
 
   const availableOrdersForVendors = activeViewRole === 'depot'
     ? allOrders.filter(cmd => cmd.status === 'available')
@@ -781,13 +775,9 @@ export default function App() {
     ? allOrders.filter(cmd => cmd.assignedVendorId === user?.id && (cmd.status === 'accepted' || cmd.status === 'in_delivery'))
     : [];
 
+  // Un livreur indépendant voit toutes les commandes prêtes au retrait quel que soit le dépôt
   const availableOrdersForDrivers = activeViewRole === 'livreur'
-    ? allOrders.filter(
-        cmd =>
-          cmd.status === 'accepted' &&
-          !cmd.assignedDriverId &&
-          (!user?.depotId || cmd.assignedVendorId === user.depotId)
-      )
+    ? allOrders.filter(cmd => cmd.status === 'accepted' && !cmd.assignedDriverId)
     : [];
 
   const myDriverActiveOrders = activeViewRole === 'livreur'
@@ -807,7 +797,7 @@ export default function App() {
     if (user.role === 'depot') {
       return activeViewRole === 'depot' ? 'VENDEUR • VUE DÉPÔT' : 'VENDEUR • VUE CLIENT';
     }
-    if (user.role === 'livreur') return 'ESPACE LIVREUR';
+    if (user.role === 'livreur') return 'LIVREUR INDÉPENDANT';
     return 'ESPACE CLIENT';
   };
 
@@ -1059,7 +1049,7 @@ export default function App() {
                         onPress={() => setDashboardTab('vendor_drivers')}
                       >
                         <Text style={[styles.pillText, dashboardTab === 'vendor_drivers' && styles.pillTextActive]}>
-                          Livreurs ({myDepotDrivers.length})
+                          Livreurs ({independentDrivers.length})
                         </Text>
                       </AnimatedButton>
 
@@ -1149,7 +1139,7 @@ export default function App() {
                         {user.role === 'depot'
                           ? (activeViewRole === 'depot' ? 'Compte Vendeur • Mode Dépôt' : 'Compte Vendeur • Mode Client')
                           : user.role === 'livreur'
-                          ? `Compte Livreur • ${user.vehicule || 'Moto'}`
+                          ? `Livreur Indépendant • ${user.vehicule || 'Moto'}`
                           : 'Compte Client'}
                       </Text>
                     </View>
@@ -1183,7 +1173,7 @@ export default function App() {
                         </View>
                         <View style={styles.kpiCard}>
                           <Text style={styles.kpiCardTag}>LIVREURS</Text>
-                          <Text style={styles.kpiCardNum}>{myDepotDrivers.length}</Text>
+                          <Text style={styles.kpiCardNum}>{independentDrivers.length}</Text>
                         </View>
                       </>
                     )}
@@ -1298,7 +1288,7 @@ export default function App() {
                     <Text style={{ textAlign: 'center', color: '#94A3B8', marginVertical: 20 }}>Aucune livraison en cours.</Text>
                   ) : (
                     myVendorDeliveries.map((order) => {
-                      const activeSelectedDriverId = selectedDriverByOrder[order.id] || myDepotDrivers[0]?.id;
+                      const activeSelectedDriverId = selectedDriverByOrder[order.id] || independentDrivers[0]?.id;
 
                       return (
                         <View key={order.id} style={[styles.liveOrderCard, { borderColor: order.status === 'in_delivery' ? '#38BDF8' : '#4ADE80' }]}>
@@ -1310,7 +1300,7 @@ export default function App() {
                                 ? { backgroundColor: 'rgba(56, 189, 248, 0.2)', color: '#38BDF8' }
                                 : { backgroundColor: 'rgba(74, 222, 128, 0.2)', color: '#4ADE80' }
                             ]}>
-                              {order.status === 'in_delivery' ? 'EN COURS DE LIVRAISON' : 'À ASSIGNER'}
+                              {order.status === 'in_delivery' ? 'EN COURS DE LIVRAISON' : 'EN ATTENTE DE LIVREUR'}
                             </Text>
                           </View>
                           <Text style={styles.liveOrderClient}>Client : {order.clientNom} ({order.clientPhone})</Text>
@@ -1320,10 +1310,10 @@ export default function App() {
 
                           {order.status === 'accepted' ? (
                             <View style={styles.assignDriverBox}>
-                              <Text style={styles.assignDriverLabel}>Choisir un livreur de mon dépôt :</Text>
+                              <Text style={styles.assignDriverLabel}>Choisir un livreur indépendant :</Text>
                               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
                                 <View style={{ flexDirection: 'row', gap: 6 }}>
-                                  {myDepotDrivers.map((drv) => {
+                                  {independentDrivers.map((drv) => {
                                     const isChosen = activeSelectedDriverId === drv.id;
                                     return (
                                       <AnimatedButton
@@ -1363,10 +1353,10 @@ export default function App() {
 
               {activeViewRole === 'depot' && dashboardTab === 'vendor_drivers' && (
                 <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Mes livreurs ({myDepotDrivers.length})</Text>
+                  <Text style={styles.cardBoxTitle}>Livreurs indépendants ({independentDrivers.length})</Text>
 
                   <View style={styles.addDriverForm}>
-                    <Text style={styles.label}>Ajouter un livreur à mon dépôt</Text>
+                    <Text style={styles.label}>Enregistrer un livreur indépendant</Text>
                     <TextInput
                       style={styles.input}
                       placeholder="Nom du livreur (Ex: Yao Paul)"
@@ -1394,11 +1384,11 @@ export default function App() {
                       ))}
                     </View>
                     <AnimatedButton style={styles.btnOrange} onPress={handleAddDriverFromVendor}>
-                      <Text style={styles.btnOrangeText}>Associer le livreur</Text>
+                      <Text style={styles.btnOrangeText}>Ajouter le livreur</Text>
                     </AnimatedButton>
                   </View>
 
-                  {myDepotDrivers.map((drv) => {
+                  {independentDrivers.map((drv) => {
                     const activeDeliveriesCount = allOrders.filter(
                       o => o.assignedDriverId === drv.id && o.status === 'in_delivery'
                     ).length;
@@ -1407,7 +1397,7 @@ export default function App() {
                       <View key={drv.id} style={styles.driverRowCard}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.depotTitle}>{drv.nom}</Text>
-                          <Text style={styles.depotSub}>{drv.telephone} • {drv.vehicule || 'Moto'}</Text>
+                          <Text style={styles.depotSub}>{drv.telephone} • {drv.vehicule || 'Moto'} • Indépendant</Text>
                         </View>
                         <View style={[
                           styles.driverStatusPill,
@@ -1471,10 +1461,10 @@ export default function App() {
                 </View>
               )}
 
-              {/* === VUES EXCLUSIVES LIVREUR (COMPTE DÉTACHÉ) === */}
+              {/* === VUES EXCLUSIVES LIVREUR INDÉPENDANT === */}
               {activeViewRole === 'livreur' && dashboardTab === 'driver_available' && (
                 <View style={styles.cardBox}>
-                  <Text style={styles.cardBoxTitle}>Courses disponibles</Text>
+                  <Text style={styles.cardBoxTitle}>Courses disponibles (Tous dépôts)</Text>
 
                   {availableOrdersForDrivers.length === 0 ? (
                     <View style={styles.emptyStateBox}>
@@ -1780,7 +1770,7 @@ export default function App() {
                     <FadeInView delay={220}>
                       <AnimatedButton style={styles.welcomeCardWhite} onPress={() => setCurrentScreen('register_livreur')}>
                         <Text style={styles.welcomeCardTitleDark}>Espace Livreur</Text>
-                        <Text style={styles.welcomeCardSubDark}>Effectuer les livraisons</Text>
+                        <Text style={styles.welcomeCardSubDark}>Livraisons indépendantes</Text>
                       </AnimatedButton>
                     </FadeInView>
                   </View>
@@ -1803,7 +1793,7 @@ export default function App() {
                     {currentScreen === 'register_depot'
                       ? 'Inscription Vendeur'
                       : currentScreen === 'register_livreur'
-                      ? 'Inscription Livreur'
+                      ? 'Inscription Livreur Indépendant'
                       : 'Inscription Client'}
                   </Text>
 
@@ -1816,32 +1806,12 @@ export default function App() {
                   <TextInput style={styles.input} keyboardType="phone-pad" placeholder="0700000000" placeholderTextColor="#64748B" value={telephone} onChangeText={setTelephone} />
 
                   <Text style={styles.label}>
-                    {currentScreen === 'register_livreur' ? 'Zone de livraison *' : 'Adresse *'}
+                    {currentScreen === 'register_livreur' ? 'Zone d’activité *' : 'Adresse *'}
                   </Text>
                   <TextInput style={styles.input} placeholder="Quartier, commune..." placeholderTextColor="#64748B" value={adresse} onChangeText={setAdresse} />
 
                   {currentScreen === 'register_livreur' && (
                     <>
-                      <Text style={styles.label}>Dépôt de rattachement *</Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                        <View style={{ flexDirection: 'row', gap: 6 }}>
-                          {depotsList.map((dep) => {
-                            const isSelected = selectedDepotForDriver === dep.id;
-                            return (
-                              <AnimatedButton
-                                key={dep.id}
-                                style={[styles.driverChip, isSelected && styles.driverChipActive]}
-                                onPress={() => setSelectedDepotForDriver(dep.id)}
-                              >
-                                <Text style={[styles.driverChipText, isSelected && { color: '#FFFFFF' }]}>
-                                  {dep.nom}
-                                </Text>
-                              </AnimatedButton>
-                            );
-                          })}
-                        </View>
-                      </ScrollView>
-
                       <Text style={styles.label}>Véhicule *</Text>
                       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                         {VEHICLE_TYPES.map((v) => (
@@ -1881,7 +1851,7 @@ export default function App() {
                 </View>
               )}
 
-              {/* ÉCRAN DE CONNEXION SANS BOUTONS DE RÔLE */}
+              {/* ÉCRAN DE CONNEXION UNIFIÉ */}
               {currentScreen === 'login' && (
                 <View style={styles.cardBox}>
                   <AnimatedButton onPress={() => setCurrentScreen('welcome')} style={styles.backBtnInline}>
