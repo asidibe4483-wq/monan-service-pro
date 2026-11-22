@@ -225,6 +225,23 @@ const getRemainingSubscriptionDays = (userObj) => {
   return getDaysLeftInTrial(userObj.createdAt);
 };
 
+const parseOrderDate = (order) => {
+  if (order?.createdAt) {
+    const parsedIso = new Date(order.createdAt);
+    if (!Number.isNaN(parsedIso.getTime())) return parsedIso;
+  }
+  if (order?.date && typeof order.date === 'string') {
+    const parts = order.date.split('/');
+    if (parts.length === 3) {
+      const [day, month, year] = parts.map(Number);
+      if (!Number.isNaN(day) && !Number.isNaN(month) && !Number.isNaN(year)) {
+        return new Date(year, month - 1, day);
+      }
+    }
+  }
+  return null;
+};
+
 const ROLE_LABELS = {
   client: 'Client',
   depot: 'Vendeur',
@@ -248,9 +265,10 @@ const PAYMENT_OPERATORS = [
 const VEHICLE_TYPES = ['Moto', 'Tricycle'];
 
 const BILAN_PERIODS = [
-  { id: 'today', label: "Aujourd'hui" },
-  { id: 'month', label: 'Ce mois' },
-  { id: 'all', label: 'Tout' },
+  { id: 'daily', label: 'Journalier' },
+  { id: 'weekly', label: 'Hebdomadaire' },
+  { id: 'monthly', label: 'Mensuel' },
+  { id: 'yearly', label: 'Annuel' },
 ];
 
 const ONBOARDING_SLIDES = [
@@ -455,7 +473,7 @@ export default function App() {
   const [savingPrices, setSavingPrices] = useState(false);
   const [pricesSavedFeedback, setPricesSavedFeedback] = useState(false);
   const [gpsSavedFeedback, setGpsSavedFeedback] = useState(false);
-  const [bilanPeriod, setBilanPeriod] = useState('all');
+  const [bilanPeriod, setBilanPeriod] = useState('daily');
   const [exportingPdf, setExportingPdf] = useState(false);
   const [pdfExportFeedback, setPdfExportFeedback] = useState(false);
 
@@ -999,10 +1017,12 @@ export default function App() {
     );
     const fin = calculateOrderFinancials(activeUnitPrice, quantite, deliveryMode, finalQuote);
     const newCmdId = `CMD-${Math.floor(100 + Math.random() * 900)}`;
+    const now = new Date();
 
     const newCmd = {
       id: newCmdId,
-      date: new Date().toLocaleDateString('fr-FR'),
+      createdAt: now.toISOString(),
+      date: now.toLocaleDateString('fr-FR'),
       clientId: user.id,
       clientNom: user.nom || 'Client',
       clientPhone: user.telephone || '',
@@ -1126,16 +1146,63 @@ export default function App() {
     setDashboardTab('home');
   };
 
-  // Données calculées pour le Bilan & PDF (uniquement chez le Vendeur)
+  // Filtrage Journalier / Hebdomadaire / Mensuel / Annuel (uniquement chez le Vendeur)
   const filterByBilanPeriod = (ordersList) => {
-    if (bilanPeriod === 'all') return ordersList;
     const now = new Date();
-    const todayStr = now.toLocaleDateString('fr-FR');
-    if (bilanPeriod === 'today') {
-      return ordersList.filter(o => o.date === todayStr);
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dayOfWeek = startOfWeek.getDay();
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    startOfWeek.setDate(startOfWeek.getDate() + diffToMonday);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    return ordersList.filter((o) => {
+      const d = parseOrderDate(o);
+      if (!d) return false;
+      if (bilanPeriod === 'daily') {
+        return (
+          d.getDate() === now.getDate() &&
+          d.getMonth() === now.getMonth() &&
+          d.getFullYear() === now.getFullYear()
+        );
+      }
+      if (bilanPeriod === 'weekly') {
+        return d >= startOfWeek && d <= endOfWeek;
+      }
+      if (bilanPeriod === 'monthly') {
+        return (
+          d.getMonth() === now.getMonth() &&
+          d.getFullYear() === now.getFullYear()
+        );
+      }
+      if (bilanPeriod === 'yearly') {
+        return d.getFullYear() === now.getFullYear();
+      }
+      return true;
+    });
+  };
+
+  const getBilanPeriodSummaryLabel = () => {
+    const now = new Date();
+    if (bilanPeriod === 'daily') {
+      return `Journalier (${now.toLocaleDateString('fr-FR')})`;
     }
-    const monthSuffix = `/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-    return ordersList.filter(o => (o.date || '').endsWith(monthSuffix));
+    if (bilanPeriod === 'weekly') {
+      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dayOfWeek = startOfWeek.getDay();
+      startOfWeek.setDate(startOfWeek.getDate() + (dayOfWeek === 0 ? -6 : 1 - dayOfWeek));
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      return `Hebdomadaire (${startOfWeek.toLocaleDateString('fr-FR')} - ${endOfWeek.toLocaleDateString('fr-FR')})`;
+    }
+    if (bilanPeriod === 'monthly') {
+      const monthName = now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      return `Mensuel (${monthName.charAt(0).toUpperCase() + monthName.slice(1)})`;
+    }
+    return `Annuel (${now.getFullYear()})`;
   };
 
   const rawVendorBilanOrders =
@@ -1151,8 +1218,7 @@ export default function App() {
   const bilanCommission = Math.max(0, bilanGasGross - bilanVendorNet);
 
   const buildVendorBilanHtml = () => {
-    const periodLabel =
-      BILAN_PERIODS.find(p => p.id === bilanPeriod)?.label || 'Tout';
+    const periodLabel = getBilanPeriodSummaryLabel();
     const generatedDate = new Date().toLocaleString('fr-FR');
 
     const rowsHtml =
@@ -1800,21 +1866,29 @@ export default function App() {
                       </View>
                     </View>
 
-                    {/* FILTRE PÉRIODE */}
-                    <View style={styles.segmentedRow}>
+                    {/* FILTRE PÉRIODE : JOURNALIER / HEBDOMADAIRE / MENSUEL / ANNUEL */}
+                    <View style={styles.periodRow}>
                       {BILAN_PERIODS.map((p) => (
                         <AnimatedButton
                           key={p.id}
                           containerStyle={{ flex: 1 }}
-                          style={[styles.segBtn, bilanPeriod === p.id && styles.segBtnActive]}
+                          style={[styles.periodBtn, bilanPeriod === p.id && styles.segBtnActive]}
                           onPress={() => setBilanPeriod(p.id)}
                         >
-                          <Text style={[styles.segBtnText, bilanPeriod === p.id && styles.segBtnTextActive]}>
+                          <Text
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            style={[styles.periodBtnText, bilanPeriod === p.id && styles.segBtnTextActive]}
+                          >
                             {p.label}
                           </Text>
                         </AnimatedButton>
                       ))}
                     </View>
+
+                    <Text style={[styles.mutedText, { marginBottom: 10 }]}>
+                      Période : {getBilanPeriodSummaryLabel()}
+                    </Text>
 
                     {/* SYNTHÈSE CHIFFRÉE VENDEUR */}
                     <View style={styles.financeSplitBox}>
@@ -2997,6 +3071,10 @@ const styles = StyleSheet.create({
   segBtnActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
   segBtnText: { fontSize: 12, fontWeight: '700', color: '#CBD5E1' },
   segBtnTextActive: { color: '#FFFFFF', fontWeight: '800' },
+
+  periodRow: { flexDirection: 'row', gap: 5, marginBottom: 10 },
+  periodBtn: { height: 38, borderRadius: 9, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155', paddingHorizontal: 4 },
+  periodBtnText: { fontSize: 11, fontWeight: '700', color: '#CBD5E1' },
 
   formatCard: { paddingVertical: 10, borderRadius: 10, backgroundColor: '#1E293B', alignItems: 'center', borderWidth: 1.5, borderColor: '#334155' },
   formatCardActive: { borderColor: '#F97316', backgroundColor: '#263347' },
