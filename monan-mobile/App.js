@@ -19,6 +19,8 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 // URL de votre backend hébergé sur Render pour la synchronisation multi-appareils
 const API_BASE_URL = 'https://monan-service-pro.onrender.com/api';
@@ -245,6 +247,12 @@ const PAYMENT_OPERATORS = [
 
 const VEHICLE_TYPES = ['Moto', 'Tricycle'];
 
+const BILAN_PERIODS = [
+  { id: 'today', label: "Aujourd'hui" },
+  { id: 'month', label: 'Ce mois' },
+  { id: 'all', label: 'Tout' },
+];
+
 const ONBOARDING_SLIDES = [
   {
     id: '1',
@@ -443,10 +451,13 @@ export default function App() {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [dashboardTab, setDashboardTab] = useState('home');
 
-  // États de confirmation visuelle pour tarifs et GPS
+  // États de confirmation visuelle pour tarifs, GPS et Bilan PDF Vendeur
   const [savingPrices, setSavingPrices] = useState(false);
   const [pricesSavedFeedback, setPricesSavedFeedback] = useState(false);
   const [gpsSavedFeedback, setGpsSavedFeedback] = useState(false);
+  const [bilanPeriod, setBilanPeriod] = useState('all');
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfExportFeedback, setPdfExportFeedback] = useState(false);
 
   const [selectedPlan, setSelectedPlan] = useState(SUBSCRIPTION_PLANS[1]);
   const [paymentMethod, setPaymentMethod] = useState('Wave');
@@ -827,17 +838,6 @@ export default function App() {
     showFeedbackAlert('Abonnement actif', `Forfait ${selectedPlan.label} activé.`);
   };
 
-  const handleSimulateExpiration = async () => {
-    if (!user || user.role !== 'depot') return;
-    await persistUserUpdate({
-      ...user,
-      isSubscribed: false,
-      subscriptionExpiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    });
-    setVendorViewMode('depot');
-    setDashboardTab('home');
-  };
-
   const handleRegister = async (type) => {
     if (!nom.trim() || !telephone.trim() || !email.trim() || !password.trim() || !ville.trim()) {
       showFeedbackAlert('Champs requis', 'Complétez tous les champs obligatoires.');
@@ -1124,6 +1124,181 @@ export default function App() {
     setPassword('');
     setCurrentScreen('welcome');
     setDashboardTab('home');
+  };
+
+  // Données calculées pour le Bilan & PDF (uniquement chez le Vendeur)
+  const filterByBilanPeriod = (ordersList) => {
+    if (bilanPeriod === 'all') return ordersList;
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('fr-FR');
+    if (bilanPeriod === 'today') {
+      return ordersList.filter(o => o.date === todayStr);
+    }
+    const monthSuffix = `/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    return ordersList.filter(o => (o.date || '').endsWith(monthSuffix));
+  };
+
+  const rawVendorBilanOrders =
+    activeViewRole === 'depot'
+      ? allOrders.filter(o => o.assignedVendorId === user?.id)
+      : [];
+
+  const bilanOrders = filterByBilanPeriod(rawVendorBilanOrders);
+  const bilanDeliveredCount = bilanOrders.filter(o => o.status === 'delivered').length;
+  const bilanTotalCylinders = bilanOrders.reduce((sum, o) => sum + (Number(o.qte) || 0), 0);
+  const bilanGasGross = bilanOrders.reduce((sum, o) => sum + (Number(o.gasSubtotal) || 0), 0);
+  const bilanVendorNet = bilanOrders.reduce((sum, o) => sum + (Number(o.vendorNet) || 0), 0);
+  const bilanCommission = Math.max(0, bilanGasGross - bilanVendorNet);
+
+  const buildVendorBilanHtml = () => {
+    const periodLabel =
+      BILAN_PERIODS.find(p => p.id === bilanPeriod)?.label || 'Tout';
+    const generatedDate = new Date().toLocaleString('fr-FR');
+
+    const rowsHtml =
+      bilanOrders.length === 0
+        ? `<tr><td colspan="6" style="text-align:center;padding:18px;color:#64748B;">Aucune opération sur cette période</td></tr>`
+        : bilanOrders
+            .map((o) => {
+              const statusText = o.status === 'delivered' ? 'Terminée' : 'En cours';
+              const netAmount = o.vendorNet || 0;
+              return `
+                <tr>
+                  <td><strong>${o.id}</strong></td>
+                  <td>${o.date || '-'}</td>
+                  <td>${o.qte}× ${o.type}<br/><span style="color:#64748B;font-size:11px;">${o.clientNom} • ${o.adresse}</span></td>
+                  <td>${o.deliveryMode === 'livraison' ? `Livraison (${o.distanceKm || 0} km)` : 'Retrait'}</td>
+                  <td>${statusText}</td>
+                  <td style="text-align:right;font-weight:700;color:#0F172A;">${netAmount.toLocaleString('fr-FR')} F</td>
+                </tr>
+              `;
+            })
+            .join('');
+
+    return `
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Bilan Vendeur MONAN - ${user?.nom || ''}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #0F172A; margin: 28px; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #F97316; padding-bottom: 14px; margin-bottom: 20px; }
+          .brand { font-size: 22px; font-weight: 900; color: #0F172A; letter-spacing: 1px; }
+          .brand span { color: #F97316; }
+          .sub { font-size: 12px; color: #475569; margin-top: 4px; }
+          .meta { text-align: right; font-size: 12px; color: #334155; line-height: 1.5; }
+          .kpi-row { display: flex; gap: 12px; margin-bottom: 20px; }
+          .kpi { flex: 1; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
+          .kpi.highlight { background: #FFF7ED; border-color: #FDBA74; }
+          .kpi-label { font-size: 11px; text-transform: uppercase; color: #64748B; font-weight: 700; }
+          .kpi-val { font-size: 17px; font-weight: 900; color: #0F172A; margin-top: 4px; }
+          .kpi.highlight .kpi-val { color: #EA580C; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+          th { background: #0F172A; color: #FFFFFF; text-align: left; padding: 9px 10px; font-weight: 700; }
+          td { padding: 9px 10px; border-bottom: 1px solid #E2E8F0; vertical-align: top; }
+          tr:nth-child(even) td { background: #F8FAFC; }
+          .footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #E2E8F0; font-size: 11px; color: #64748B; display: flex; justify-content: space-between; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="brand">MONAN <span>SERVICE</span></div>
+            <div class="sub">Bilan d'activité • Espace Vendeur / Dépôt</div>
+          </div>
+          <div class="meta">
+            <strong>${user?.nom || ''}</strong><br/>
+            ${userCity} • ${user?.adresse || ''}<br/>
+            Tél : ${user?.telephone || '-'}<br/>
+            Période : <strong>${periodLabel}</strong>
+          </div>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="kpi-label">Commandes (Livrées)</div>
+            <div class="kpi-val">${bilanOrders.length} (${bilanDeliveredCount})</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Ventes Gaz Brut</div>
+            <div class="kpi-val">${bilanGasGross.toLocaleString('fr-FR')} FCFA</div>
+          </div>
+          <div class="kpi highlight">
+            <div class="kpi-label">Revenu Net Vendeur (95%)</div>
+            <div class="kpi-val">${bilanVendorNet.toLocaleString('fr-FR')} FCFA</div>
+          </div>
+        </div>
+
+        <p style="font-size:12px;color:#475569;margin-bottom:12px;">
+          Bouteilles traitées : <strong>${bilanTotalCylinders}</strong> • Commission plateforme (5%) : <strong>${bilanCommission.toLocaleString('fr-FR')} FCFA</strong>
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Réf</th>
+              <th>Date</th>
+              <th>Détails</th>
+              <th>Mode</th>
+              <th>Statut</th>
+              <th style="text-align:right;">Net Vendeur</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <span>Document généré le ${generatedDate}</span>
+          <span>MONAN Service Pro</span>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  const handleExportBilanPDF = async () => {
+    if (activeViewRole !== 'depot') return;
+    setExportingPdf(true);
+    setPdfExportFeedback(false);
+    try {
+      const html = buildVendorBilanHtml();
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') {
+          const printWindow = window.open('', '_blank');
+          if (printWindow) {
+            printWindow.document.write(html);
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => {
+              printWindow.print();
+            }, 250);
+          } else {
+            await Print.printAsync({ html });
+          }
+        }
+      } else {
+        const { uri } = await Print.printToFileAsync({ html });
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, {
+            mimeType: 'application/pdf',
+            dialogTitle: `Bilan MONAN - ${user?.nom || ''}`,
+            UTI: 'com.adobe.pdf',
+          });
+        } else {
+          await Print.printAsync({ html });
+        }
+      }
+      setPdfExportFeedback(true);
+      setTimeout(() => setPdfExportFeedback(false), 3500);
+    } catch (err) {
+      showFeedbackAlert('Erreur PDF', 'Impossible de générer le bilan PDF.');
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const filteredDepotsList = localCityVendors.filter(d =>
@@ -1452,14 +1627,14 @@ export default function App() {
                       </View>
                     </View>
 
-                    {user.role === 'depot' && (
+                    {user.role === 'depot' && activeViewRole === 'depot' && (
                       <View style={styles.subStrip}>
                         <View>
                           <Text style={styles.microLabel}>ABONNEMENT</Text>
                           <Text style={styles.subStripValue}>{remainingSubDays} j restants</Text>
                         </View>
-                        <AnimatedButton style={styles.ghostDangerBtn} onPress={handleSimulateExpiration}>
-                          <Text style={styles.ghostDangerText}>Simuler fin</Text>
+                        <AnimatedButton style={styles.compactPrimaryBtn} onPress={() => setDashboardTab('bilan')}>
+                          <Text style={styles.compactPrimaryBtnText}>Bilan PDF</Text>
                         </AnimatedButton>
                       </View>
                     )}
@@ -1573,9 +1748,22 @@ export default function App() {
                         <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('vendor_live_orders')}>
                           <Text style={styles.btnPrimaryText}>Commandes ({availableOrdersForVendors.length})</Text>
                         </AnimatedButton>
-                        <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('pricing')}>
-                          <Text style={styles.btnSecondaryText}>Tarifs & GPS</Text>
-                        </AnimatedButton>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                          <AnimatedButton
+                            containerStyle={{ flex: 1 }}
+                            style={styles.btnSecondary}
+                            onPress={() => setDashboardTab('pricing')}
+                          >
+                            <Text style={styles.btnSecondaryText}>Tarifs & GPS</Text>
+                          </AnimatedButton>
+                          <AnimatedButton
+                            containerStyle={{ flex: 1 }}
+                            style={styles.btnSecondary}
+                            onPress={() => setDashboardTab('bilan')}
+                          >
+                            <Text style={styles.btnSecondaryText}>Bilan PDF</Text>
+                          </AnimatedButton>
+                        </View>
                       </View>
                     )}
 
@@ -1595,6 +1783,115 @@ export default function App() {
                         <Text style={styles.btnPrimaryText}>Commander</Text>
                       </AnimatedButton>
                     )}
+                  </View>
+                )}
+
+                {/* BILAN & EXPORT PDF (UNIQUEMENT CHEZ LE VENDEUR) */}
+                {activeViewRole === 'depot' && dashboardTab === 'bilan' && (
+                  <View style={styles.cardBox}>
+                    <Pressable onPress={() => setDashboardTab('home')} style={styles.backRow}>
+                      <Text style={styles.backText}>‹ Accueil</Text>
+                    </Pressable>
+
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.cardBoxTitle}>Bilan Vendeur PDF</Text>
+                      <View style={styles.cityPill}>
+                        <Text style={styles.cityPillText}>{bilanOrders.length} cmd</Text>
+                      </View>
+                    </View>
+
+                    {/* FILTRE PÉRIODE */}
+                    <View style={styles.segmentedRow}>
+                      {BILAN_PERIODS.map((p) => (
+                        <AnimatedButton
+                          key={p.id}
+                          containerStyle={{ flex: 1 }}
+                          style={[styles.segBtn, bilanPeriod === p.id && styles.segBtnActive]}
+                          onPress={() => setBilanPeriod(p.id)}
+                        >
+                          <Text style={[styles.segBtnText, bilanPeriod === p.id && styles.segBtnTextActive]}>
+                            {p.label}
+                          </Text>
+                        </AnimatedButton>
+                      ))}
+                    </View>
+
+                    {/* SYNTHÈSE CHIFFRÉE VENDEUR */}
+                    <View style={styles.financeSplitBox}>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeLabel}>Commandes (Livrées)</Text>
+                        <Text style={styles.financeValue}>
+                          {bilanOrders.length} ({bilanDeliveredCount})
+                        </Text>
+                      </View>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeLabel}>Bouteilles vendues</Text>
+                        <Text style={styles.financeValue}>{bilanTotalCylinders}</Text>
+                      </View>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeLabel}>Ventes gaz brut</Text>
+                        <Text style={styles.financeValue}>
+                          {bilanGasGross.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeLabel}>Commission plateforme (5%)</Text>
+                        <Text style={styles.financeMuted}>
+                          -{bilanCommission.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+                      <View style={[styles.rowBetween, styles.financeTotalRow]}>
+                        <Text style={styles.financeTotalLabel}>Revenu net vendeur</Text>
+                        <Text style={[styles.priceHighlight, { color: '#4ADE80' }]}>
+                          {bilanVendorNet.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+                    </View>
+
+                    {pdfExportFeedback && (
+                      <View style={styles.toastSuccess}>
+                        <Text style={styles.toastSuccessText}>✓ Bilan PDF généré</Text>
+                      </View>
+                    )}
+
+                    <AnimatedButton
+                      style={[styles.btnPrimary, pdfExportFeedback && { backgroundColor: '#16A34A' }]}
+                      onPress={handleExportBilanPDF}
+                      disabled={exportingPdf}
+                    >
+                      {exportingPdf ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.btnPrimaryText}>
+                          {pdfExportFeedback ? 'PDF généré ✓' : 'Exporter PDF'}
+                        </Text>
+                      )}
+                    </AnimatedButton>
+
+                    {/* DÉTAIL DES OPÉRATIONS DE LA PÉRIODE */}
+                    <View style={{ marginTop: 14 }}>
+                      {bilanOrders.length === 0 ? (
+                        <View style={styles.emptyStateBox}>
+                          <Text style={styles.emptyStateText}>Aucune opération sur cette période</Text>
+                        </View>
+                      ) : (
+                        bilanOrders.map((cmd) => (
+                          <View key={cmd.id} style={styles.listRowCard}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.listRowTitle}>
+                                {cmd.id} • {cmd.qte}× {cmd.type}
+                              </Text>
+                              <Text style={styles.mutedText}>
+                                {cmd.date} • {cmd.clientNom}
+                              </Text>
+                            </View>
+                            <Text style={[styles.priceHighlight, { color: '#4ADE80' }]}>
+                              +{(cmd.vendorNet || 0).toLocaleString('fr-FR')} F
+                            </Text>
+                          </View>
+                        ))
+                      )}
+                    </View>
                   </View>
                 )}
 
@@ -2629,8 +2926,6 @@ const styles = StyleSheet.create({
   subStrip: { backgroundColor: '#0F172A', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#1E293B', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   microLabel: { color: '#64748B', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   subStripValue: { color: '#4ADE80', fontSize: 14, fontWeight: '800', marginTop: 1 },
-  ghostDangerBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: 'rgba(239, 68, 68, 0.12)' },
-  ghostDangerText: { color: '#F87171', fontSize: 11, fontWeight: '700' },
 
   kpiGrid: { flexDirection: 'row', gap: 8 },
   kpiCard: { flex: 1, backgroundColor: '#0F172A', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#1E293B', alignItems: 'center' },
