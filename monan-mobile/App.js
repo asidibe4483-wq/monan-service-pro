@@ -49,10 +49,10 @@ const SUBSCRIPTION_PLANS = [
 ];
 
 const PAYMENT_OPERATORS = [
-  { id: 'wave', name: 'Wave', logo: require('./assets/wave.png') },
-  { id: 'orange', name: 'Orange Money', logo: require('./assets/orange.png') },
-  { id: 'mtn', name: 'MTN MoMo', logo: require('./assets/mtn.png') },
-  { id: 'moov', name: 'Moov Money', logo: require('./assets/moov.png') },
+  { id: 'wave', name: 'Wave', logo: require('./assets/wave.jpeg') },
+  { id: 'orange', name: 'Orange Money', logo: require('./assets/Orange.jpeg') },
+  { id: 'mtn', name: 'MTN MoMo', logo: require('./assets/MTN.jpeg') },
+  { id: 'moov', name: 'Moov Money', logo: require('./assets/Moov.jpeg') },
 ];
 
 const CYLINDER_TYPES = [
