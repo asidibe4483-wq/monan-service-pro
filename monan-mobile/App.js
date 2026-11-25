@@ -24,7 +24,11 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 // Numéro WhatsApp de l'administrateur pour la réception des CNI (format international sans +)
-const ADMIN_WHATSAPP_NUMBER = '2250700000000';
+const ADMIN_WHATSAPP_NUMBER = '2250574241335';
+
+// Identifiants Administrateur (remplacez le mot de passe de secours et configurez ADMIN_PASSWORD sur Render)
+const ADMIN_EMAIL = 'admin@monan.ci';
+const ADMIN_FALLBACK_PASSWORD = process.env.EXPO_PUBLIC_ADMIN_PASSWORD || 'Monan@Admin2026';
 
 // URL de votre backend hébergé sur Render pour la synchronisation multi-appareils
 const API_BASE_URL = 'https://monan-service-pro.onrender.com/api';
@@ -403,7 +407,7 @@ const CYLINDER_TYPES = [
 const DEFAULT_USERS = [
   {
     id: 'ADMIN-MONAN',
-    email: 'admin@monan.ci',
+    email: ADMIN_EMAIL,
     role: 'admin',
     nom: 'Administrateur MONAN',
     telephone: ADMIN_WHATSAPP_NUMBER,
@@ -935,7 +939,7 @@ export default function App() {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    if (cleanEmail === 'admin@monan.ci') {
+    if (cleanEmail === ADMIN_EMAIL) {
       showFeedbackAlert('Email réservé', 'Utilisez l’écran Connexion pour accéder à l’espace Administrateur.');
       return;
     }
@@ -1005,12 +1009,42 @@ export default function App() {
     const { users: latestUsers } = await syncAppState();
     const cleanEmail = email.trim().toLowerCase();
 
-    // Accès Administrateur (admin@monan.ci avec n'importe quel mot de passe)
-    if (cleanEmail === 'admin@monan.ci') {
-      const existingAdmin = latestUsers.find(u => u.email.toLowerCase() === 'admin@monan.ci');
+    // Accès Administrateur sécurisé (vérification serveur Render + mot de passe fixe de secours)
+    if (cleanEmail === ADMIN_EMAIL) {
+      const enteredPwd = password.trim();
+      let isAuthorized = false;
+      let backendChecked = false;
+
+      try {
+        const authResponse = await fetch(`${API_BASE_URL}/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password: enteredPwd }),
+        });
+
+        if (authResponse.status === 200) {
+          isAuthorized = true;
+          backendChecked = true;
+        } else if (authResponse.status === 401 || authResponse.status === 403) {
+          isAuthorized = false;
+          backendChecked = true;
+        }
+      } catch (networkErr) {}
+
+      if (!backendChecked) {
+        isAuthorized = enteredPwd === ADMIN_FALLBACK_PASSWORD;
+      }
+
+      if (!isAuthorized) {
+        setLoading(false);
+        showFeedbackAlert('Accès refusé', 'Mot de passe administrateur incorrect.');
+        return;
+      }
+
+      const existingAdmin = latestUsers.find(u => u.email.toLowerCase() === ADMIN_EMAIL);
       const adminProfile = existingAdmin || {
         id: 'ADMIN-MONAN',
-        email: 'admin@monan.ci',
+        email: ADMIN_EMAIL,
         role: 'admin',
         nom: 'Administrateur MONAN',
         telephone: ADMIN_WHATSAPP_NUMBER,
