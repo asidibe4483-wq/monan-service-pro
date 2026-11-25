@@ -23,7 +23,7 @@ import * as Location from 'expo-location';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
-// Numéro WhatsApp de l'administrateur pour la réception des CNI (format international sans +)
+// Numéro WhatsApp de l'administrateur pour la réception des CNI et rechargements (format international sans +)
 const ADMIN_WHATSAPP_NUMBER = '2250574241335';
 
 // Identifiants Administrateur (remplacez le mot de passe de secours et configurez ADMIN_PASSWORD sur Render)
@@ -37,11 +37,14 @@ const STORAGE_ORDERS_KEY = '@monan_orders_v7';
 
 const APP_GAS_COMMISSION_RATE = 0.05; // 5 % commission plateforme sur le gaz
 const APP_DELIVERY_COMMISSION_RATE = 0.20; // 20 % commission plateforme sur la livraison
+const MIN_DRIVER_WALLET_BALANCE = 200; // Solde minimum requis pour un livreur (FCFA)
 const BASE_DELIVERY_FEE = 300; // Prise en charge de base (FCFA)
 const FREE_BASE_KM = 1.5; // Kilomètres inclus dans la prise en charge
 const PER_KM_RATE = 100; // Tarif par km supplémentaire (FCFA)
 const MIN_DELIVERY_FEE = 400; // Minimum de course (FCFA)
 const ROAD_TORTUOSITY_FACTOR = 1.3; // Facteur de correction trajet routier vs vol d'oiseau
+
+const WALLET_TOPUP_PRESETS = [1000, 2000, 5000, 10000];
 
 const DEFAULT_VENDOR_PRICES = {
   B6: { recharge: '2000', achat: '13000' },
@@ -65,6 +68,75 @@ const hasValidCoords = (c) =>
       !Number.isNaN(c.latitude) &&
       !Number.isNaN(c.longitude)
   );
+
+const mergeWalletHistories = (listA = [], listB = []) => {
+  const map = new Map();
+  [...(Array.isArray(listA) ? listA : []), ...(Array.isArray(listB) ? listB : [])].forEach((tx) => {
+    if (tx && tx.id) {
+      map.set(tx.id, tx);
+    }
+  });
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+};
+
+const getDefaultInitialWallet = (userObj) => {
+  if (!userObj) return 0;
+  if (typeof userObj.initialWalletBalance === 'number' && !Number.isNaN(userObj.initialWalletBalance)) {
+    return userObj.initialWalletBalance;
+  }
+  if (['DEP-DEFAULT', 'DEP-ANYAMA', 'LIV-DEFAULT'].includes(userObj.id)) {
+    return 5000;
+  }
+  return 0;
+};
+
+const computeWalletBalance = (userObj) => {
+  if (!userObj || (userObj.role !== 'depot' && userObj.role !== 'livreur')) return 0;
+  const base = getDefaultInitialWallet(userObj);
+  if (Array.isArray(userObj.walletHistory)) {
+    const delta = userObj.walletHistory.reduce((sum, tx) => {
+      const amt = Number(tx?.amount) || 0;
+      return sum + (tx?.type === 'credit' ? amt : -amt);
+    }, 0);
+    return base + delta;
+  }
+  if (typeof userObj.walletBalance === 'number' && !Number.isNaN(userObj.walletBalance)) {
+    return userObj.walletBalance;
+  }
+  return base;
+};
+
+const appendWalletTransaction = (userObj, tx) => {
+  if (!userObj) return userObj;
+  const initialWalletBalance = getDefaultInitialWallet(userObj);
+  const walletHistory = mergeWalletHistories(userObj.walletHistory || [], [tx]);
+  const updated = {
+    ...userObj,
+    initialWalletBalance,
+    walletHistory,
+  };
+  return {
+    ...updated,
+    walletBalance: computeWalletBalance(updated),
+  };
+};
+
+const getOrderGasCommission = (order) => {
+  if (typeof order?.appGasCommission === 'number' && !Number.isNaN(order.appGasCommission)) {
+    return order.appGasCommission;
+  }
+  return Math.round((Number(order?.gasSubtotal) || 0) * APP_GAS_COMMISSION_RATE);
+};
+
+const getOrderDeliveryCommission = (order) => {
+  if (order?.deliveryMode !== 'livraison') return 0;
+  if (typeof order?.appDeliveryCommission === 'number' && !Number.isNaN(order.appDeliveryCommission)) {
+    return order.appDeliveryCommission;
+  }
+  return Math.round((Number(order?.deliveryFee) || 0) * APP_DELIVERY_COMMISSION_RATE);
+};
 
 // Référentiel de secours si le GPS d'un compte n'a pas encore été enregistré
 const LOCALITY_COORDS = {
@@ -298,8 +370,8 @@ const ONBOARDING_SLIDES = [
   {
     id: '3',
     badge: 'VENDEUR',
-    title: 'Tarifs & Position GPS du dépôt',
-    subtitle: 'Fixez vos prix et enregistrez les coordonnées GPS de votre dépôt.',
+    title: 'Tarifs, GPS & Portefeuille',
+    subtitle: 'Fixez vos prix et gérez votre solde prépayé en toute autonomie.',
     icon: require('./assets/splash-icon.png')
   },
   {
@@ -427,6 +499,9 @@ const DEFAULT_USERS = [
     createdAt: new Date().toISOString(),
     subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     isSubscribed: true,
+    initialWalletBalance: 5000,
+    walletBalance: 5000,
+    walletHistory: [],
     prices: {
       B6: { recharge: '2000', achat: '13000' },
       B12: { recharge: '5500', achat: '25000' },
@@ -445,6 +520,9 @@ const DEFAULT_USERS = [
     createdAt: new Date().toISOString(),
     subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     isSubscribed: true,
+    initialWalletBalance: 5000,
+    walletBalance: 5000,
+    walletHistory: [],
     prices: {
       B6: { recharge: '1950', achat: '12800' },
       B12: { recharge: '5400', achat: '24500' },
@@ -472,6 +550,9 @@ const DEFAULT_USERS = [
     adresse: 'Cocody / Yopougon',
     vehicule: 'Tricycle',
     isDriverVerified: true,
+    initialWalletBalance: 5000,
+    walletBalance: 5000,
+    walletHistory: [],
     createdAt: new Date().toISOString()
   }
 ];
@@ -496,6 +577,11 @@ export default function App() {
   const [bilanPeriod, setBilanPeriod] = useState('daily');
   const [exportingPdf, setExportingPdf] = useState(false);
   const [pdfExportFeedback, setPdfExportFeedback] = useState(false);
+
+  // Portefeuille prépayé (rechargement partenaire + crédit Admin)
+  const [topupAmount, setTopupAmount] = useState('2000');
+  const [topupOperator, setTopupOperator] = useState('Wave');
+  const [adminCreditInputs, setAdminCreditInputs] = useState({});
 
   const [selectedPlan, setSelectedPlan] = useState(SUBSCRIPTION_PLANS[1]);
   const [paymentMethod, setPaymentMethod] = useState('Wave');
@@ -642,16 +728,60 @@ export default function App() {
     }
   }, [user, currentScreen]);
 
+  const normalizeUserWallet = (u) => {
+    if (!u) return u;
+    if (u.role !== 'depot' && u.role !== 'livreur') return u;
+    const initialWalletBalance = getDefaultInitialWallet(u);
+    const walletHistory = Array.isArray(u.walletHistory) ? u.walletHistory : [];
+    const hydrated = { ...u, initialWalletBalance, walletHistory };
+    return {
+      ...hydrated,
+      walletBalance: computeWalletBalance(hydrated),
+    };
+  };
+
   const mergeUsersLists = (baseList, incomingList) => {
     const map = new Map();
     baseList.forEach(u => {
-      if (u?.email) map.set(u.email.toLowerCase(), u);
+      if (u?.email) map.set(u.email.toLowerCase(), normalizeUserWallet(u));
     });
     incomingList.forEach(u => {
       if (u?.email) {
         const key = u.email.toLowerCase();
         const existing = map.get(key);
-        map.set(key, existing ? { ...existing, ...u } : u);
+        if (!existing) {
+          map.set(key, normalizeUserWallet(u));
+        } else {
+          const merged = { ...existing, ...u };
+          if (existing.subscriptionExpiresAt && u.subscriptionExpiresAt) {
+            const tPrev = new Date(existing.subscriptionExpiresAt).getTime();
+            const tNew = new Date(u.subscriptionExpiresAt).getTime();
+            merged.subscriptionExpiresAt =
+              tNew >= tPrev ? u.subscriptionExpiresAt : existing.subscriptionExpiresAt;
+          }
+          if (!u.coords && existing.coords) {
+            merged.coords = existing.coords;
+          }
+          if (merged.role === 'depot' || merged.role === 'livreur') {
+            merged.initialWalletBalance = Math.max(
+              getDefaultInitialWallet(existing),
+              getDefaultInitialWallet(u)
+            );
+            merged.walletHistory = mergeWalletHistories(
+              existing.walletHistory || [],
+              u.walletHistory || []
+            );
+            merged.walletBalance = computeWalletBalance(merged);
+
+            const prevTopupTime = new Date(existing.pendingTopupUpdatedAt || 0).getTime();
+            const newTopupTime = new Date(u.pendingTopupUpdatedAt || 0).getTime();
+            if (prevTopupTime > newTopupTime) {
+              merged.pendingTopup = existing.pendingTopup ?? null;
+              merged.pendingTopupUpdatedAt = existing.pendingTopupUpdatedAt;
+            }
+          }
+          map.set(key, merged);
+        }
       }
     });
     return Array.from(map.values());
@@ -663,7 +793,9 @@ export default function App() {
       const storedUsersRaw = await AsyncStorage.getItem(STORAGE_USERS_KEY);
       const storedOrdersRaw = await AsyncStorage.getItem(STORAGE_ORDERS_KEY);
 
-      let mergedUsers = localUsersOverride || (storedUsersRaw ? JSON.parse(storedUsersRaw) : DEFAULT_USERS);
+      let mergedUsers = (localUsersOverride || (storedUsersRaw ? JSON.parse(storedUsersRaw) : DEFAULT_USERS)).map(
+        normalizeUserWallet
+      );
       let mergedOrders = localOrdersOverride || (storedOrdersRaw ? JSON.parse(storedOrdersRaw) : []);
 
       try {
@@ -688,13 +820,13 @@ export default function App() {
       setRegisteredUsers(mergedUsers);
       setAllOrders(mergedOrders);
 
-      // Rafraîchit immédiatement le profil de l'utilisateur connecté (ex: déblocage CNI livreur)
+      // Rafraîchit immédiatement le profil de l'utilisateur connecté (CNI + solde prépayé)
       setUser(prev => {
         if (!prev) return null;
         const freshUser = mergedUsers.find(
           u => u?.email && prev?.email && u.email.toLowerCase() === prev.email.toLowerCase()
         );
-        return freshUser ? { ...prev, ...freshUser } : prev;
+        return freshUser ? normalizeUserWallet({ ...prev, ...freshUser }) : prev;
       });
 
       await AsyncStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(mergedUsers));
@@ -758,6 +890,35 @@ export default function App() {
   const isVendorSubscriptionExpired = user?.role === 'depot' && remainingSubDays <= 0;
   const isDriverAccountVerified = user?.role === 'livreur' ? user?.isDriverVerified === true : true;
 
+  // Calcul du solde prépayé actuel et des commissions réservées sur les commandes en cours
+  const currentWalletBalance =
+    user && (user.role === 'depot' || user.role === 'livreur') ? computeWalletBalance(user) : 0;
+
+  const vendorReservedCommission =
+    user?.role === 'depot'
+      ? allOrders
+          .filter(
+            (o) =>
+              o.assignedVendorId === user.id &&
+              (o.status === 'accepted' || o.status === 'in_delivery')
+          )
+          .reduce((sum, o) => sum + getOrderGasCommission(o), 0)
+      : 0;
+
+  const driverReservedCommission =
+    user?.role === 'livreur'
+      ? allOrders
+          .filter((o) => o.assignedDriverId === user.id && o.status === 'in_delivery')
+          .reduce((sum, o) => sum + getOrderDeliveryCommission(o), 0)
+      : 0;
+
+  const vendorAvailableWallet = currentWalletBalance - vendorReservedCommission;
+  const driverAvailableWallet = currentWalletBalance - driverReservedCommission;
+
+  const isVendorWalletLow = user?.role === 'depot' && vendorAvailableWallet <= 0;
+  const isDriverWalletBlocked =
+    user?.role === 'livreur' && driverAvailableWallet < MIN_DRIVER_WALLET_BALANCE;
+
   const getVendorUnitPrice = (vendorObj, cylinderId, opType) => {
     const cylMeta = CYLINDER_TYPES.find(c => c.id === cylinderId) || CYLINDER_TYPES[0];
     const customPrices = vendorObj?.prices?.[cylinderId];
@@ -814,11 +975,102 @@ export default function App() {
   };
 
   const persistUserUpdate = async (updatedUserObj) => {
-    setUser(updatedUserObj);
+    const normalized = normalizeUserWallet(updatedUserObj);
+    setUser(normalized);
     const storedRaw = await AsyncStorage.getItem(STORAGE_USERS_KEY);
     const latestUsers = storedRaw ? JSON.parse(storedRaw) : registeredUsers;
-    const updatedList = mergeUsersLists(latestUsers, [updatedUserObj]);
+    const updatedList = mergeUsersLists(latestUsers, [normalized]);
     await syncAppState(updatedList, null);
+  };
+
+  // Demande de rechargement du portefeuille prépayé (Vendeur ou Livreur)
+  const handleRequestWalletTopup = async () => {
+    if (!user || (user.role !== 'depot' && user.role !== 'livreur')) return;
+    const amount = parseInt((topupAmount || '').replace(/\D/g, ''), 10);
+    if (!amount || amount < 500) {
+      showFeedbackAlert('Montant invalide', 'Entrez un montant d’au moins 500 FCFA.');
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const updatedUser = {
+      ...user,
+      pendingTopup: {
+        amount,
+        operator: topupOperator,
+        requestedAt: nowIso,
+      },
+      pendingTopupUpdatedAt: nowIso,
+    };
+
+    await persistUserUpdate(updatedUser);
+
+    const roleLabel = user.role === 'depot' ? 'Vendeur / Dépôt' : 'Livreur';
+    const message = [
+      'Bonjour Administrateur MONAN,',
+      'Je souhaite recharger mon portefeuille prépayé :',
+      `• Profil : ${roleLabel}`,
+      `• Nom : ${user.nom}`,
+      `• Identifiant : ${user.id}`,
+      `• Téléphone : ${user.telephone}`,
+      `• Montant : ${amount.toLocaleString('fr-FR')} FCFA`,
+      `• Opérateur : ${topupOperator}`,
+      'Je vous envoie la capture du transfert Mobile Money.'
+    ].join('\n');
+
+    const cleanAdminPhone = ADMIN_WHATSAPP_NUMBER.replace(/\D/g, '');
+    const waUrl = `https://wa.me/${cleanAdminPhone}?text=${encodeURIComponent(message)}`;
+
+    try {
+      await Linking.openURL(waUrl);
+    } catch (err) {
+      showFeedbackAlert(
+        'Demande enregistrée',
+        `Effectuez le dépôt ${topupOperator} de ${amount.toLocaleString('fr-FR')} FCFA au +${cleanAdminPhone} avec votre ID ${user.id}.`
+      );
+    }
+  };
+
+  // Crédit du portefeuille prépayé par l'Administrateur
+  const handleAdminCreditWallet = async (targetUser, customAmountOverride = null) => {
+    if (user?.role !== 'admin' || !targetUser) return;
+    const rawStr =
+      customAmountOverride !== null
+        ? String(customAmountOverride)
+        : (adminCreditInputs[targetUser.id] || '').trim();
+    const amount = parseInt(rawStr.replace(/\D/g, ''), 10);
+
+    if (!amount || amount <= 0) {
+      showFeedbackAlert('Montant requis', 'Entrez un montant valide à créditer (ex: 2000).');
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const tx = {
+      id: `CRD-${targetUser.id}-${Date.now()}`,
+      type: 'credit',
+      amount,
+      label: `Rechargement validé (${targetUser.pendingTopup?.operator || 'Admin'})`,
+      createdAt: nowIso,
+    };
+
+    const creditedUser = appendWalletTransaction(
+      {
+        ...targetUser,
+        pendingTopup: null,
+        pendingTopupUpdatedAt: nowIso,
+      },
+      tx
+    );
+
+    const updatedUsers = mergeUsersLists(registeredUsers, [creditedUser]);
+    setAdminCreditInputs((prev) => ({ ...prev, [targetUser.id]: '' }));
+    await syncAppState(updatedUsers, null);
+
+    showFeedbackAlert(
+      'Portefeuille crédité',
+      `+${amount.toLocaleString('fr-FR')} FCFA ajoutés à ${targetUser.nom}. Nouveau solde : ${creditedUser.walletBalance.toLocaleString('fr-FR')} FCFA.`
+    );
   };
 
   const handleUpdateVendorGPS = async () => {
@@ -962,6 +1214,7 @@ export default function App() {
     const nowIso = new Date().toISOString();
     const cleanCity = ville.trim();
     const cleanLocality = adresse.trim() || cleanCity;
+    const isPartner = type === 'depot' || type === 'livreur';
 
     const newUser = {
       id: `${type === 'depot' ? 'DEP' : type === 'livreur' ? 'LIV' : 'CLI'}-${Date.now().toString().slice(-5)}`,
@@ -973,8 +1226,10 @@ export default function App() {
       coords: finalCoords || null,
       role: type,
       vehicule: type === 'livreur' ? vehicule : null,
-      // Tout nouveau livreur inscrit seul est bloqué par défaut en attente de validation CNI
       isDriverVerified: type === 'livreur' ? false : null,
+      initialWalletBalance: isPartner ? 0 : null,
+      walletBalance: isPartner ? 0 : null,
+      walletHistory: isPartner ? [] : null,
       createdAt: nowIso,
       subscriptionExpiresAt: type === 'depot' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
       isSubscribed: type === 'depot',
@@ -1065,7 +1320,7 @@ export default function App() {
       return;
     }
 
-    const userData = {
+    const userData = normalizeUserWallet({
       ...foundUser,
       ville: (foundUser.ville || '').trim(),
       prices: foundUser.prices || { ...DEFAULT_VENDOR_PRICES },
@@ -1076,7 +1331,7 @@ export default function App() {
         (foundUser.role === 'depot'
           ? new Date(new Date(foundUser.createdAt || Date.now()).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
           : null)
-    };
+    });
 
     setUser(userData);
     setClientCoords(userData.coords || null);
@@ -1105,7 +1360,6 @@ export default function App() {
       return;
     }
 
-    // Les livreurs ajoutés directement par un vendeur sont validés sous sa responsabilité
     const driverObj = {
       id: `LIV-${Date.now().toString().slice(-5)}`,
       nom: newDriverName.trim(),
@@ -1116,6 +1370,9 @@ export default function App() {
       role: 'livreur',
       vehicule: newDriverVehicle,
       isDriverVerified: true,
+      initialWalletBalance: 0,
+      walletBalance: 0,
+      walletHistory: [],
       addedByVendorId: user.id,
       createdAt: new Date().toISOString()
     };
@@ -1125,7 +1382,10 @@ export default function App() {
 
     setNewDriverName('');
     setNewDriverPhone('');
-    showFeedbackAlert('Livreur ajouté', `${driverObj.nom} a été enregistré et validé.`);
+    showFeedbackAlert(
+      'Livreur ajouté',
+      `${driverObj.nom} a été enregistré. Son portefeuille prépayé doit être crédité avant sa première course.`
+    );
   };
 
   const handleCreateOrder = async () => {
@@ -1156,7 +1416,6 @@ export default function App() {
     const newCmdId = `CMD-${Math.floor(100 + Math.random() * 900)}`;
     const now = new Date();
 
-    // Code secret aléatoire à 4 chiffres généré automatiquement pour les commandes en livraison
     const deliveryCode =
       deliveryMode === 'livraison'
         ? Math.floor(1000 + Math.random() * 9000).toString()
@@ -1180,6 +1439,8 @@ export default function App() {
       qte: fin.qty,
       gasSubtotal: fin.gasSubtotal,
       deliveryFee: fin.deliveryFee,
+      appGasCommission: fin.appGasCommission,
+      appDeliveryCommission: fin.appDeliveryCommission,
       appCommission: fin.appTotalCommission,
       vendorNet: fin.vendorNet,
       driverNet: fin.driverNet,
@@ -1214,8 +1475,22 @@ export default function App() {
     setLoading(false);
   };
 
+  // Vendeur accepte une commande : vérification obligatoire du solde prépayé (5 % gaz)
   const handleAcceptOrder = async (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
+    const targetOrder = allOrders.find(o => o.id === orderId);
+    if (!targetOrder) return;
+
+    const requiredCommission = getOrderGasCommission(targetOrder);
+    if (vendorAvailableWallet < requiredCommission) {
+      showFeedbackAlert(
+        'Portefeuille prépayé insuffisant',
+        `Votre solde disponible (${Math.max(0, vendorAvailableWallet).toLocaleString('fr-FR')} FCFA) est inférieur à la commission de ${requiredCommission.toLocaleString('fr-FR')} FCFA (5 %). Rechargez votre portefeuille pour accepter.`
+      );
+      setDashboardTab('wallet');
+      return;
+    }
+
     const updatedOrders = allOrders.map(o =>
       o.id === orderId
         ? { ...o, status: 'accepted', assignedVendorId: user.id, assignedVendorNom: user.nom || 'Dépôt' }
@@ -1225,12 +1500,34 @@ export default function App() {
     setDashboardTab('my_deliveries');
   };
 
+  // Clôture d'un retrait au dépôt : déduction automatique des 5 % sur le portefeuille du vendeur
   const handleCompletePickupOrder = async (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
+    const targetOrder = allOrders.find(o => o.id === orderId);
+    if (!targetOrder) return;
+
+    const gasCommission = getOrderGasCommission(targetOrder);
+    const nowIso = new Date().toISOString();
+
+    const updatedVendor = appendWalletTransaction(user, {
+      id: `DEB-GAS-${orderId}`,
+      type: 'debit',
+      amount: gasCommission,
+      label: `Commission gaz 5% • ${orderId}`,
+      createdAt: nowIso,
+    });
+
+    const updatedUsers = mergeUsersLists(registeredUsers, [updatedVendor]);
     const updatedOrders = allOrders.map(o =>
       o.id === orderId && o.assignedVendorId === user.id ? { ...o, status: 'delivered' } : o
     );
-    await syncAppState(null, updatedOrders);
+
+    setUser(updatedVendor);
+    await syncAppState(updatedUsers, updatedOrders);
+    showFeedbackAlert(
+      'Retrait confirmé',
+      `Commission MONAN (-${gasCommission.toLocaleString('fr-FR')} F) prélevée. Nouveau solde : ${updatedVendor.walletBalance.toLocaleString('fr-FR')} F.`
+    );
   };
 
   const handleAssignDriverToOrder = async (orderId) => {
@@ -1240,8 +1537,19 @@ export default function App() {
       return;
     }
 
+    const targetOrder = allOrders.find(o => o.id === orderId);
     const chosenDriverId = selectedDriverByOrder[orderId] || verifiedCityDrivers[0].id;
     const driver = verifiedCityDrivers.find(d => d.id === chosenDriverId) || verifiedCityDrivers[0];
+
+    const deliveryCommission = getOrderDeliveryCommission(targetOrder);
+    const driverBal = computeWalletBalance(driver);
+    if (driverBal < deliveryCommission || driverBal < MIN_DRIVER_WALLET_BALANCE) {
+      showFeedbackAlert(
+        'Solde livreur insuffisant',
+        `Le portefeuille prépayé de ${driver.nom} (${driverBal.toLocaleString('fr-FR')} F) est insuffisant pour couvrir la commission de course.`
+      );
+      return;
+    }
 
     const updatedOrders = allOrders.map(o =>
       o.id === orderId
@@ -1257,6 +1565,7 @@ export default function App() {
     await syncAppState(null, updatedOrders);
   };
 
+  // Livreur accepte une course : vérification CNI + solde prépayé (20 % course)
   const handleDriverClaimOrder = async (orderId) => {
     if (user?.role !== 'livreur' || activeViewRole !== 'livreur') return;
     if (!isDriverAccountVerified) {
@@ -1266,6 +1575,20 @@ export default function App() {
       );
       return;
     }
+
+    const targetOrder = allOrders.find(o => o.id === orderId);
+    if (!targetOrder) return;
+
+    const deliveryCommission = getOrderDeliveryCommission(targetOrder);
+    if (driverAvailableWallet < deliveryCommission || driverAvailableWallet < MIN_DRIVER_WALLET_BALANCE) {
+      showFeedbackAlert(
+        'Portefeuille prépayé insuffisant',
+        `Votre solde disponible (${Math.max(0, driverAvailableWallet).toLocaleString('fr-FR')} FCFA) est insuffisant pour accepter cette course (commission : ${deliveryCommission.toLocaleString('fr-FR')} FCFA). Rechargez votre portefeuille.`
+      );
+      setDashboardTab('wallet');
+      return;
+    }
+
     const updatedOrders = allOrders.map(o =>
       o.id === orderId
         ? {
@@ -1281,12 +1604,12 @@ export default function App() {
     setDashboardTab('driver_active');
   };
 
+  // Validation de livraison par code secret 4 chiffres : prélèvement simultané des commissions sur le Livreur (20 %) et le Dépôt (5 %)
   const handleDriverConfirmDelivery = async (orderId) => {
     if (user?.role !== 'livreur' || activeViewRole !== 'livreur') return;
     const targetOrder = allOrders.find(o => o.id === orderId);
     if (!targetOrder) return;
 
-    // Vérification obligatoire du code secret à 4 chiffres du client
     if (targetOrder.deliveryCode) {
       const enteredCode = (driverCodeInputs[orderId] || '').trim();
       if (enteredCode !== String(targetOrder.deliveryCode).trim()) {
@@ -1298,16 +1621,50 @@ export default function App() {
       }
     }
 
+    const nowIso = new Date().toISOString();
+    const deliveryCommission = getOrderDeliveryCommission(targetOrder);
+    const gasCommission = getOrderGasCommission(targetOrder);
+
+    const updatedDriver = appendWalletTransaction(user, {
+      id: `DEB-DEL-${orderId}`,
+      type: 'debit',
+      amount: deliveryCommission,
+      label: `Commission course 20% • ${orderId}`,
+      createdAt: nowIso,
+    });
+
+    const usersToMerge = [updatedDriver];
+    if (targetOrder.assignedVendorId) {
+      const assignedVendor = registeredUsers.find(u => u.id === targetOrder.assignedVendorId);
+      if (assignedVendor) {
+        const updatedVendor = appendWalletTransaction(assignedVendor, {
+          id: `DEB-GAS-${orderId}`,
+          type: 'debit',
+          amount: gasCommission,
+          label: `Commission gaz 5% • ${orderId}`,
+          createdAt: nowIso,
+        });
+        usersToMerge.push(updatedVendor);
+      }
+    }
+
+    const updatedUsers = mergeUsersLists(registeredUsers, usersToMerge);
     const updatedOrders = allOrders.map(o =>
       o.id === orderId && o.assignedDriverId === user.id ? { ...o, status: 'delivered' } : o
     );
+
     setDriverCodeInputs(prev => {
       const next = { ...prev };
       delete next[orderId];
       return next;
     });
-    await syncAppState(null, updatedOrders);
-    showFeedbackAlert('Livraison confirmée', `Course ${orderId} clôturée avec succès.`);
+    setUser(updatedDriver);
+    await syncAppState(updatedUsers, updatedOrders);
+
+    showFeedbackAlert(
+      'Livraison confirmée',
+      `Course ${orderId} clôturée • Commission MONAN (-${deliveryCommission.toLocaleString('fr-FR')} F) prélevée. Nouveau solde : ${updatedDriver.walletBalance.toLocaleString('fr-FR')} F.`
+    );
   };
 
   const handleLogout = () => {
@@ -1474,7 +1831,7 @@ export default function App() {
         </div>
 
         <p style="font-size:12px;color:#475569;margin-bottom:12px;">
-          Bouteilles traitées : <strong>${bilanTotalCylinders}</strong> • Commission plateforme (5%) : <strong>${bilanCommission.toLocaleString('fr-FR')} FCFA</strong>
+          Bouteilles traitées : <strong>${bilanTotalCylinders}</strong> • Commission prépayée (5%) : <strong>${bilanCommission.toLocaleString('fr-FR')} FCFA</strong> • Solde portefeuille : <strong>${currentWalletBalance.toLocaleString('fr-FR')} FCFA</strong>
         </p>
 
         <table>
@@ -1562,31 +1919,58 @@ export default function App() {
     .sort((a, b) => {
       const aVer = a.isDriverVerified === true ? 1 : 0;
       const bVer = b.isDriverVerified === true ? 1 : 0;
-      return aVer - bVer; // En attente CNI en priorité en haut
+      return aVer - bVer;
     });
 
   const pendingDriversForAdmin = allDriversSortedForAdmin.filter(u => u.isDriverVerified !== true);
   const allDepotsForAdmin = registeredUsers.filter(u => u.role === 'depot');
 
+  // Liste des partenaires (Dépôts + Livreurs) triée par demande de rechargement en attente puis solde faible
+  const allWalletPartnersForAdmin = registeredUsers
+    .filter(u => u.role === 'depot' || u.role === 'livreur')
+    .map(u => ({
+      ...u,
+      computedBalance: computeWalletBalance(u),
+    }))
+    .sort((a, b) => {
+      const aReq = a.pendingTopup ? 1 : 0;
+      const bReq = b.pendingTopup ? 1 : 0;
+      if (aReq !== bReq) return bReq - aReq;
+      return a.computedBalance - b.computedBalance;
+    });
+
+  const pendingTopupsCountForAdmin = allWalletPartnersForAdmin.filter(u => Boolean(u.pendingTopup)).length;
+
+  const deliveredOrdersAll = allOrders.filter(o => o.status === 'delivered');
+  const totalCollectedGasCommissions = deliveredOrdersAll.reduce(
+    (sum, o) => sum + getOrderGasCommission(o),
+    0
+  );
+  const totalCollectedDeliveryCommissions = deliveredOrdersAll.reduce(
+    (sum, o) => sum + getOrderDeliveryCommission(o),
+    0
+  );
+  const totalPlatformCommissions =
+    totalCollectedGasCommissions + totalCollectedDeliveryCommissions;
+
   const depotCommissionsSummary = allDepotsForAdmin.map((dep) => {
     const depOrders = allOrders.filter(o => o.assignedVendorId === dep.id);
-    const deliveredOrdersCount = depOrders.filter(o => o.status === 'delivered').length;
-    const totalSalesGross = depOrders.reduce((sum, o) => sum + (Number(o.gasSubtotal) || 0), 0);
-    const totalCommissionGenerated = depOrders.reduce((sum, o) => sum + (Number(o.appCommission) || 0), 0);
+    const depDeliveredOrders = depOrders.filter(o => o.status === 'delivered');
+    const totalSalesGross = depDeliveredOrders.reduce((sum, o) => sum + (Number(o.gasSubtotal) || 0), 0);
+    const totalGasCommissionCollected = depDeliveredOrders.reduce(
+      (sum, o) => sum + getOrderGasCommission(o),
+      0
+    );
     return {
       ...dep,
+      walletBalance: computeWalletBalance(dep),
       ordersCount: depOrders.length,
-      deliveredOrdersCount,
+      deliveredOrdersCount: depDeliveredOrders.length,
       totalSalesGross,
-      totalCommissionGenerated,
+      totalGasCommissionCollected,
       remainingDays: getRemainingSubscriptionDays(dep),
     };
   });
-
-  const totalPlatformCommissions = depotCommissionsSummary.reduce(
-    (sum, d) => sum + d.totalCommissionGenerated,
-    0
-  );
 
   const availableOrdersForVendors = activeViewRole === 'depot'
     ? allOrders.filter(
@@ -1601,15 +1985,16 @@ export default function App() {
     ? allOrders.filter(c => c.assignedVendorId === user?.id && (c.status === 'accepted' || c.status === 'in_delivery'))
     : [];
 
-  const availableOrdersForDrivers = activeViewRole === 'livreur' && isDriverAccountVerified
-    ? allOrders.filter(
-        c =>
-          c.status === 'accepted' &&
-          c.deliveryMode === 'livraison' &&
-          !c.assignedDriverId &&
-          normalizeText(c.ville) === normalizedUserCity
-      )
-    : [];
+  const availableOrdersForDrivers =
+    activeViewRole === 'livreur' && isDriverAccountVerified && !isDriverWalletBlocked
+      ? allOrders.filter(
+          c =>
+            c.status === 'accepted' &&
+            c.deliveryMode === 'livraison' &&
+            !c.assignedDriverId &&
+            normalizeText(c.ville) === normalizedUserCity
+        )
+      : [];
 
   const myDriverActiveOrders = activeViewRole === 'livreur'
     ? allOrders.filter(c => c.assignedDriverId === user?.id && c.status === 'in_delivery')
@@ -1660,8 +2045,9 @@ export default function App() {
     if (activeViewRole === 'admin') {
       return [
         { id: 'home', label: 'Accueil', badge: 0 },
-        { id: 'admin_drivers', label: 'Livreurs CNI', badge: pendingDriversForAdmin.length },
-        { id: 'admin_commissions', label: 'Commissions', badge: 0 },
+        { id: 'admin_drivers', label: 'CNI', badge: pendingDriversForAdmin.length },
+        { id: 'admin_wallets', label: 'Soldes', badge: pendingTopupsCountForAdmin },
+        { id: 'admin_commissions', label: 'Revenus', badge: 0 },
       ];
     }
     if (activeViewRole === 'depot') {
@@ -1669,7 +2055,7 @@ export default function App() {
         { id: 'home', label: 'Accueil', badge: 0 },
         { id: 'vendor_live_orders', label: 'Commandes', badge: availableOrdersForVendors.length },
         { id: 'my_deliveries', label: 'En cours', badge: myVendorDeliveries.length },
-        { id: 'vendor_drivers', label: 'Livreurs', badge: 0 },
+        { id: 'wallet', label: 'Solde', badge: isVendorWalletLow ? 1 : 0 },
         { id: 'pricing', label: 'Tarifs', badge: 0 },
       ];
     }
@@ -1678,6 +2064,7 @@ export default function App() {
         { id: 'home', label: 'Accueil', badge: 0 },
         { id: 'driver_available', label: 'Courses', badge: availableOrdersForDrivers.length },
         { id: 'driver_active', label: 'En cours', badge: myDriverActiveOrders.length },
+        { id: 'wallet', label: 'Solde', badge: isDriverWalletBlocked ? 1 : 0 },
         { id: 'driver_history', label: 'Livrées', badge: 0 },
       ];
     }
@@ -1929,6 +2316,48 @@ export default function App() {
                       </View>
                     )}
 
+                    {/* CARTE PORTEFEUILLE PRÉPAYÉ (VENDEUR & LIVREUR) */}
+                    {(activeViewRole === 'depot' || activeViewRole === 'livreur') && (
+                      <View
+                        style={[
+                          styles.walletStrip,
+                          ((activeViewRole === 'depot' && isVendorWalletLow) ||
+                            (activeViewRole === 'livreur' && isDriverWalletBlocked)) &&
+                            styles.walletStripDanger,
+                        ]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.microLabel}>PORTEFEUILLE PRÉPAYÉ MONAN</Text>
+                          <Text
+                            style={[
+                              styles.walletStripValue,
+                              ((activeViewRole === 'depot' && isVendorWalletLow) ||
+                                (activeViewRole === 'livreur' && isDriverWalletBlocked)) && {
+                                color: '#F87171',
+                              },
+                            ]}
+                          >
+                            {currentWalletBalance.toLocaleString('fr-FR')} FCFA
+                          </Text>
+                          <Text style={styles.mutedText}>
+                            {activeViewRole === 'depot'
+                              ? isVendorWalletLow
+                                ? 'Solde insuffisant • Rechargez pour accepter des commandes'
+                                : `Disponible : ${Math.max(0, vendorAvailableWallet).toLocaleString('fr-FR')} F (Commission 5 %)`
+                              : isDriverWalletBlocked
+                              ? `Solde min. ${MIN_DRIVER_WALLET_BALANCE} F requis pour prendre des courses`
+                              : `Disponible : ${Math.max(0, driverAvailableWallet).toLocaleString('fr-FR')} F (Commission 20 %)`}
+                          </Text>
+                        </View>
+                        <AnimatedButton
+                          style={styles.compactPrimaryBtn}
+                          onPress={() => setDashboardTab('wallet')}
+                        >
+                          <Text style={styles.compactPrimaryBtnText}>Recharger</Text>
+                        </AnimatedButton>
+                      </View>
+                    )}
+
                     {user.role === 'depot' && activeViewRole === 'depot' && (
                       <View style={styles.subStrip}>
                         <View>
@@ -1949,16 +2378,16 @@ export default function App() {
                             <Text style={[styles.kpiNum, pendingDriversForAdmin.length > 0 && { color: '#F87171' }]}>
                               {pendingDriversForAdmin.length}
                             </Text>
-                            <Text style={styles.kpiLabel}>CNI en attente</Text>
+                            <Text style={styles.kpiLabel}>CNI attente</Text>
                           </Pressable>
-                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('admin_drivers')}>
-                            <Text style={[styles.kpiNum, { color: '#4ADE80' }]}>
-                              {allDriversSortedForAdmin.length - pendingDriversForAdmin.length}
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('admin_wallets')}>
+                            <Text style={[styles.kpiNum, pendingTopupsCountForAdmin > 0 && { color: '#38BDF8' }]}>
+                              {pendingTopupsCountForAdmin}
                             </Text>
-                            <Text style={styles.kpiLabel}>Livreurs actifs</Text>
+                            <Text style={styles.kpiLabel}>Recharges</Text>
                           </Pressable>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('admin_commissions')}>
-                            <Text style={styles.kpiNum}>{allDepotsForAdmin.length}</Text>
+                            <Text style={[styles.kpiNum, { color: '#4ADE80' }]}>{allDepotsForAdmin.length}</Text>
                             <Text style={styles.kpiLabel}>Dépôts</Text>
                           </Pressable>
                         </>
@@ -1976,7 +2405,7 @@ export default function App() {
                           </Pressable>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('vendor_drivers')}>
                             <Text style={styles.kpiNum}>{verifiedCityDrivers.length}</Text>
-                            <Text style={styles.kpiLabel}>Livreurs validés</Text>
+                            <Text style={styles.kpiLabel}>Livreurs</Text>
                           </Pressable>
                         </>
                       )}
@@ -2070,7 +2499,7 @@ export default function App() {
                       <View style={{ gap: 10 }}>
                         <View style={styles.subStrip}>
                           <View>
-                            <Text style={styles.microLabel}>CUMUL COMMISSIONS MONAN</Text>
+                            <Text style={styles.microLabel}>COMMISSIONS PRÉLEVÉES (LIVRÉES)</Text>
                             <Text style={styles.subStripValue}>
                               {totalPlatformCommissions.toLocaleString('fr-FR')} FCFA
                             </Text>
@@ -2083,8 +2512,14 @@ export default function App() {
                           </AnimatedButton>
                         </View>
 
-                        <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('admin_drivers')}>
+                        <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('admin_wallets')}>
                           <Text style={styles.btnPrimaryText}>
+                            Gérer les portefeuilles prépayés ({pendingTopupsCountForAdmin} demande)
+                          </Text>
+                        </AnimatedButton>
+
+                        <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('admin_drivers')}>
+                          <Text style={styles.btnSecondaryText}>
                             Vérifier les CNI livreurs ({pendingDriversForAdmin.length})
                           </Text>
                         </AnimatedButton>
@@ -2100,16 +2535,16 @@ export default function App() {
                           <AnimatedButton
                             containerStyle={{ flex: 1 }}
                             style={styles.btnSecondary}
-                            onPress={() => setDashboardTab('pricing')}
+                            onPress={() => setDashboardTab('vendor_drivers')}
                           >
-                            <Text style={styles.btnSecondaryText}>Tarifs & GPS</Text>
+                            <Text style={styles.btnSecondaryText}>Livreurs</Text>
                           </AnimatedButton>
                           <AnimatedButton
                             containerStyle={{ flex: 1 }}
                             style={styles.btnSecondary}
-                            onPress={() => setDashboardTab('bilan')}
+                            onPress={() => setDashboardTab('pricing')}
                           >
-                            <Text style={styles.btnSecondaryText}>Bilan PDF</Text>
+                            <Text style={styles.btnSecondaryText}>Tarifs & GPS</Text>
                           </AnimatedButton>
                         </View>
                       </View>
@@ -2118,7 +2553,10 @@ export default function App() {
                     {activeViewRole === 'livreur' && (
                       <View style={{ gap: 10 }}>
                         <AnimatedButton
-                          style={[styles.btnPrimary, !isDriverAccountVerified && { opacity: 0.45 }]}
+                          style={[
+                            styles.btnPrimary,
+                            (!isDriverAccountVerified || isDriverWalletBlocked) && { opacity: 0.45 },
+                          ]}
                           onPress={() => setDashboardTab('driver_available')}
                         >
                           <Text style={styles.btnPrimaryText}>Courses ({availableOrdersForDrivers.length})</Text>
@@ -2133,6 +2571,281 @@ export default function App() {
                       <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('order')}>
                         <Text style={styles.btnPrimaryText}>Commander</Text>
                       </AnimatedButton>
+                    )}
+                  </View>
+                )}
+
+                {/* PORTEFEUILLE PRÉPAYÉ (VENDEUR & LIVREUR) */}
+                {(activeViewRole === 'depot' || activeViewRole === 'livreur') && dashboardTab === 'wallet' && (
+                  <View style={styles.cardBox}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.cardBoxTitle}>Portefeuille Prépayé</Text>
+                      <View style={styles.cityPill}>
+                        <Text style={styles.cityPillText}>
+                          {activeViewRole === 'depot' ? 'Commission 5 %' : 'Commission 20 %'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* SOLDE ACTUEL & DISPONIBLE */}
+                    <View style={styles.financeSplitBox}>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeLabel}>Solde prépayé total</Text>
+                        <Text
+                          style={[
+                            styles.priceHighlight,
+                            {
+                              fontSize: 18,
+                              color: currentWalletBalance > 0 ? '#4ADE80' : '#F87171',
+                            },
+                          ]}
+                        >
+                          {currentWalletBalance.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeLabel}>Réservé (commandes en cours)</Text>
+                        <Text style={styles.financeValue}>
+                          {(activeViewRole === 'depot'
+                            ? vendorReservedCommission
+                            : driverReservedCommission
+                          ).toLocaleString('fr-FR')}{' '}
+                          FCFA
+                        </Text>
+                      </View>
+                      <View style={[styles.rowBetween, styles.financeTotalRow]}>
+                        <Text style={styles.financeTotalLabel}>Solde disponible</Text>
+                        <Text style={styles.financeValue}>
+                          {Math.max(
+                            0,
+                            activeViewRole === 'depot' ? vendorAvailableWallet : driverAvailableWallet
+                          ).toLocaleString('fr-FR')}{' '}
+                          FCFA
+                        </Text>
+                      </View>
+                    </View>
+
+                    {user.pendingTopup && (
+                      <View style={styles.toastWarning}>
+                        <Text style={styles.toastWarningText}>
+                          Demande en attente : +{Number(user.pendingTopup.amount).toLocaleString('fr-FR')} F via{' '}
+                          {user.pendingTopup.operator} (validation Admin en cours)
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* FORMULAIRE DE RECHARGEMENT */}
+                    <Text style={styles.label}>1. Montant à recharger (FCFA)</Text>
+                    <View style={styles.periodRow}>
+                      {WALLET_TOPUP_PRESETS.map((amt) => {
+                        const isSelected = Number(topupAmount) === amt;
+                        return (
+                          <AnimatedButton
+                            key={amt}
+                            containerStyle={{ flex: 1 }}
+                            style={[styles.periodBtn, isSelected && styles.segBtnActive]}
+                            onPress={() => setTopupAmount(String(amt))}
+                          >
+                            <Text style={[styles.periodBtnText, isSelected && styles.segBtnTextActive]}>
+                              {amt.toLocaleString('fr-FR')} F
+                            </Text>
+                          </AnimatedButton>
+                        );
+                      })}
+                    </View>
+
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="numeric"
+                      placeholder="Montant personnalisé (ex: 3000)"
+                      placeholderTextColor="#64748B"
+                      value={topupAmount}
+                      onChangeText={(val) => setTopupAmount(val.replace(/[^0-9]/g, ''))}
+                    />
+
+                    <Text style={styles.label}>2. Opérateur Mobile Money</Text>
+                    <View style={styles.operatorRow}>
+                      {PAYMENT_OPERATORS.map((op) => {
+                        const isSelected = topupOperator === op.name;
+                        return (
+                          <AnimatedButton
+                            key={op.id}
+                            containerStyle={{ flex: 1 }}
+                            style={[styles.operatorTile, isSelected && styles.operatorTileActive]}
+                            onPress={() => setTopupOperator(op.name)}
+                          >
+                            {isSelected && (
+                              <View style={styles.operatorCheckBadge}>
+                                <Text style={styles.operatorCheckText}>✓</Text>
+                              </View>
+                            )}
+                            <Image source={op.logo} style={styles.operatorTileLogo} resizeMode="contain" />
+                          </AnimatedButton>
+                        );
+                      })}
+                    </View>
+
+                    <AnimatedButton style={styles.btnWhatsapp} onPress={handleRequestWalletTopup}>
+                      <Text style={styles.btnWhatsappText}>
+                        Recharger {Number(topupAmount || 0).toLocaleString('fr-FR')} F (WhatsApp)
+                      </Text>
+                    </AnimatedButton>
+
+                    {/* HISTORIQUE DES OPÉRATIONS DU PORTEFEUILLE */}
+                    <View style={styles.dividerSection}>
+                      <Text style={[styles.label, { marginBottom: 8 }]}>
+                        Historique des mouvements ({(user.walletHistory || []).length})
+                      </Text>
+
+                      {!user.walletHistory || user.walletHistory.length === 0 ? (
+                        <View style={styles.emptyStateBox}>
+                          <Text style={styles.emptyStateText}>Aucun mouvement enregistré</Text>
+                        </View>
+                      ) : (
+                        user.walletHistory.map((tx) => {
+                          const isCredit = tx.type === 'credit';
+                          return (
+                            <View key={tx.id} style={styles.listRowCard}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.listRowTitle}>{tx.label}</Text>
+                                <Text style={styles.mutedText}>
+                                  {tx.createdAt ? new Date(tx.createdAt).toLocaleString('fr-FR') : '-'}
+                                </Text>
+                              </View>
+                              <Text
+                                style={[
+                                  styles.priceHighlight,
+                                  { color: isCredit ? '#4ADE80' : '#F87171' },
+                                ]}
+                              >
+                                {isCredit ? '+' : '-'}
+                                {Number(tx.amount || 0).toLocaleString('fr-FR')} F
+                              </Text>
+                            </View>
+                          );
+                        })
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                {/* ADMIN : GESTION & CRÉDIT DES PORTEFEUILLES PRÉPAYÉS */}
+                {activeViewRole === 'admin' && dashboardTab === 'admin_wallets' && (
+                  <View style={styles.cardBox}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.cardBoxTitle}>Portefeuilles ({allWalletPartnersForAdmin.length})</Text>
+                      <View style={styles.cityPill}>
+                        <Text style={styles.cityPillText}>{pendingTopupsCountForAdmin} demande(s)</Text>
+                      </View>
+                    </View>
+
+                    {allWalletPartnersForAdmin.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucun dépôt ou livreur enregistré</Text>
+                      </View>
+                    ) : (
+                      allWalletPartnersForAdmin.map((partner) => {
+                        const bal = partner.computedBalance;
+                        const hasRequest = Boolean(partner.pendingTopup);
+                        return (
+                          <View
+                            key={partner.id}
+                            style={[
+                              styles.orderCard,
+                              hasRequest && { borderColor: '#38BDF8', backgroundColor: '#17253B' },
+                            ]}
+                          >
+                            <View style={styles.rowBetween}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.orderId}>{partner.nom}</Text>
+                                <Text style={styles.mutedText}>
+                                  {partner.role === 'depot' ? 'Vendeur' : 'Livreur'} • {partner.ville} • {partner.telephone}
+                                </Text>
+                              </View>
+                              <View
+                                style={[
+                                  styles.badgePill,
+                                  {
+                                    backgroundColor:
+                                      bal > 0 ? 'rgba(74, 222, 128, 0.15)' : 'rgba(239, 68, 68, 0.18)',
+                                  },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.badgePillText,
+                                    { color: bal > 0 ? '#4ADE80' : '#F87171' },
+                                  ]}
+                                >
+                                  Solde : {bal.toLocaleString('fr-FR')} F
+                                </Text>
+                              </View>
+                            </View>
+
+                            {hasRequest && (
+                              <View style={styles.toastWarning}>
+                                <Text style={styles.toastWarningText}>
+                                  Demande : +{Number(partner.pendingTopup.amount).toLocaleString('fr-FR')} FCFA via{' '}
+                                  {partner.pendingTopup.operator}
+                                </Text>
+                              </View>
+                            )}
+
+                            <View style={styles.dividerSection}>
+                              <Text style={styles.microLabel}>CRÉDITER LE COMPTE (FCFA)</Text>
+                              <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, marginBottom: 8 }}>
+                                {[1000, 2000, 5000, 10000].map((quickAmt) => (
+                                  <AnimatedButton
+                                    key={quickAmt}
+                                    containerStyle={{ flex: 1 }}
+                                    style={styles.chip}
+                                    onPress={() =>
+                                      setAdminCreditInputs((prev) => ({
+                                        ...prev,
+                                        [partner.id]: String(quickAmt),
+                                      }))
+                                    }
+                                  >
+                                    <Text style={[styles.chipText, { textAlign: 'center', fontSize: 11 }]}>
+                                      +{quickAmt / 1000}k
+                                    </Text>
+                                  </AnimatedButton>
+                                ))}
+                              </View>
+
+                              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                                <TextInput
+                                  style={[styles.input, { flex: 1, marginBottom: 0, height: 42 }]}
+                                  keyboardType="numeric"
+                                  placeholder={
+                                    hasRequest ? String(partner.pendingTopup.amount) : 'Montant (ex: 5000)'
+                                  }
+                                  placeholderTextColor="#64748B"
+                                  value={adminCreditInputs[partner.id] || ''}
+                                  onChangeText={(val) =>
+                                    setAdminCreditInputs((prev) => ({
+                                      ...prev,
+                                      [partner.id]: val.replace(/[^0-9]/g, ''),
+                                    }))
+                                  }
+                                />
+                                <AnimatedButton
+                                  style={styles.compactSuccessBtn}
+                                  onPress={() =>
+                                    handleAdminCreditWallet(
+                                      partner,
+                                      adminCreditInputs[partner.id] ||
+                                        (hasRequest ? partner.pendingTopup.amount : '')
+                                    )
+                                  }
+                                >
+                                  <Text style={styles.compactPrimaryBtnText}>Créditer ✓</Text>
+                                </AnimatedButton>
+                              </View>
+                            </View>
+                          </View>
+                        );
+                      })
                     )}
                   </View>
                 )}
@@ -2214,19 +2927,31 @@ export default function App() {
                   </View>
                 )}
 
-                {/* ADMIN : COMMISSIONS PAR DÉPÔT */}
+                {/* ADMIN : COMMISSIONS PRÉLEVÉES PAR DÉPÔT ET LIVREUR */}
                 {activeViewRole === 'admin' && dashboardTab === 'admin_commissions' && (
                   <View style={styles.cardBox}>
                     <View style={styles.rowBetween}>
-                      <Text style={styles.cardBoxTitle}>Commissions Dépôts</Text>
+                      <Text style={styles.cardBoxTitle}>Commissions Prélevées</Text>
                       <View style={styles.cityPill}>
-                        <Text style={styles.cityPillText}>{depotCommissionsSummary.length} dépôts</Text>
+                        <Text style={styles.cityPillText}>{deliveredOrdersAll.length} livrées</Text>
                       </View>
                     </View>
 
                     <View style={styles.financeSplitBox}>
                       <View style={styles.rowBetween}>
-                        <Text style={styles.financeTotalLabel}>Cumul total plateforme</Text>
+                        <Text style={styles.financeLabel}>Commissions Gaz (5 % Dépôts)</Text>
+                        <Text style={styles.financeValue}>
+                          {totalCollectedGasCommissions.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeLabel}>Commissions Course (20 % Livreurs)</Text>
+                        <Text style={styles.financeValue}>
+                          {totalCollectedDeliveryCommissions.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+                      <View style={[styles.rowBetween, styles.financeTotalRow]}>
+                        <Text style={styles.financeTotalLabel}>Total prélevé (portefeuilles)</Text>
                         <Text style={[styles.priceHighlight, { color: '#4ADE80' }]}>
                           {totalPlatformCommissions.toLocaleString('fr-FR')} FCFA
                         </Text>
@@ -2265,26 +2990,26 @@ export default function App() {
                           </View>
 
                           <Text style={styles.mutedText}>
-                            {dep.ville} • {dep.adresse} • Tél : {dep.telephone}
+                            {dep.ville} • Solde prépayé : {dep.walletBalance.toLocaleString('fr-FR')} F
                           </Text>
 
                           <View style={styles.financeSplitBox}>
                             <View style={styles.rowBetween}>
-                              <Text style={styles.financeLabel}>Commandes traitées (Livrées)</Text>
+                              <Text style={styles.financeLabel}>Commandes livrées</Text>
                               <Text style={styles.financeValue}>
-                                {dep.ordersCount} ({dep.deliveredOrdersCount})
+                                {dep.deliveredOrdersCount} / {dep.ordersCount}
                               </Text>
                             </View>
                             <View style={styles.rowBetween}>
-                              <Text style={styles.financeLabel}>Volume gaz brut</Text>
+                              <Text style={styles.financeLabel}>Volume gaz brut livré</Text>
                               <Text style={styles.financeValue}>
                                 {dep.totalSalesGross.toLocaleString('fr-FR')} FCFA
                               </Text>
                             </View>
                             <View style={[styles.rowBetween, styles.financeTotalRow]}>
-                              <Text style={styles.financeTotalLabel}>Commissions générées</Text>
+                              <Text style={styles.financeTotalLabel}>Commission gaz 5 % prélevée</Text>
                               <Text style={styles.priceHighlight}>
-                                {dep.totalCommissionGenerated.toLocaleString('fr-FR')} FCFA
+                                {dep.totalGasCommissionCollected.toLocaleString('fr-FR')} FCFA
                               </Text>
                             </View>
                           </View>
@@ -2351,7 +3076,7 @@ export default function App() {
                         </Text>
                       </View>
                       <View style={styles.rowBetween}>
-                        <Text style={styles.financeLabel}>Commission plateforme (5%)</Text>
+                        <Text style={styles.financeLabel}>Commission prépayée (5%)</Text>
                         <Text style={styles.financeMuted}>
                           -{bilanCommission.toLocaleString('fr-FR')} FCFA
                         </Text>
@@ -2414,72 +3139,75 @@ export default function App() {
                 {/* VENDEUR : COMMANDES DISPONIBLES */}
                 {activeViewRole === 'depot' && dashboardTab === 'vendor_live_orders' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Commandes ({userCity})</Text>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.cardBoxTitle}>Commandes ({userCity})</Text>
+                      <View style={styles.cityPill}>
+                        <Text style={styles.cityPillText}>
+                          Solde : {Math.max(0, vendorAvailableWallet).toLocaleString('fr-FR')} F
+                        </Text>
+                      </View>
+                    </View>
+
                     {availableOrdersForVendors.length === 0 ? (
                       <View style={styles.emptyStateBox}>
                         <Text style={styles.emptyStateText}>Aucune commande en attente</Text>
                       </View>
                     ) : (
-                      availableOrdersForVendors.map((order) => (
-                        <View key={order.id} style={styles.orderCard}>
-                          <View style={styles.rowBetween}>
-                            <Text style={styles.orderId}>{order.id}</Text>
-                            <View style={[
-                              styles.badgePill,
-                              { backgroundColor: order.deliveryMode === 'livraison' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)' }
-                            ]}>
-                              <Text style={[
-                                styles.badgePillText,
-                                { color: order.deliveryMode === 'livraison' ? '#38BDF8' : '#FBBF24' }
+                      availableOrdersForVendors.map((order) => {
+                        const gasComm = getOrderGasCommission(order);
+                        return (
+                          <View key={order.id} style={styles.orderCard}>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.orderId}>{order.id}</Text>
+                              <View style={[
+                                styles.badgePill,
+                                { backgroundColor: order.deliveryMode === 'livraison' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(251, 191, 36, 0.15)' }
                               ]}>
-                                {order.deliveryMode === 'livraison'
-                                  ? `Livraison (${order.distanceKm || 1.5} km)`
-                                  : 'Retrait'}
-                              </Text>
-                            </View>
-                          </View>
-                          <Text style={styles.orderMainText}>{order.qte}× {order.type} • {order.operation}</Text>
-                          <Text style={styles.mutedText}>{order.clientNom} ({order.clientPhone})</Text>
-                          <Text style={styles.mutedText}>{order.adresse}</Text>
-                          {hasValidCoords(order.clientCoords) && (
-                            <Text style={styles.gpsBadgeText}>
-                              GPS Client : {order.clientCoords.latitude}, {order.clientCoords.longitude}
-                            </Text>
-                          )}
-
-                          {/* VENTILATION FINANCIÈRE */}
-                          <View style={styles.financeSplitBox}>
-                            <View style={styles.rowBetween}>
-                              <Text style={styles.financeLabel}>Total client</Text>
-                              <Text style={styles.financeValue}>{order.total}</Text>
-                            </View>
-                            <View style={styles.rowBetween}>
-                              <Text style={styles.financeLabel}>Votre part (95 %)</Text>
-                              <Text style={[styles.financeValue, { color: '#4ADE80' }]}>
-                                {(order.vendorNet || 0).toLocaleString('fr-FR')} FCFA
-                              </Text>
-                            </View>
-                            {order.deliveryMode === 'livraison' && (
-                              <View style={styles.rowBetween}>
-                                <Text style={styles.financeLabel}>Part livreur ({order.distanceKm || 1.5} km)</Text>
-                                <Text style={[styles.financeValue, { color: '#38BDF8' }]}>
-                                  {(order.driverNet || 0).toLocaleString('fr-FR')} FCFA
+                                <Text style={[
+                                  styles.badgePillText,
+                                  { color: order.deliveryMode === 'livraison' ? '#38BDF8' : '#FBBF24' }
+                                ]}>
+                                  {order.deliveryMode === 'livraison'
+                                    ? `Livraison (${order.distanceKm || 1.5} km)`
+                                    : 'Retrait'}
                                 </Text>
                               </View>
-                            )}
-                            <View style={styles.rowBetween}>
-                              <Text style={styles.financeLabel}>Commission MONAN</Text>
-                              <Text style={styles.financeMuted}>
-                                {(order.appCommission || 0).toLocaleString('fr-FR')} FCFA
-                              </Text>
                             </View>
-                          </View>
+                            <Text style={styles.orderMainText}>{order.qte}× {order.type} • {order.operation}</Text>
+                            <Text style={styles.mutedText}>{order.clientNom} ({order.clientPhone})</Text>
+                            <Text style={styles.mutedText}>{order.adresse}</Text>
+                            {hasValidCoords(order.clientCoords) && (
+                              <Text style={styles.gpsBadgeText}>
+                                GPS Client : {order.clientCoords.latitude}, {order.clientCoords.longitude}
+                              </Text>
+                            )}
 
-                          <AnimatedButton style={styles.btnSuccess} onPress={() => handleAcceptOrder(order.id)}>
-                            <Text style={styles.btnSuccessText}>Accepter</Text>
-                          </AnimatedButton>
-                        </View>
-                      ))
+                            {/* VENTILATION FINANCIÈRE */}
+                            <View style={styles.financeSplitBox}>
+                              <View style={styles.rowBetween}>
+                                <Text style={styles.financeLabel}>Total client</Text>
+                                <Text style={styles.financeValue}>{order.total}</Text>
+                              </View>
+                              <View style={styles.rowBetween}>
+                                <Text style={styles.financeLabel}>Votre part nette (95 %)</Text>
+                                <Text style={[styles.financeValue, { color: '#4ADE80' }]}>
+                                  {(order.vendorNet || 0).toLocaleString('fr-FR')} FCFA
+                                </Text>
+                              </View>
+                              <View style={styles.rowBetween}>
+                                <Text style={styles.financeLabel}>Prélèvement portefeuille (5 %)</Text>
+                                <Text style={[styles.financeValue, { color: '#F97316' }]}>
+                                  -{gasComm.toLocaleString('fr-FR')} FCFA
+                                </Text>
+                              </View>
+                            </View>
+
+                            <AnimatedButton style={styles.btnSuccess} onPress={() => handleAcceptOrder(order.id)}>
+                              <Text style={styles.btnSuccessText}>Accepter</Text>
+                            </AnimatedButton>
+                          </View>
+                        );
+                      })
                     )}
                   </View>
                 )}
@@ -2580,6 +3308,10 @@ export default function App() {
                 {/* VENDEUR : LIVREURS DE LA VILLE */}
                 {activeViewRole === 'depot' && dashboardTab === 'vendor_drivers' && (
                   <View style={styles.cardBox}>
+                    <Pressable onPress={() => setDashboardTab('home')} style={styles.backRow}>
+                      <Text style={styles.backText}>‹ Accueil</Text>
+                    </Pressable>
+
                     <Text style={styles.cardBoxTitle}>
                       Livreurs validés ({verifiedCityDrivers.length}/{cityDrivers.length})
                     </Text>
@@ -2619,6 +3351,7 @@ export default function App() {
 
                     {cityDrivers.map((drv) => {
                       const isVerified = drv.isDriverVerified === true;
+                      const drvBal = computeWalletBalance(drv);
                       const activeCount = allOrders.filter(
                         o => o.assignedDriverId === drv.id && o.status === 'in_delivery'
                       ).length;
@@ -2627,7 +3360,9 @@ export default function App() {
                         <View key={drv.id} style={styles.listRowCard}>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.listRowTitle}>{drv.nom}</Text>
-                            <Text style={styles.mutedText}>{drv.telephone} • {drv.vehicule || 'Moto'}</Text>
+                            <Text style={styles.mutedText}>
+                              {drv.telephone} • {drv.vehicule || 'Moto'} • Solde : {drvBal.toLocaleString('fr-FR')} F
+                            </Text>
                           </View>
                           <View style={[
                             styles.badgePill,
@@ -2752,7 +3487,15 @@ export default function App() {
                 {/* LIVREUR : COURSES DISPONIBLES DANS SA VILLE */}
                 {activeViewRole === 'livreur' && dashboardTab === 'driver_available' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Courses ({userCity})</Text>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.cardBoxTitle}>Courses ({userCity})</Text>
+                      <View style={styles.cityPill}>
+                        <Text style={styles.cityPillText}>
+                          Solde : {Math.max(0, driverAvailableWallet).toLocaleString('fr-FR')} F
+                        </Text>
+                      </View>
+                    </View>
+
                     {!isDriverAccountVerified ? (
                       <View style={styles.driverBlockedCard}>
                         <View style={styles.statusPillDanger}>
@@ -2766,36 +3509,54 @@ export default function App() {
                           <Text style={styles.btnWhatsappText}>Envoyer ma CNI (WhatsApp)</Text>
                         </AnimatedButton>
                       </View>
+                    ) : isDriverWalletBlocked ? (
+                      <View style={styles.driverBlockedCard}>
+                        <View style={styles.statusPillDanger}>
+                          <Text style={styles.statusPillDangerText}>PORTEFEUILLE PRÉPAYÉ INSUFFISANT</Text>
+                        </View>
+                        <Text style={styles.driverBlockedTitle}>Rechargement requis pour rouler</Text>
+                        <Text style={styles.driverBlockedText}>
+                          Votre solde disponible est de {Math.max(0, driverAvailableWallet).toLocaleString('fr-FR')} FCFA (minimum requis : {MIN_DRIVER_WALLET_BALANCE} FCFA). Rechargez votre compte pour recevoir les courses.
+                        </Text>
+                        <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('wallet')}>
+                          <Text style={styles.btnPrimaryText}>Recharger mon portefeuille</Text>
+                        </AnimatedButton>
+                      </View>
                     ) : availableOrdersForDrivers.length === 0 ? (
                       <View style={styles.emptyStateBox}>
                         <Text style={styles.emptyStateText}>Aucune course disponible</Text>
                       </View>
                     ) : (
-                      availableOrdersForDrivers.map((order) => (
-                        <View key={order.id} style={styles.orderCard}>
-                          <View style={styles.rowBetween}>
-                            <Text style={styles.orderId}>{order.id} • {order.distanceKm || 1.5} km</Text>
-                            <View style={[styles.badgePill, { backgroundColor: 'rgba(74, 222, 128, 0.15)' }]}>
-                              <Text style={[styles.badgePillText, { color: '#4ADE80' }]}>
-                                Gain : {(order.driverNet || 0).toLocaleString('fr-FR')} F
-                              </Text>
+                      availableOrdersForDrivers.map((order) => {
+                        const delComm = getOrderDeliveryCommission(order);
+                        return (
+                          <View key={order.id} style={styles.orderCard}>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.orderId}>{order.id} • {order.distanceKm || 1.5} km</Text>
+                              <View style={[styles.badgePill, { backgroundColor: 'rgba(74, 222, 128, 0.15)' }]}>
+                                <Text style={[styles.badgePillText, { color: '#4ADE80' }]}>
+                                  Gain net : {(order.driverNet || 0).toLocaleString('fr-FR')} F
+                                </Text>
+                              </View>
                             </View>
-                          </View>
-                          <Text style={styles.orderMainText}>{order.qte}× {order.type}</Text>
-                          <Text style={styles.mutedText}>Dépôt : {order.assignedVendorNom}</Text>
-                          <Text style={styles.mutedText}>Destination : {order.adresse}</Text>
-                          {hasValidCoords(order.clientCoords) && (
-                            <Text style={styles.gpsBadgeText}>
-                              GPS Client : {order.clientCoords.latitude}, {order.clientCoords.longitude}
+                            <Text style={styles.orderMainText}>{order.qte}× {order.type}</Text>
+                            <Text style={styles.mutedText}>Dépôt : {order.assignedVendorNom}</Text>
+                            <Text style={styles.mutedText}>Destination : {order.adresse}</Text>
+                            {hasValidCoords(order.clientCoords) && (
+                              <Text style={styles.gpsBadgeText}>
+                                GPS Client : {order.clientCoords.latitude}, {order.clientCoords.longitude}
+                              </Text>
+                            )}
+                            <Text style={styles.mutedText}>
+                              Encaissement client : {order.total} • Commission portefeuille : -{delComm.toLocaleString('fr-FR')} F
                             </Text>
-                          )}
-                          <Text style={styles.priceHighlight}>Total : {order.total}</Text>
 
-                          <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverClaimOrder(order.id)}>
-                            <Text style={styles.btnSuccessText}>Accepter</Text>
-                          </AnimatedButton>
-                        </View>
-                      ))
+                            <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverClaimOrder(order.id)}>
+                              <Text style={styles.btnSuccessText}>Accepter</Text>
+                            </AnimatedButton>
+                          </View>
+                        );
+                      })
                     )}
                   </View>
                 )}
@@ -2825,7 +3586,9 @@ export default function App() {
                               GPS : {order.clientCoords.latitude}, {order.clientCoords.longitude}
                             </Text>
                           )}
-                          <Text style={styles.mutedText}>Total : {order.total}</Text>
+                          <Text style={styles.mutedText}>
+                            Total à encaisser : {order.total} • Commission MONAN : -{getOrderDeliveryCommission(order).toLocaleString('fr-FR')} F
+                          </Text>
 
                           {/* CHAMP OBLIGATOIRE CODE SECRET À 4 CHIFFRES DU CLIENT */}
                           <View style={styles.dividerSection}>
@@ -3501,6 +4264,29 @@ const styles = StyleSheet.create({
   mutedText: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
   gpsBadgeText: { color: '#4ADE80', fontSize: 11, fontWeight: '700', marginTop: 3 },
 
+  walletStrip: {
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: '#334155',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  walletStripDanger: {
+    borderColor: '#EF4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  walletStripValue: {
+    color: '#4ADE80',
+    fontSize: 17,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+
   driverBlockedCard: {
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
     borderRadius: 14,
@@ -3715,6 +4501,7 @@ const styles = StyleSheet.create({
   btnDangerOutline: { backgroundColor: 'rgba(239, 68, 68, 0.14)', borderWidth: 1, borderColor: '#EF4444', height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
   btnDangerOutlineText: { color: '#F87171', fontWeight: '800', fontSize: 12 },
   compactPrimaryBtn: { backgroundColor: '#F97316', paddingHorizontal: 14, height: 36, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  compactSuccessBtn: { backgroundColor: '#16A34A', paddingHorizontal: 14, height: 42, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   compactPrimaryBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
 
   statusPillDanger: { backgroundColor: 'rgba(239, 68, 68, 0.15)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 8 },
@@ -3729,6 +4516,8 @@ const styles = StyleSheet.create({
 
   toastSuccess: { backgroundColor: 'rgba(74, 222, 128, 0.16)', borderWidth: 1, borderColor: 'rgba(74, 222, 128, 0.4)', borderRadius: 10, padding: 10, marginBottom: 10 },
   toastSuccessText: { color: '#4ADE80', fontWeight: '800', fontSize: 13, textAlign: 'center' },
+  toastWarning: { backgroundColor: 'rgba(56, 189, 248, 0.14)', borderWidth: 1, borderColor: 'rgba(56, 189, 248, 0.4)', borderRadius: 10, padding: 10, marginBottom: 10, marginTop: 4 },
+  toastWarningText: { color: '#38BDF8', fontWeight: '700', fontSize: 12, textAlign: 'center' },
 
   emptyStateBox: { paddingVertical: 24, alignItems: 'center' },
   emptyStateText: { color: '#64748B', fontWeight: '600', fontSize: 13 },

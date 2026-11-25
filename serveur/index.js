@@ -43,7 +43,7 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // ==========================================
-// SYNCHRONISATION MULTI-APPAREILS (APP MOBILE)
+// SYNCHRONISATION MULTI-APPAREILS & PORTEFEUILLES PRÉPAYÉS
 // ==========================================
 const ORDER_STATUS_RANK = {
     available: 1,
@@ -73,6 +73,45 @@ async function assurerTableSync() {
     tableSyncInitialisee = true;
 }
 
+function fusionnerHistoriquePortefeuille(histA = [], histB = []) {
+    const carte = new Map();
+    [...(Array.isArray(histA) ? histA : []), ...(Array.isArray(histB) ? histB : [])].forEach((tx) => {
+        if (tx && tx.id) {
+            carte.set(tx.id, tx);
+        }
+    });
+    return Array.from(carte.values()).sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+}
+
+function obtenirSoldeInitial(u) {
+    if (!u) return 0;
+    if (typeof u.initialWalletBalance === 'number' && !Number.isNaN(u.initialWalletBalance)) {
+        return u.initialWalletBalance;
+    }
+    if (['DEP-DEFAULT', 'DEP-ANYAMA', 'LIV-DEFAULT'].includes(u.id)) {
+        return 5000;
+    }
+    return 0;
+}
+
+function calculerSoldePortefeuille(u) {
+    if (!u || (u.role !== 'depot' && u.role !== 'livreur')) return 0;
+    const base = obtenirSoldeInitial(u);
+    if (Array.isArray(u.walletHistory)) {
+        const delta = u.walletHistory.reduce((somme, tx) => {
+            const montant = Number(tx?.amount) || 0;
+            return somme + (tx?.type === 'credit' ? montant : -montant);
+        }, 0);
+        return base + delta;
+    }
+    if (typeof u.walletBalance === 'number' && !Number.isNaN(u.walletBalance)) {
+        return u.walletBalance;
+    }
+    return base;
+}
+
 function fusionnerUtilisateurs(existants = [], entrants = []) {
     const carte = new Map();
     existants.forEach((u) => {
@@ -84,6 +123,11 @@ function fusionnerUtilisateurs(existants = [], entrants = []) {
         const cle = u.email.toLowerCase();
         const precedent = carte.get(cle);
         if (!precedent) {
+            if (u.role === 'depot' || u.role === 'livreur') {
+                u.initialWalletBalance = obtenirSoldeInitial(u);
+                u.walletHistory = Array.isArray(u.walletHistory) ? u.walletHistory : [];
+                u.walletBalance = calculerSoldePortefeuille(u);
+            }
             carte.set(cle, u);
             return;
         }
@@ -101,6 +145,26 @@ function fusionnerUtilisateurs(existants = [], entrants = []) {
         // Conserve les coordonnées GPS si le client entrant n'en a pas encore
         if (!u.coords && precedent.coords) {
             fusion.coords = precedent.coords;
+        }
+
+        // Fusion immuable du portefeuille prépayé (Vendeur & Livreur)
+        if (fusion.role === 'depot' || fusion.role === 'livreur') {
+            fusion.initialWalletBalance = Math.max(
+                obtenirSoldeInitial(precedent),
+                obtenirSoldeInitial(u)
+            );
+            fusion.walletHistory = fusionnerHistoriquePortefeuille(
+                precedent.walletHistory || [],
+                u.walletHistory || []
+            );
+            fusion.walletBalance = calculerSoldePortefeuille(fusion);
+
+            const tPrevTopup = new Date(precedent.pendingTopupUpdatedAt || 0).getTime();
+            const tNewTopup = new Date(u.pendingTopupUpdatedAt || 0).getTime();
+            if (tPrevTopup > tNewTopup) {
+                fusion.pendingTopup = precedent.pendingTopup ?? null;
+                fusion.pendingTopupUpdatedAt = precedent.pendingTopupUpdatedAt;
+            }
         }
 
         carte.set(cle, fusion);
