@@ -25,7 +25,7 @@ import * as Sharing from 'expo-sharing';
 // CONFIGURATION MONAN (ADMIN & BACKEND)
 // ==========================================
 const API_BASE_URL = 'https://monan-service-pro.onrender.com';
-const ADMIN_WHATSAPP_NUMBER = '2250700000000'; // Remplacez par votre numéro WhatsApp Admin (format international sans +)
+const ADMIN_WHATSAPP_NUMBER = '2250143322317'; // Remplacez par votre numéro WhatsApp Admin (format international sans +)
 const ADMIN_EMAIL = 'admin@monan.ci';
 const ADMIN_PASSWORD = 'admin123';
 
@@ -76,7 +76,7 @@ const MARQUES_GAZ = [
   { id: 'corlay', name: 'Corlay', color: '#0284C7' },
 ];
 
-const VEHICLE_TYPES = ['Moto', 'Tricycle', 'Fourgonnette'];
+const VEHICLE_TYPES = ['Moto', 'Tricycle'];
 
 const BILAN_PERIODS = [
   { id: 'day', label: '24h' },
