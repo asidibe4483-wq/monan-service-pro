@@ -15,12 +15,16 @@ import {
   Animated,
   Pressable,
   Easing,
-  BackHandler
+  BackHandler,
+  Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+
+// Numéro WhatsApp de l'administrateur pour la réception des CNI (format international sans +)
+const ADMIN_WHATSAPP_NUMBER = '2250700000000';
 
 // URL de votre backend hébergé sur Render pour la synchronisation multi-appareils
 const API_BASE_URL = 'https://monan-service-pro.onrender.com/api';
@@ -246,6 +250,7 @@ const ROLE_LABELS = {
   client: 'Client',
   depot: 'Vendeur',
   livreur: 'Livreur',
+  admin: 'Administrateur',
 };
 
 const SUBSCRIPTION_PLANS = [
@@ -282,8 +287,8 @@ const ONBOARDING_SLIDES = [
   {
     id: '2',
     badge: 'CLIENT',
-    title: 'Distance GPS & Offres en direct',
-    subtitle: 'Visualisez le tarif exact de chaque dépôt et les frais calculés par GPS.',
+    title: 'Distance GPS & Code sécurisé',
+    subtitle: 'Visualisez le tarif exact et validez la livraison avec un code à 4 chiffres.',
     icon: require('./assets/splash-icon.png')
   },
   {
@@ -397,6 +402,16 @@ const CYLINDER_TYPES = [
 
 const DEFAULT_USERS = [
   {
+    id: 'ADMIN-MONAN',
+    email: 'admin@monan.ci',
+    role: 'admin',
+    nom: 'Administrateur MONAN',
+    telephone: ADMIN_WHATSAPP_NUMBER,
+    ville: 'Côte d\'Ivoire',
+    adresse: 'Siège MONAN',
+    createdAt: new Date().toISOString()
+  },
+  {
     id: 'DEP-DEFAULT',
     email: 'vendeur@monan.ci',
     role: 'depot',
@@ -452,6 +467,7 @@ const DEFAULT_USERS = [
     ville: 'Abidjan',
     adresse: 'Cocody / Yopougon',
     vehicule: 'Tricycle',
+    isDriverVerified: true,
     createdAt: new Date().toISOString()
   }
 ];
@@ -499,6 +515,9 @@ export default function App() {
   const [newDriverPhone, setNewDriverPhone] = useState('');
   const [newDriverVehicle, setNewDriverVehicle] = useState('Moto');
   const [selectedDriverByOrder, setSelectedDriverByOrder] = useState({});
+
+  // Saisie du code secret à 4 chiffres par le livreur lors de la remise
+  const [driverCodeInputs, setDriverCodeInputs] = useState({});
 
   // Paramètres de commande client + GPS en direct
   const [selectedMarque, setSelectedMarque] = useState(MARQUES_GAZ[0]);
@@ -664,6 +683,16 @@ export default function App() {
 
       setRegisteredUsers(mergedUsers);
       setAllOrders(mergedOrders);
+
+      // Rafraîchit immédiatement le profil de l'utilisateur connecté (ex: déblocage CNI livreur)
+      setUser(prev => {
+        if (!prev) return null;
+        const freshUser = mergedUsers.find(
+          u => u?.email && prev?.email && u.email.toLowerCase() === prev.email.toLowerCase()
+        );
+        return freshUser ? { ...prev, ...freshUser } : prev;
+      });
+
       await AsyncStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(mergedUsers));
       await AsyncStorage.setItem(STORAGE_ORDERS_KEY, JSON.stringify(mergedOrders));
       return { users: mergedUsers, orders: mergedOrders };
@@ -723,6 +752,7 @@ export default function App() {
 
   const remainingSubDays = user?.role === 'depot' ? getRemainingSubscriptionDays(user) : null;
   const isVendorSubscriptionExpired = user?.role === 'depot' && remainingSubDays <= 0;
+  const isDriverAccountVerified = user?.role === 'livreur' ? user?.isDriverVerified === true : true;
 
   const getVendorUnitPrice = (vendorObj, cylinderId, opType) => {
     const cylMeta = CYLINDER_TYPES.find(c => c.id === cylinderId) || CYLINDER_TYPES[0];
@@ -856,9 +886,57 @@ export default function App() {
     showFeedbackAlert('Abonnement actif', `Forfait ${selectedPlan.label} activé.`);
   };
 
+  const handleSendDriverCniWhatsApp = async () => {
+    if (!user || user.role !== 'livreur') return;
+    const message = [
+      'Bonjour Administrateur MONAN,',
+      'Je souhaite faire valider mon identité (CNI) pour activer mon compte livreur :',
+      `• Nom : ${user.nom}`,
+      `• Identifiant : ${user.id}`,
+      `• Téléphone : ${user.telephone}`,
+      `• Ville : ${user.ville}`,
+      `• Véhicule : ${user.vehicule || 'Moto'}`,
+      'Veuillez trouver ci-joint la photo de ma CNI.'
+    ].join('\n');
+
+    const cleanAdminPhone = ADMIN_WHATSAPP_NUMBER.replace(/\D/g, '');
+    const waUrl = `https://wa.me/${cleanAdminPhone}?text=${encodeURIComponent(message)}`;
+
+    try {
+      await Linking.openURL(waUrl);
+    } catch (err) {
+      showFeedbackAlert(
+        'WhatsApp indisponible',
+        `Envoyez votre CNI par WhatsApp au +${cleanAdminPhone} avec votre ID ${user.id}.`
+      );
+    }
+  };
+
+  const handleToggleDriverVerification = async (driverId, verifyStatus) => {
+    if (user?.role !== 'admin') return;
+    const updatedUsers = registeredUsers.map((u) =>
+      u.id === driverId && u.role === 'livreur'
+        ? { ...u, isDriverVerified: verifyStatus }
+        : u
+    );
+    await syncAppState(updatedUsers, null);
+    showFeedbackAlert(
+      verifyStatus ? 'Identité validée' : 'Compte bloqué',
+      verifyStatus
+        ? 'Le livreur peut désormais accepter des courses dès actualisation.'
+        : 'Le compte livreur a été suspendu.'
+    );
+  };
+
   const handleRegister = async (type) => {
     if (!nom.trim() || !telephone.trim() || !email.trim() || !password.trim() || !ville.trim()) {
       showFeedbackAlert('Champs requis', 'Complétez tous les champs obligatoires.');
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail === 'admin@monan.ci') {
+      showFeedbackAlert('Email réservé', 'Utilisez l’écran Connexion pour accéder à l’espace Administrateur.');
       return;
     }
 
@@ -869,7 +947,6 @@ export default function App() {
     }
 
     const { users: latestUsers } = await syncAppState();
-    const cleanEmail = email.trim().toLowerCase();
 
     const existingAccount = latestUsers.find(u => u.email.toLowerCase() === cleanEmail);
     if (existingAccount) {
@@ -892,6 +969,8 @@ export default function App() {
       coords: finalCoords || null,
       role: type,
       vehicule: type === 'livreur' ? vehicule : null,
+      // Tout nouveau livreur inscrit seul est bloqué par défaut en attente de validation CNI
+      isDriverVerified: type === 'livreur' ? false : null,
       createdAt: nowIso,
       subscriptionExpiresAt: type === 'depot' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
       isSubscribed: type === 'depot',
@@ -926,6 +1005,25 @@ export default function App() {
     const { users: latestUsers } = await syncAppState();
     const cleanEmail = email.trim().toLowerCase();
 
+    // Accès Administrateur (admin@monan.ci avec n'importe quel mot de passe)
+    if (cleanEmail === 'admin@monan.ci') {
+      const existingAdmin = latestUsers.find(u => u.email.toLowerCase() === 'admin@monan.ci');
+      const adminProfile = existingAdmin || {
+        id: 'ADMIN-MONAN',
+        email: 'admin@monan.ci',
+        role: 'admin',
+        nom: 'Administrateur MONAN',
+        telephone: ADMIN_WHATSAPP_NUMBER,
+        ville: 'Côte d\'Ivoire',
+        adresse: 'Siège MONAN',
+        createdAt: new Date().toISOString(),
+      };
+      setUser(adminProfile);
+      setDashboardTab('home');
+      setLoading(false);
+      return;
+    }
+
     const foundUser = latestUsers.find(u => u.email.toLowerCase() === cleanEmail);
     if (!foundUser) {
       setLoading(false);
@@ -937,6 +1035,8 @@ export default function App() {
       ...foundUser,
       ville: (foundUser.ville || '').trim(),
       prices: foundUser.prices || { ...DEFAULT_VENDOR_PRICES },
+      isDriverVerified:
+        foundUser.role === 'livreur' ? foundUser.isDriverVerified === true : foundUser.isDriverVerified ?? null,
       subscriptionExpiresAt:
         foundUser.subscriptionExpiresAt ||
         (foundUser.role === 'depot'
@@ -971,6 +1071,7 @@ export default function App() {
       return;
     }
 
+    // Les livreurs ajoutés directement par un vendeur sont validés sous sa responsabilité
     const driverObj = {
       id: `LIV-${Date.now().toString().slice(-5)}`,
       nom: newDriverName.trim(),
@@ -980,6 +1081,8 @@ export default function App() {
       adresse: user?.adresse || user?.ville || '',
       role: 'livreur',
       vehicule: newDriverVehicle,
+      isDriverVerified: true,
+      addedByVendorId: user.id,
       createdAt: new Date().toISOString()
     };
 
@@ -988,7 +1091,7 @@ export default function App() {
 
     setNewDriverName('');
     setNewDriverPhone('');
-    showFeedbackAlert('Livreur ajouté', `${driverObj.nom} a été enregistré.`);
+    showFeedbackAlert('Livreur ajouté', `${driverObj.nom} a été enregistré et validé.`);
   };
 
   const handleCreateOrder = async () => {
@@ -1019,6 +1122,12 @@ export default function App() {
     const newCmdId = `CMD-${Math.floor(100 + Math.random() * 900)}`;
     const now = new Date();
 
+    // Code secret aléatoire à 4 chiffres généré automatiquement pour les commandes en livraison
+    const deliveryCode =
+      deliveryMode === 'livraison'
+        ? Math.floor(1000 + Math.random() * 9000).toString()
+        : null;
+
     const newCmd = {
       id: newCmdId,
       createdAt: now.toISOString(),
@@ -1031,6 +1140,7 @@ export default function App() {
       type: `${selectedMarque.name} ${selectedCylinder.name}`,
       operation: operationType === 'recharge' ? 'Recharge' : 'Achat Neuf',
       deliveryMode,
+      deliveryCode,
       distanceKm: fin.distanceKm,
       isExactGps: fin.isExactGps,
       qte: fin.qty,
@@ -1061,7 +1171,11 @@ export default function App() {
     const updatedOrders = [newCmd, ...allOrders];
     await syncAppState(null, updatedOrders);
 
-    setOrderSuccessBanner(`Commande ${newCmdId} envoyée.`);
+    setOrderSuccessBanner(
+      deliveryCode
+        ? `Commande ${newCmdId} envoyée • CODE DE CONFIRMATION : ${deliveryCode} (à donner uniquement à la réception de la bouteille)`
+        : `Commande ${newCmdId} envoyée.`
+    );
     setDashboardTab('orders_list');
     setLoading(false);
   };
@@ -1087,13 +1201,13 @@ export default function App() {
 
   const handleAssignDriverToOrder = async (orderId) => {
     if (user?.role !== 'depot' || activeViewRole !== 'depot' || isVendorSubscriptionExpired) return;
-    if (cityDrivers.length === 0) {
-      showFeedbackAlert('Aucun livreur', `Ajoutez un livreur à ${userCity}.`);
+    if (verifiedCityDrivers.length === 0) {
+      showFeedbackAlert('Aucun livreur validé', `Ajoutez un livreur validé à ${userCity}.`);
       return;
     }
 
-    const chosenDriverId = selectedDriverByOrder[orderId] || cityDrivers[0].id;
-    const driver = cityDrivers.find(d => d.id === chosenDriverId) || cityDrivers[0];
+    const chosenDriverId = selectedDriverByOrder[orderId] || verifiedCityDrivers[0].id;
+    const driver = verifiedCityDrivers.find(d => d.id === chosenDriverId) || verifiedCityDrivers[0];
 
     const updatedOrders = allOrders.map(o =>
       o.id === orderId
@@ -1111,6 +1225,13 @@ export default function App() {
 
   const handleDriverClaimOrder = async (orderId) => {
     if (user?.role !== 'livreur' || activeViewRole !== 'livreur') return;
+    if (!isDriverAccountVerified) {
+      showFeedbackAlert(
+        'Compte bloqué',
+        'Votre identité (CNI) doit être validée par l’administrateur avant de prendre une course.'
+      );
+      return;
+    }
     const updatedOrders = allOrders.map(o =>
       o.id === orderId
         ? {
@@ -1128,10 +1249,31 @@ export default function App() {
 
   const handleDriverConfirmDelivery = async (orderId) => {
     if (user?.role !== 'livreur' || activeViewRole !== 'livreur') return;
+    const targetOrder = allOrders.find(o => o.id === orderId);
+    if (!targetOrder) return;
+
+    // Vérification obligatoire du code secret à 4 chiffres du client
+    if (targetOrder.deliveryCode) {
+      const enteredCode = (driverCodeInputs[orderId] || '').trim();
+      if (enteredCode !== String(targetOrder.deliveryCode).trim()) {
+        showFeedbackAlert(
+          'Code secret incorrect',
+          'Veuillez saisir le code de confirmation à 4 chiffres communiqué par le client à la réception de la bouteille.'
+        );
+        return;
+      }
+    }
+
     const updatedOrders = allOrders.map(o =>
       o.id === orderId && o.assignedDriverId === user.id ? { ...o, status: 'delivered' } : o
     );
+    setDriverCodeInputs(prev => {
+      const next = { ...prev };
+      delete next[orderId];
+      return next;
+    });
     await syncAppState(null, updatedOrders);
+    showFeedbackAlert('Livraison confirmée', `Course ${orderId} clôturée avec succès.`);
   };
 
   const handleLogout = () => {
@@ -1140,6 +1282,7 @@ export default function App() {
     setSelectedVendorId(null);
     setClientCoords(null);
     setRegisterCoords(null);
+    setDriverCodeInputs({});
     setEmail('');
     setPassword('');
     setCurrentScreen('welcome');
@@ -1376,6 +1519,41 @@ export default function App() {
     u => u.role === 'livreur' && normalizeText(u.ville) === normalizedUserCity
   );
 
+  // Uniquement les livreurs déjà validés peuvent recevoir des courses d'un dépôt
+  const verifiedCityDrivers = cityDrivers.filter(u => u.isDriverVerified === true);
+
+  // Données Administrateur (admin@monan.ci)
+  const allDriversSortedForAdmin = registeredUsers
+    .filter(u => u.role === 'livreur')
+    .sort((a, b) => {
+      const aVer = a.isDriverVerified === true ? 1 : 0;
+      const bVer = b.isDriverVerified === true ? 1 : 0;
+      return aVer - bVer; // En attente CNI en priorité en haut
+    });
+
+  const pendingDriversForAdmin = allDriversSortedForAdmin.filter(u => u.isDriverVerified !== true);
+  const allDepotsForAdmin = registeredUsers.filter(u => u.role === 'depot');
+
+  const depotCommissionsSummary = allDepotsForAdmin.map((dep) => {
+    const depOrders = allOrders.filter(o => o.assignedVendorId === dep.id);
+    const deliveredOrdersCount = depOrders.filter(o => o.status === 'delivered').length;
+    const totalSalesGross = depOrders.reduce((sum, o) => sum + (Number(o.gasSubtotal) || 0), 0);
+    const totalCommissionGenerated = depOrders.reduce((sum, o) => sum + (Number(o.appCommission) || 0), 0);
+    return {
+      ...dep,
+      ordersCount: depOrders.length,
+      deliveredOrdersCount,
+      totalSalesGross,
+      totalCommissionGenerated,
+      remainingDays: getRemainingSubscriptionDays(dep),
+    };
+  });
+
+  const totalPlatformCommissions = depotCommissionsSummary.reduce(
+    (sum, d) => sum + d.totalCommissionGenerated,
+    0
+  );
+
   const availableOrdersForVendors = activeViewRole === 'depot'
     ? allOrders.filter(
         c =>
@@ -1389,7 +1567,7 @@ export default function App() {
     ? allOrders.filter(c => c.assignedVendorId === user?.id && (c.status === 'accepted' || c.status === 'in_delivery'))
     : [];
 
-  const availableOrdersForDrivers = activeViewRole === 'livreur'
+  const availableOrdersForDrivers = activeViewRole === 'livreur' && isDriverAccountVerified
     ? allOrders.filter(
         c =>
           c.status === 'accepted' &&
@@ -1413,6 +1591,7 @@ export default function App() {
 
   const getRoleSubtitle = () => {
     if (!user) return 'Distribution de gaz';
+    if (user.role === 'admin') return 'Administration MONAN';
     if (user.role === 'depot') return activeViewRole === 'depot' ? `Vendeur • ${userCity}` : `Client • ${userCity}`;
     if (user.role === 'livreur') return `Livreur • ${userCity}`;
     return `Client • ${userCity}`;
@@ -1444,6 +1623,13 @@ export default function App() {
   };
 
   const getBottomNavItems = () => {
+    if (activeViewRole === 'admin') {
+      return [
+        { id: 'home', label: 'Accueil', badge: 0 },
+        { id: 'admin_drivers', label: 'Livreurs CNI', badge: pendingDriversForAdmin.length },
+        { id: 'admin_commissions', label: 'Commissions', badge: 0 },
+      ];
+    }
     if (activeViewRole === 'depot') {
       return [
         { id: 'home', label: 'Accueil', badge: 0 },
@@ -1683,7 +1869,7 @@ export default function App() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.greetingTitle}>{user.nom}</Text>
                         <Text style={styles.mutedText}>
-                          {userCity} • {user.adresse}
+                          {user.role === 'admin' ? 'Espace Administrateur • MONAN' : `${userCity} • ${user.adresse}`}
                         </Text>
                         {hasValidCoords(user.coords) && (
                           <Text style={styles.gpsBadgeText}>
@@ -1692,6 +1878,22 @@ export default function App() {
                         )}
                       </View>
                     </View>
+
+                    {/* ENCART ROUGE DE BLOCAGE LIVREUR EN ATTENTE CNI */}
+                    {activeViewRole === 'livreur' && !isDriverAccountVerified && (
+                      <View style={styles.driverBlockedCard}>
+                        <View style={styles.statusPillDanger}>
+                          <Text style={styles.statusPillDangerText}>COMPTE BLOQUÉ • EN ATTENTE CNI</Text>
+                        </View>
+                        <Text style={styles.driverBlockedTitle}>Validation d'identité requise</Text>
+                        <Text style={styles.driverBlockedText}>
+                          Votre compte ({user.id}) est en attente de vérification. Envoyez la photo de votre CNI à l'administrateur sur WhatsApp, puis appuyez sur ↻ une fois validé.
+                        </Text>
+                        <AnimatedButton style={styles.btnWhatsapp} onPress={handleSendDriverCniWhatsApp}>
+                          <Text style={styles.btnWhatsappText}>Envoyer ma CNI (WhatsApp)</Text>
+                        </AnimatedButton>
+                      </View>
+                    )}
 
                     {user.role === 'depot' && activeViewRole === 'depot' && (
                       <View style={styles.subStrip}>
@@ -1707,6 +1909,27 @@ export default function App() {
 
                     {/* INDICATEURS CLÉS */}
                     <View style={styles.kpiGrid}>
+                      {activeViewRole === 'admin' && (
+                        <>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('admin_drivers')}>
+                            <Text style={[styles.kpiNum, pendingDriversForAdmin.length > 0 && { color: '#F87171' }]}>
+                              {pendingDriversForAdmin.length}
+                            </Text>
+                            <Text style={styles.kpiLabel}>CNI en attente</Text>
+                          </Pressable>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('admin_drivers')}>
+                            <Text style={[styles.kpiNum, { color: '#4ADE80' }]}>
+                              {allDriversSortedForAdmin.length - pendingDriversForAdmin.length}
+                            </Text>
+                            <Text style={styles.kpiLabel}>Livreurs actifs</Text>
+                          </Pressable>
+                          <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('admin_commissions')}>
+                            <Text style={styles.kpiNum}>{allDepotsForAdmin.length}</Text>
+                            <Text style={styles.kpiLabel}>Dépôts</Text>
+                          </Pressable>
+                        </>
+                      )}
+
                       {activeViewRole === 'depot' && (
                         <>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('vendor_live_orders')}>
@@ -1718,8 +1941,8 @@ export default function App() {
                             <Text style={styles.kpiLabel}>En cours</Text>
                           </Pressable>
                           <Pressable style={styles.kpiCard} onPress={() => setDashboardTab('vendor_drivers')}>
-                            <Text style={styles.kpiNum}>{cityDrivers.length}</Text>
-                            <Text style={styles.kpiLabel}>Livreurs</Text>
+                            <Text style={styles.kpiNum}>{verifiedCityDrivers.length}</Text>
+                            <Text style={styles.kpiLabel}>Livreurs validés</Text>
                           </Pressable>
                         </>
                       )}
@@ -1809,6 +2032,31 @@ export default function App() {
                     )}
 
                     {/* ACTIONS RAPIDES */}
+                    {activeViewRole === 'admin' && (
+                      <View style={{ gap: 10 }}>
+                        <View style={styles.subStrip}>
+                          <View>
+                            <Text style={styles.microLabel}>CUMUL COMMISSIONS MONAN</Text>
+                            <Text style={styles.subStripValue}>
+                              {totalPlatformCommissions.toLocaleString('fr-FR')} FCFA
+                            </Text>
+                          </View>
+                          <AnimatedButton
+                            style={styles.compactPrimaryBtn}
+                            onPress={() => setDashboardTab('admin_commissions')}
+                          >
+                            <Text style={styles.compactPrimaryBtnText}>Détails</Text>
+                          </AnimatedButton>
+                        </View>
+
+                        <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('admin_drivers')}>
+                          <Text style={styles.btnPrimaryText}>
+                            Vérifier les CNI livreurs ({pendingDriversForAdmin.length})
+                          </Text>
+                        </AnimatedButton>
+                      </View>
+                    )}
+
                     {activeViewRole === 'depot' && (
                       <View style={{ gap: 10 }}>
                         <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('vendor_live_orders')}>
@@ -1835,7 +2083,10 @@ export default function App() {
 
                     {activeViewRole === 'livreur' && (
                       <View style={{ gap: 10 }}>
-                        <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('driver_available')}>
+                        <AnimatedButton
+                          style={[styles.btnPrimary, !isDriverAccountVerified && { opacity: 0.45 }]}
+                          onPress={() => setDashboardTab('driver_available')}
+                        >
                           <Text style={styles.btnPrimaryText}>Courses ({availableOrdersForDrivers.length})</Text>
                         </AnimatedButton>
                         <AnimatedButton style={styles.btnSecondary} onPress={() => setDashboardTab('driver_active')}>
@@ -1848,6 +2099,163 @@ export default function App() {
                       <AnimatedButton style={styles.btnPrimary} onPress={() => setDashboardTab('order')}>
                         <Text style={styles.btnPrimaryText}>Commander</Text>
                       </AnimatedButton>
+                    )}
+                  </View>
+                )}
+
+                {/* ADMIN : VALIDATION IDENTITÉ CNI DES LIVREURS */}
+                {activeViewRole === 'admin' && dashboardTab === 'admin_drivers' && (
+                  <View style={styles.cardBox}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.cardBoxTitle}>Livreurs CNI ({allDriversSortedForAdmin.length})</Text>
+                      <View style={styles.cityPill}>
+                        <Text style={styles.cityPillText}>{pendingDriversForAdmin.length} en attente</Text>
+                      </View>
+                    </View>
+
+                    {allDriversSortedForAdmin.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucun livreur enregistré</Text>
+                      </View>
+                    ) : (
+                      allDriversSortedForAdmin.map((drv) => {
+                        const isVerified = drv.isDriverVerified === true;
+                        return (
+                          <View
+                            key={drv.id}
+                            style={[
+                              styles.orderCard,
+                              !isVerified && { borderColor: '#EF4444', backgroundColor: '#231720' }
+                            ]}
+                          >
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.orderId}>{drv.nom}</Text>
+                              <View
+                                style={[
+                                  styles.badgePill,
+                                  {
+                                    backgroundColor: isVerified
+                                      ? 'rgba(74, 222, 128, 0.15)'
+                                      : 'rgba(239, 68, 68, 0.2)'
+                                  }
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.badgePillText,
+                                    { color: isVerified ? '#4ADE80' : '#F87171' }
+                                  ]}
+                                >
+                                  {isVerified ? 'Identité validée ✓' : 'En attente CNI'}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <Text style={styles.mutedText}>
+                              ID : {drv.id} • Tél : {drv.telephone}
+                            </Text>
+                            <Text style={styles.mutedText}>
+                              Ville : {drv.ville} ({drv.adresse}) • {drv.vehicule || 'Moto'}
+                            </Text>
+
+                            {!isVerified ? (
+                              <AnimatedButton
+                                style={styles.btnSuccess}
+                                onPress={() => handleToggleDriverVerification(drv.id, true)}
+                              >
+                                <Text style={styles.btnSuccessText}>Valider identité ✓</Text>
+                              </AnimatedButton>
+                            ) : (
+                              <AnimatedButton
+                                style={styles.btnDangerOutline}
+                                onPress={() => handleToggleDriverVerification(drv.id, false)}
+                              >
+                                <Text style={styles.btnDangerOutlineText}>Suspendre / Bloquer</Text>
+                              </AnimatedButton>
+                            )}
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
+                )}
+
+                {/* ADMIN : COMMISSIONS PAR DÉPÔT */}
+                {activeViewRole === 'admin' && dashboardTab === 'admin_commissions' && (
+                  <View style={styles.cardBox}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.cardBoxTitle}>Commissions Dépôts</Text>
+                      <View style={styles.cityPill}>
+                        <Text style={styles.cityPillText}>{depotCommissionsSummary.length} dépôts</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.financeSplitBox}>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.financeTotalLabel}>Cumul total plateforme</Text>
+                        <Text style={[styles.priceHighlight, { color: '#4ADE80' }]}>
+                          {totalPlatformCommissions.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                      </View>
+                    </View>
+
+                    {depotCommissionsSummary.length === 0 ? (
+                      <View style={styles.emptyStateBox}>
+                        <Text style={styles.emptyStateText}>Aucun dépôt enregistré</Text>
+                      </View>
+                    ) : (
+                      depotCommissionsSummary.map((dep) => (
+                        <View key={dep.id} style={styles.orderCard}>
+                          <View style={styles.rowBetween}>
+                            <Text style={styles.listRowTitle}>{dep.nom}</Text>
+                            <View
+                              style={[
+                                styles.badgePill,
+                                {
+                                  backgroundColor:
+                                    dep.remainingDays > 0
+                                      ? 'rgba(74, 222, 128, 0.15)'
+                                      : 'rgba(239, 68, 68, 0.15)'
+                                }
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.badgePillText,
+                                  { color: dep.remainingDays > 0 ? '#4ADE80' : '#F87171' }
+                                ]}
+                              >
+                                {dep.remainingDays > 0 ? `Actif (${dep.remainingDays}j)` : 'Expiré'}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <Text style={styles.mutedText}>
+                            {dep.ville} • {dep.adresse} • Tél : {dep.telephone}
+                          </Text>
+
+                          <View style={styles.financeSplitBox}>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.financeLabel}>Commandes traitées (Livrées)</Text>
+                              <Text style={styles.financeValue}>
+                                {dep.ordersCount} ({dep.deliveredOrdersCount})
+                              </Text>
+                            </View>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.financeLabel}>Volume gaz brut</Text>
+                              <Text style={styles.financeValue}>
+                                {dep.totalSalesGross.toLocaleString('fr-FR')} FCFA
+                              </Text>
+                            </View>
+                            <View style={[styles.rowBetween, styles.financeTotalRow]}>
+                              <Text style={styles.financeTotalLabel}>Commissions générées</Text>
+                              <Text style={styles.priceHighlight}>
+                                {dep.totalCommissionGenerated.toLocaleString('fr-FR')} FCFA
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      ))
                     )}
                   </View>
                 )}
@@ -2052,7 +2460,7 @@ export default function App() {
                       </View>
                     ) : (
                       myVendorDeliveries.map((order) => {
-                        const activeSelectedDriverId = selectedDriverByOrder[order.id] || cityDrivers[0]?.id;
+                        const activeSelectedDriverId = selectedDriverByOrder[order.id] || verifiedCityDrivers[0]?.id;
                         const isAssigned = order.status === 'in_delivery';
                         const isPickup = order.deliveryMode === 'retrait';
 
@@ -2086,28 +2494,38 @@ export default function App() {
                             ) : !isAssigned ? (
                               <View style={styles.dividerSection}>
                                 <Text style={styles.microLabel}>
-                                  LIVREUR • GAIN ({order.distanceKm || 1.5} KM) : {(order.driverNet || 0).toLocaleString('fr-FR')} F
+                                  LIVREURS VALIDÉS • GAIN ({order.distanceKm || 1.5} KM) : {(order.driverNet || 0).toLocaleString('fr-FR')} F
                                 </Text>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6, marginBottom: 10 }}>
-                                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                                    {cityDrivers.map((drv) => {
-                                      const isChosen = activeSelectedDriverId === drv.id;
-                                      return (
-                                        <AnimatedButton
-                                          key={drv.id}
-                                          style={[styles.chip, isChosen && styles.chipActive]}
-                                          onPress={() => setSelectedDriverByOrder(prev => ({ ...prev, [order.id]: drv.id }))}
-                                        >
-                                          <Text style={[styles.chipText, isChosen && styles.chipTextActive]}>
-                                            {drv.nom} ({drv.vehicule || 'Moto'})
-                                          </Text>
-                                        </AnimatedButton>
-                                      );
-                                    })}
-                                  </View>
-                                </ScrollView>
+                                {verifiedCityDrivers.length === 0 ? (
+                                  <Text style={[styles.mutedText, { marginTop: 6, marginBottom: 8 }]}>
+                                    Aucun livreur validé disponible à {userCity}.
+                                  </Text>
+                                ) : (
+                                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6, marginBottom: 10 }}>
+                                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                                      {verifiedCityDrivers.map((drv) => {
+                                        const isChosen = activeSelectedDriverId === drv.id;
+                                        return (
+                                          <AnimatedButton
+                                            key={drv.id}
+                                            style={[styles.chip, isChosen && styles.chipActive]}
+                                            onPress={() => setSelectedDriverByOrder(prev => ({ ...prev, [order.id]: drv.id }))}
+                                          >
+                                            <Text style={[styles.chipText, isChosen && styles.chipTextActive]}>
+                                              {drv.nom} ({drv.vehicule || 'Moto'})
+                                            </Text>
+                                          </AnimatedButton>
+                                        );
+                                      })}
+                                    </View>
+                                  </ScrollView>
+                                )}
 
-                                <AnimatedButton style={styles.btnPrimary} onPress={() => handleAssignDriverToOrder(order.id)}>
+                                <AnimatedButton
+                                  style={[styles.btnPrimary, verifiedCityDrivers.length === 0 && { opacity: 0.5 }]}
+                                  onPress={() => handleAssignDriverToOrder(order.id)}
+                                  disabled={verifiedCityDrivers.length === 0}
+                                >
                                   <Text style={styles.btnPrimaryText}>Assigner</Text>
                                 </AnimatedButton>
                               </View>
@@ -2128,7 +2546,9 @@ export default function App() {
                 {/* VENDEUR : LIVREURS DE LA VILLE */}
                 {activeViewRole === 'depot' && dashboardTab === 'vendor_drivers' && (
                   <View style={styles.cardBox}>
-                    <Text style={styles.cardBoxTitle}>Livreurs ({cityDrivers.length})</Text>
+                    <Text style={styles.cardBoxTitle}>
+                      Livreurs validés ({verifiedCityDrivers.length}/{cityDrivers.length})
+                    </Text>
 
                     <View style={styles.subCard}>
                       <TextInput
@@ -2164,6 +2584,7 @@ export default function App() {
                     </View>
 
                     {cityDrivers.map((drv) => {
+                      const isVerified = drv.isDriverVerified === true;
                       const activeCount = allOrders.filter(
                         o => o.assignedDriverId === drv.id && o.status === 'in_delivery'
                       ).length;
@@ -2176,10 +2597,25 @@ export default function App() {
                           </View>
                           <View style={[
                             styles.badgePill,
-                            { backgroundColor: activeCount > 0 ? 'rgba(249, 115, 22, 0.15)' : 'rgba(74, 222, 128, 0.15)' }
+                            {
+                              backgroundColor: !isVerified
+                                ? 'rgba(239, 68, 68, 0.16)'
+                                : activeCount > 0
+                                ? 'rgba(249, 115, 22, 0.15)'
+                                : 'rgba(74, 222, 128, 0.15)'
+                            }
                           ]}>
-                            <Text style={[styles.badgePillText, { color: activeCount > 0 ? '#F97316' : '#4ADE80' }]}>
-                              {activeCount > 0 ? 'En course' : 'Libre'}
+                            <Text style={[
+                              styles.badgePillText,
+                              {
+                                color: !isVerified
+                                  ? '#F87171'
+                                  : activeCount > 0
+                                  ? '#F97316'
+                                  : '#4ADE80'
+                              }
+                            ]}>
+                              {!isVerified ? 'En attente CNI' : activeCount > 0 ? 'En course' : 'Libre'}
                             </Text>
                           </View>
                         </View>
@@ -2283,7 +2719,20 @@ export default function App() {
                 {activeViewRole === 'livreur' && dashboardTab === 'driver_available' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Courses ({userCity})</Text>
-                    {availableOrdersForDrivers.length === 0 ? (
+                    {!isDriverAccountVerified ? (
+                      <View style={styles.driverBlockedCard}>
+                        <View style={styles.statusPillDanger}>
+                          <Text style={styles.statusPillDangerText}>COMPTE BLOQUÉ • EN ATTENTE CNI</Text>
+                        </View>
+                        <Text style={styles.driverBlockedTitle}>Accès aux courses verrouillé</Text>
+                        <Text style={styles.driverBlockedText}>
+                          Envoyez votre CNI via WhatsApp à l'administrateur ({user.id}), puis appuyez sur ↻ en haut dès qu'elle est validée.
+                        </Text>
+                        <AnimatedButton style={styles.btnWhatsapp} onPress={handleSendDriverCniWhatsApp}>
+                          <Text style={styles.btnWhatsappText}>Envoyer ma CNI (WhatsApp)</Text>
+                        </AnimatedButton>
+                      </View>
+                    ) : availableOrdersForDrivers.length === 0 ? (
                       <View style={styles.emptyStateBox}>
                         <Text style={styles.emptyStateText}>Aucune course disponible</Text>
                       </View>
@@ -2317,7 +2766,7 @@ export default function App() {
                   </View>
                 )}
 
-                {/* LIVREUR : EN COURS */}
+                {/* LIVREUR : EN COURS (AVEC VALIDATION OBLIGATOIRE DU CODE SECRET À 4 CHIFFRES) */}
                 {activeViewRole === 'livreur' && dashboardTab === 'driver_active' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>En cours</Text>
@@ -2344,9 +2793,30 @@ export default function App() {
                           )}
                           <Text style={styles.mutedText}>Total : {order.total}</Text>
 
-                          <AnimatedButton style={styles.btnSuccess} onPress={() => handleDriverConfirmDelivery(order.id)}>
-                            <Text style={styles.btnSuccessText}>Livré</Text>
-                          </AnimatedButton>
+                          {/* CHAMP OBLIGATOIRE CODE SECRET À 4 CHIFFRES DU CLIENT */}
+                          <View style={styles.dividerSection}>
+                            <Text style={styles.microLabel}>CODE SECRET CLIENT (4 CHIFFRES)</Text>
+                            <TextInput
+                              style={[styles.input, styles.secretCodeInput]}
+                              keyboardType="number-pad"
+                              maxLength={4}
+                              placeholder="Ex: 4829"
+                              placeholderTextColor="#64748B"
+                              value={driverCodeInputs[order.id] || ''}
+                              onChangeText={(val) =>
+                                setDriverCodeInputs(prev => ({
+                                  ...prev,
+                                  [order.id]: val.replace(/[^0-9]/g, '')
+                                }))
+                              }
+                            />
+                            <AnimatedButton
+                              style={styles.btnSuccess}
+                              onPress={() => handleDriverConfirmDelivery(order.id)}
+                            >
+                              <Text style={styles.btnSuccessText}>Valider la livraison</Text>
+                            </AnimatedButton>
+                          </View>
                         </View>
                       ))
                     )}
@@ -2654,7 +3124,7 @@ export default function App() {
                   </View>
                 )}
 
-                {/* CLIENT : SUIVI */}
+                {/* CLIENT : SUIVI (AVEC CODE DE CONFIRMATION SECRET À 4 CHIFFRES) */}
                 {activeViewRole === 'client' && dashboardTab === 'orders_list' && (
                   <View style={styles.cardBox}>
                     <Text style={styles.cardBoxTitle}>Suivi</Text>
@@ -2685,6 +3155,21 @@ export default function App() {
                               {cmd.assignedVendorNom || cmd.targetVendorNom} •{' '}
                               {cmd.deliveryMode === 'livraison' ? `Livraison (${cmd.distanceKm || 1.5} km)` : 'Retrait'}
                             </Text>
+
+                            {/* CODE SECRET VISIBLE UNIQUEMENT PAR LE CLIENT */}
+                            {cmd.deliveryMode === 'livraison' && cmd.deliveryCode && (
+                              <View style={styles.secretCodeBanner}>
+                                <Text style={styles.secretCodeBannerTitle}>
+                                  CODE DE CONFIRMATION : {cmd.deliveryCode}
+                                </Text>
+                                <Text style={styles.secretCodeBannerHint}>
+                                  {cmd.status === 'delivered'
+                                    ? 'Code validé à la livraison.'
+                                    : 'Ne communiquez ce code au livreur qu’à la réception de la bouteille.'}
+                                </Text>
+                              </View>
+                            )}
+
                             <View style={styles.rowBetween}>
                               <Text style={styles.mutedText}>{cmd.date}</Text>
                               <Text style={styles.priceHighlight}>{cmd.total}</Text>
@@ -2982,6 +3467,68 @@ const styles = StyleSheet.create({
   mutedText: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
   gpsBadgeText: { color: '#4ADE80', fontSize: 11, fontWeight: '700', marginTop: 3 },
 
+  driverBlockedCard: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
+  },
+  driverBlockedTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  driverBlockedText: {
+    color: '#FCA5A5',
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  btnWhatsapp: {
+    backgroundColor: '#16A34A',
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  btnWhatsappText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+
+  secretCodeBanner: {
+    backgroundColor: 'rgba(249, 115, 22, 0.15)',
+    borderWidth: 1,
+    borderColor: '#F97316',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  secretCodeBannerTitle: {
+    color: '#F97316',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  secretCodeBannerHint: {
+    color: '#CBD5E1',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  secretCodeInput: {
+    marginTop: 6,
+    marginBottom: 6,
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 6,
+    borderColor: '#F97316',
+  },
+
   gpsBox: {
     backgroundColor: '#1E293B',
     borderRadius: 10,
@@ -3131,6 +3678,8 @@ const styles = StyleSheet.create({
   btnSecondaryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   btnSuccess: { backgroundColor: '#16A34A', height: 42, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
   btnSuccessText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
+  btnDangerOutline: { backgroundColor: 'rgba(239, 68, 68, 0.14)', borderWidth: 1, borderColor: '#EF4444', height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  btnDangerOutlineText: { color: '#F87171', fontWeight: '800', fontSize: 12 },
   compactPrimaryBtn: { backgroundColor: '#F97316', paddingHorizontal: 14, height: 36, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   compactPrimaryBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
 
