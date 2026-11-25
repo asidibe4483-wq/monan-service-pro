@@ -36,8 +36,9 @@ const STORAGE_KEYS = {
   onboarding: '@monan_onboarding_v1',
 };
 
-const VENDOR_COMMISSION_RATE = 0.05; // 5% sur le gaz
-const DRIVER_COMMISSION_RATE = 0.20; // 20% sur la course
+const FREE_TRIAL_DAYS = 30; // 1 mois d'utilisation gratuite à l'inscription
+const VENDOR_COMMISSION_RATE = 0.05; // 5% sur le gaz (commission par commande)
+const DRIVER_COMMISSION_RATE = 0.20; // 20% sur la course (commission par commande)
 const MIN_DRIVER_WALLET_BALANCE = 500; // Solde min. livreur (FCFA)
 const WALLET_TOPUP_PRESETS = [1000, 2000, 5000, 10000];
 
@@ -196,9 +197,13 @@ const showFeedbackAlert = (title, message) => {
 };
 
 const getRemainingSubscriptionDays = (u) => {
-  if (!u || u.role !== 'depot' || !u.subscriptionExpiresAt) return 0;
-  const expiresMs = new Date(u.subscriptionExpiresAt).getTime();
-  if (Number.isNaN(expiresMs)) return 0;
+  if (!u || u.role !== 'depot') return 0;
+  const expiresMs = u.subscriptionExpiresAt
+    ? new Date(u.subscriptionExpiresAt).getTime()
+    : u.createdAt
+    ? new Date(u.createdAt).getTime() + FREE_TRIAL_DAYS * 86400000
+    : 0;
+  if (!expiresMs || Number.isNaN(expiresMs)) return 0;
   const diffMs = expiresMs - Date.now();
   return diffMs > 0 ? Math.ceil(diffMs / 86400000) : 0;
 };
@@ -285,7 +290,7 @@ export default function App() {
   const [vehicule, setVehicule] = useState('Moto');
   const [registerCoords, setRegisterCoords] = useState(null);
 
-  // Abonnement Vendeur (verrouillé -> WhatsApp + Admin)
+  // Abonnement Vendeur (après le mois gratuit -> WhatsApp + Admin)
   const [selectedPlan, setSelectedPlan] = useState(SUBSCRIPTION_PLANS[0]);
   const [paymentMethod, setPaymentMethod] = useState('Wave');
   const [paymentPhone, setPaymentPhone] = useState('');
@@ -344,7 +349,6 @@ export default function App() {
       let currentOrders = overrideOrders || allOrders;
 
       if (overrideUsers || overrideOrders) {
-        // Envoi vers Render
         try {
           await fetch(`${API_BASE_URL}/api/sync`, {
             method: 'POST',
@@ -355,7 +359,6 @@ export default function App() {
           // Mode hors-ligne toléré : AsyncStorage conserve les données
         }
       } else {
-        // Récupération depuis Render ou AsyncStorage
         try {
           const res = await fetch(`${API_BASE_URL}/api/state`);
           if (res.ok) {
@@ -469,6 +472,11 @@ export default function App() {
     setLoading(true);
     try {
       const prefix = role === 'depot' ? 'DEP' : role === 'livreur' ? 'LIV' : 'CLI';
+      const freeTrialExpiresAt =
+        role === 'depot'
+          ? new Date(Date.now() + FREE_TRIAL_DAYS * 86400000).toISOString()
+          : null;
+
       const newUser = {
         id: `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`,
         role,
@@ -481,9 +489,9 @@ export default function App() {
         coords: registerCoords || null,
         vehicule: role === 'livreur' ? vehicule : null,
         isDriverVerified: false,
-        // VERROUILLAGE ABONNEMENT DÉPÔT : aucun jour gratuit, activation uniquement après WhatsApp + Admin
-        subscriptionExpiresAt: null,
-        subscriptionPlan: null,
+        // 1 mois (30 jours) gratuit à l'inscription : seules les commandes sont commissionnées
+        subscriptionExpiresAt: freeTrialExpiresAt,
+        subscriptionPlan: role === 'depot' ? '1 Mois Gratuit' : null,
         pendingSubscription: null,
         walletBalance: 0,
         walletHistory: [],
@@ -568,7 +576,7 @@ export default function App() {
   };
 
   // ==========================================
-  // ABONNEMENT VENDEUR (VERROUILLÉ -> WHATSAPP + VALIDATION ADMIN)
+  // ABONNEMENT VENDEUR (APRÈS ESSAI GRATUIT -> WHATSAPP + ADMIN)
   // ==========================================
   const handleRenewSubscription = async () => {
     if (!user || user.role !== 'depot') return;
@@ -589,7 +597,6 @@ export default function App() {
         requestedAt: new Date().toISOString(),
       };
 
-      // Aucune activation automatique : on enregistre uniquement la demande en attente
       const nextUsers = registeredUsers.map((u) =>
         u.id === user.id ? { ...u, pendingSubscription: pendingSub } : u
       );
@@ -603,7 +610,7 @@ export default function App() {
 
       const message =
         `Bonjour Admin MONAN,\n` +
-        `Je demande l'activation de mon abonnement Dépôt :\n` +
+        `Je demande le renouvellement de mon abonnement Dépôt :\n` +
         `• Dépôt : ${user.nom} (${user.id})\n` +
         `• Ville : ${user.ville}\n` +
         `• Formule : ${selectedPlan.label} (${selectedPlan.days} jours)\n` +
@@ -631,6 +638,8 @@ export default function App() {
     if (!depotUser || !plan) return;
     const currentExpiryMs = depotUser.subscriptionExpiresAt
       ? new Date(depotUser.subscriptionExpiresAt).getTime()
+      : depotUser.createdAt
+      ? new Date(depotUser.createdAt).getTime() + FREE_TRIAL_DAYS * 86400000
       : 0;
     const baseMs = currentExpiryMs > Date.now() ? currentExpiryMs : Date.now();
     const newExpiryIso = new Date(baseMs + Number(plan.days) * 86400000).toISOString();
@@ -913,7 +922,7 @@ export default function App() {
     return Number(custom) > 0 ? Number(custom) : DEFAULT_PRICES[cylId][opType];
   };
 
-  // Seuls les dépôts avec abonnement ACTIF (validé par Admin) apparaissent aux clients
+  // Dépôts actifs (mois gratuit en cours ou abonnement validé) dans la ville du client
   const localCityVendors = registeredUsers
     .filter(
       (u) =>
@@ -1547,15 +1556,15 @@ export default function App() {
         >
           {user ? (
             isVendorSubscriptionExpired ? (
-              /* BLOCAGE ABONNEMENT EXPIRÉ : PAIEMENT MOBILE MONEY + VALIDATION ADMIN */
+              /* BLOCAGE ABONNEMENT EXPIRÉ (APRÈS LES 30 JOURS GRATUITS) */
               <FadeInView key="subscription-lock" style={styles.mainWrapper}>
                 <View style={styles.cardBox}>
                   <View style={styles.statusPillDanger}>
-                    <Text style={styles.statusPillDangerText}>ABONNEMENT EXPIRÉ / NON ACTIVÉ</Text>
+                    <Text style={styles.statusPillDangerText}>PÉRIODE GRATUITE / ABONNEMENT EXPIRÉ</Text>
                   </View>
-                  <Text style={styles.cardBoxTitle}>Activer ({user.nom})</Text>
+                  <Text style={styles.cardBoxTitle}>Renouveler ({user.nom})</Text>
                   <Text style={styles.mutedText}>
-                    Choisissez une formule, transférez via Mobile Money puis envoyez le reçu sur WhatsApp. Votre espace s’ouvrira dès validation par l’Admin.
+                    Votre mois d’utilisation gratuite est terminé. Choisissez une formule, transférez via Mobile Money puis envoyez le reçu sur WhatsApp pour réactiver votre espace.
                   </Text>
 
                   {user.pendingSubscription && (
@@ -1730,7 +1739,11 @@ export default function App() {
                     {user.role === 'depot' && activeViewRole === 'depot' && (
                       <View style={styles.subStrip}>
                         <View>
-                          <Text style={styles.microLabel}>ABONNEMENT</Text>
+                          <Text style={styles.microLabel}>
+                            {!user.subscriptionPlan || user.subscriptionPlan === '1 Mois Gratuit'
+                              ? 'ESSAI GRATUIT (1 MOIS)'
+                              : 'ABONNEMENT'}
+                          </Text>
                           <Text style={styles.subStripValue}>{remainingSubDays} j restants</Text>
                         </View>
                         <AnimatedButton style={styles.compactPrimaryBtn} onPress={() => setDashboardTab('bilan')}>
@@ -3498,7 +3511,7 @@ export default function App() {
                     <AnimatedButton style={styles.roleSelectCard} onPress={() => setCurrentScreen('register_depot')}>
                       <View>
                         <Text style={styles.roleSelectTitle}>Vendeur</Text>
-                        <Text style={styles.roleSelectSub}>Gérer mon dépôt</Text>
+                        <Text style={styles.roleSelectSub}>Gérer mon dépôt (1 mois gratuit)</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
                     </AnimatedButton>
